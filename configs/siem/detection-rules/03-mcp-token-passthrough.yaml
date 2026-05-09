@@ -1,0 +1,33 @@
+id: "Kirakira-SIEM-003"
+name: "MCP Token Audience Mismatch"
+description: >
+  MCP OAuth or bearer token presented for server A routed to backend B — audience or host
+  does not match the registered MCP endpoint allowlist policy.
+severity: "medium"
+mitre_attack:
+  - "T1550"
+queries:
+  kql: |
+    event.category:"authentication" AND event.action:("approval.request","approval.decision")
+    AND labels.kirakira.mcp_server_id:*
+    AND message:*"audience"* AND NOT labels.kirakira.mcp_audience_matches:"true"
+  splunk_spl: |
+    index=kirakira sourcetype=audit (kind IN ("approval.request","tool.exec"))
+      (subject.mcp_audience!="subject.mcp_server_id" OR mcp_audience!=mcp_registered_host)
+      NOT match(subject.url, subject.allowed_hosts_regex)
+  sigma: |
+    title: MCP JWT Audience Vs Registered Server
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      mcp_evt:
+        event.action|startswith:
+          - "approval."
+        labels.kirakira.mcp_server_id|contains:
+          - "*"
+      audience_fail:
+        error.message|contains:
+          - "audience"
+      condition: mcp_evt and audience_fail

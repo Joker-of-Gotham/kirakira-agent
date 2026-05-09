@@ -1,0 +1,23 @@
+{
+  "name": "@kirakira/mcp-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@kirakira/audit-ledger": "workspace:*",
+    "@kirakira/core": "workspace:*",
+    "@kirakira/policy-engine": "workspace:*",
+    "execa": "^9.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.0"
+  }
+}

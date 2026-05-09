@@ -1,0 +1,30 @@
+id: "Kirakira-SIEM-010"
+name: "Unauthorized Model Provider Route"
+description: >
+  Model invocation routed via a provider or host not present in approved model-route table
+  for the workspace tier.
+severity: "high"
+mitre_attack:
+  - "T1048"
+queries:
+  kql: |
+    event.category:"process" AND event.action:("policy.decision","tool.exec")
+    AND labels.kirakira.model_provider:*
+    AND NOT labels.kirakira.model_route_approved:"true"
+  splunk_spl: |
+    index=kirakira sourcetype=audit (kind IN ("model.invoke","policy.decision"))
+      NOT [| inputlookup kirakira_allowed_model_providers | fields provider]
+      | eval p=subject.model_provider
+      | lookup kirakira_allowed_model_providers provider AS p OUTPUT approved
+      | where isnull(approved)
+  sigma: |
+    title: Model Provider Not Allowed
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      model_evt:
+        labels.kirakira.model_provider|startswith:
+          - "*"
+      condition: model_evt

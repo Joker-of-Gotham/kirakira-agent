@@ -1,0 +1,30 @@
+id: "Kirakira-SIEM-005"
+name: "Unsigned Bundle With Allow Effect"
+description: >
+  Policy returned allow while bundle digest or signature metadata indicates unknown or missing
+  trust tier relative to organizational baseline.
+severity: "high"
+mitre_attack:
+  - "T1553"
+queries:
+  kql: |
+    event.outcome:"success" AND event.action:"policy.decision"
+    AND (NOT code_signature.digest:* OR labels.kirakira.trust_tier:"unknown")
+  splunk_spl: |
+    index=kirakira sourcetype=audit kind="policy.decision" effect="allow"
+      (isnull(integrity.bundle_digest) OR trust_tier="unknown" OR verified="false")
+  sigma: |
+    title: Unsigned Or Unknown Tier Allow
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      allow_unknown:
+        event.action|startswith:
+          - "policy.decision"
+        event.outcome|contains:
+          - "success"
+        code_signature.digest|contains:
+          - ""
+      condition: allow_unknown

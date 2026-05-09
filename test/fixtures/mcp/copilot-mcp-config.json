@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "db": { "command": "npx", "args": ["-y", "mcp-server-sqlite"] }
+  }
+}

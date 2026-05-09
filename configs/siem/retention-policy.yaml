@@ -1,0 +1,27 @@
+version: "1.0"
+description: "Kirakira Agent data retention policy"
+
+tiers:
+  local_ledger:
+    description: "On-device append-only audit JSONL"
+    retention_days: 365
+
+  checkpoint_summaries:
+    description: "Signed checkpoint root hashes"
+    retention_years: 7
+
+  remote_trace_metadata:
+    description: "Trace spans in backend (Tempo/Jaeger)"
+    retention_days: 90
+
+  full_content_capture:
+    description: "Prompt/response/tool args (when opted in)"
+    retention_days: 7
+
+  deny_approval_traces:
+    description: "Deny decisions and approval events"
+    retention_days: 365
+
+  cold_archive:
+    description: "Compressed cold storage"
+    retention_years: 7

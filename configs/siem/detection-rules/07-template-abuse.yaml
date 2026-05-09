@@ -1,0 +1,29 @@
+id: "Kirakira-SIEM-007"
+name: "Template Fingerprint Replay Across Principals"
+description: >
+  Same prompt or policy template fingerprint seen with different user ids in overlapping time,
+  indicating possible template laundering or cloned sessions.
+severity: "low"
+mitre_attack:
+  - "T1586"
+queries:
+  kql: |
+    labels.kirakira.template_fingerprint:*
+    | STATS dc(user.id) AS principals by labels.kirakira.template_fingerprint bucket(@timestamp, 1h)
+    | where principals > 3
+  splunk_spl: |
+    index=kirakira sourcetype=audit subject.template_fp!=*
+    | bucket _time span=1h
+    | stats dc(actor.user_id) AS users by template_fp,_time
+    | where users > 3
+  sigma: |
+    title: Shared Template Across Many Users
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      template:
+        labels.kirakira.template_fingerprint|contains:
+          - "*"
+      condition: template

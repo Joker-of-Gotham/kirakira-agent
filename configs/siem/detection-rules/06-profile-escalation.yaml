@@ -1,0 +1,30 @@
+id: "Kirakira-SIEM-006"
+name: "Rapid Sandbox Profile Escalation"
+description: >
+  Multiple sandbox.transition events upgrading to a higher-privilege profile for the same
+  principal within a 5-minute window.
+severity: "medium"
+mitre_attack:
+  - "T1078"
+queries:
+  kql: |
+    event.category:"configuration" AND event.action:"sandbox.transition"
+    | STATS countDistinct(labels.kirakira.sandbox_profile) AS profiles by user.id, trace.id
+      span=5m
+    | where profiles > 2
+  splunk_spl: |
+    index=kirakira sourcetype=audit kind="sandbox.transition"
+    | bucket _time span=5m AS win
+    | stats dc(result.sandbox_profile) AS swaps by user.id, win
+    | where swaps > 2
+  sigma: |
+    title: Repeated Sandbox Upgrade
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      transition:
+        event.action:
+          - sandbox.transition
+      condition: transition

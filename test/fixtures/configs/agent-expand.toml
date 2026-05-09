@@ -1,0 +1,7 @@
+schema_version = 1
+workspace_name = "expand-ws"
+trust = "trusted"
+
+[model]
+default = "${TEST_KIRAKIRA_MODEL:-fallback-model}"
+fallback = "gpt-4o-mini"

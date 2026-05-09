@@ -1,0 +1,17 @@
+schemaVersion: 1
+workspaceTrust: trusted
+shell:
+  hostExecution: deny
+  allowlist:
+    - "git:*"
+    - "pytest:*"
+  denylist:
+    - "rm:*"
+    - "sudo:*"
+mcp:
+  allowRemoteHttp: true
+  allowLegacySse: ask
+privacy:
+  redactEnv:
+    - OPENAI_API_KEY
+    - GITHUB_TOKEN

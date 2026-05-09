@@ -1,0 +1,130 @@
+{
+  "$ref": "#/definitions/approval_record",
+  "definitions": {
+    "approval_record": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "default": "kirakira.approval.v1"
+        },
+        "approval_id": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved",
+            "denied",
+            "expired",
+            "revoked"
+          ]
+        },
+        "scope": {
+          "type": "string",
+          "enum": [
+            "once",
+            "session",
+            "workspace",
+            "policy-window"
+          ]
+        },
+        "requested_at": {
+          "type": "string"
+        },
+        "resolved_at": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string"
+            },
+            "interactive": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "user_id",
+            "interactive"
+          ],
+          "additionalProperties": false
+        },
+        "decision_id": {
+          "type": "string"
+        },
+        "fingerprint": {
+          "type": "object",
+          "properties": {
+            "exact": {
+              "type": "string"
+            },
+            "template": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "exact",
+            "template"
+          ],
+          "additionalProperties": false
+        },
+        "request_summary": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "risk": {
+              "type": "string"
+            },
+            "requested_permissions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "title",
+            "risk",
+            "requested_permissions"
+          ],
+          "additionalProperties": false
+        },
+        "resolution": {
+          "type": "object",
+          "properties": {
+            "outcome": {
+              "type": "string",
+              "enum": [
+                "approved",
+                "denied"
+              ]
+            },
+            "reviewer": {
+              "type": "string"
+            },
+            "comment": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "approval_id",
+        "status",
+        "scope",
+        "principal",
+        "decision_id",
+        "fingerprint",
+        "request_summary"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

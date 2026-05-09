@@ -1,0 +1,134 @@
+schemaVersion: 1
+workspaceTrust: ask
+
+shell:
+  hostExecution: deny
+  allowlist:
+    - git:*
+    - pytest:*
+    - python -m pytest:*
+  denylist:
+    - rm:*
+    - sudo:*
+    - curl * | bash
+
+mcp:
+  allowRemoteHttp: true
+  allowLegacySse: ask
+  approvedServers:
+    - filesystem-core
+    - filesystem-search
+    - filesystem-git
+    - filesystem-patch
+    - filesystem-artifact
+
+skills:
+  allowExternalScripts: ask
+  allowAllowedToolsField: ask
+
+privacy:
+  redactEnv:
+    - OPENAI_API_KEY
+    - GITHUB_TOKEN
+    - AWS_SECRET_ACCESS_KEY
+    - LLM_API_KEY
+
+# ── Filesystem MCP Security Policy ──────────────────────────────────
+filesystem:
+  allowed_roots:
+    - "${workspaceFolder}"
+
+  denied_roots:
+    - "${userHome}/.ssh"
+    - "${userHome}/.aws"
+    - "${userHome}/.config"
+    - "${userHome}/AppData/Roaming"
+    - "/etc"
+    - "/var/run"
+    - "C:\\Windows"
+
+  denied_patterns:
+    - "**/.env"
+    - "**/.env.*"
+    - "**/credentials.json"
+    - "**/*.pem"
+    - "**/*.key"
+
+  directory_tree:
+    max_depth: 6
+    max_entries: 2000
+
+  read_text:
+    max_bytes: 1048576    # 1 MB — larger files → artifact
+
+# ── MCP Tool-Level Policy ───────────────────────────────────────────
+tools:
+  allow:
+    # filesystem-core: read-only tools
+    - "mcp.filesystem-core.read_file"
+    - "mcp.filesystem-core.read_multiple_files"
+    - "mcp.filesystem-core.list_directory"
+    - "mcp.filesystem-core.directory_tree"
+    - "mcp.filesystem-core.get_file_info"
+    - "mcp.filesystem-core.search_files"
+    - "mcp.filesystem-core.list_allowed_directories"
+    # filesystem-search: all read-only
+    - "mcp.filesystem-search.*"
+    # filesystem-git: read-only tools
+    - "mcp.filesystem-git.git_status"
+    - "mcp.filesystem-git.git_diff"
+    - "mcp.filesystem-git.git_diff_staged"
+    - "mcp.filesystem-git.git_log"
+    - "mcp.filesystem-git.git_show"
+    # filesystem-patch: read-only tools
+    - "mcp.filesystem-patch.snapshot_list"
+    - "mcp.filesystem-patch.diff_files"
+    # filesystem-artifact: read-only tools
+    - "mcp.filesystem-artifact.artifact_get_summary"
+    - "mcp.filesystem-artifact.artifact_list"
+    - "mcp.filesystem-artifact.content_hash"
+    - "mcp.filesystem-artifact.inspect_binary"
+    - "mcp.filesystem-artifact.preview_structured"
+
+  ask:
+    # filesystem-core: write tools
+    - "mcp.filesystem-core.create_directory"
+    - "mcp.filesystem-core.write_file"
+    - "mcp.filesystem-core.edit_file"
+    - "mcp.filesystem-core.move_file"
+    # filesystem-patch: write tools
+    - "mcp.filesystem-patch.snapshot_create"
+    - "mcp.filesystem-patch.patch_preview"
+    - "mcp.filesystem-patch.patch_apply"
+    - "mcp.filesystem-patch.rollback"
+    # filesystem-git: write tools
+    - "mcp.filesystem-git.git_add"
+    - "mcp.filesystem-git.git_commit"
+    - "mcp.filesystem-git.git_reset"
+    # filesystem-artifact: write tools
+    - "mcp.filesystem-artifact.artifact_put"
+
+  deny:
+    # dangerous operations
+    - "mcp.filesystem-git.git_push"
+    - "mcp.filesystem-process.*"
+
+# ── Obligations ─────────────────────────────────────────────────────
+obligations:
+  snapshot_required:
+    - "mcp.filesystem-core.write_file"
+    - "mcp.filesystem-core.edit_file"
+    - "mcp.filesystem-core.move_file"
+    - "mcp.filesystem-patch.patch_apply"
+
+  dry_run_required:
+    - "mcp.filesystem-core.edit_file"
+    - "mcp.filesystem-patch.patch_apply"
+
+  audit_required:
+    - "mcp.filesystem-core.write_file"
+    - "mcp.filesystem-core.edit_file"
+    - "mcp.filesystem-core.move_file"
+    - "mcp.filesystem-patch.patch_apply"
+    - "mcp.filesystem-patch.rollback"
+    - "mcp.filesystem-git.git_commit"

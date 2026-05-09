@@ -1,0 +1,37 @@
+schema_version = 1
+workspace_name = "260503_FG_Construct_V4"
+trust = "ask"
+
+[ui]
+theme = "default"
+vim_mode = false
+show_trace_ids = false
+
+[output]
+default = "human"
+exec_default = "json"
+
+[approvals]
+mode = "ask"
+auto_run_readonly = false
+
+[sandbox]
+mode = "container"
+network = "restricted"
+
+[skills]
+discover = [ ".kirakira/skills", ".claude/skills", ".agents/skills", ".cursor/skills", ".cursor/commands" ]
+
+[mcp]
+config_files = [ ".mcp.json", ".cursor/mcp.json" ]
+
+[compat]
+read_claude = true
+read_codex = true
+read_cursor = true
+read_copilot = true
+read_gemini = true
+
+[telemetry]
+mode = "off"
+otel = false

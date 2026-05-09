@@ -1,0 +1,43 @@
+id: "Kirakira-SIEM-002"
+name: "Write After Deny (Same Trace)"
+description: |
+  Correlates a policy deny or failed outcome with a subsequent file/tool write span
+  sharing the same trace.id within a short correlation window at ingest.
+severity: "high"
+mitre_attack:
+  - "T1485"
+queries:
+  kql: |
+    event.category:"configuration" and event.action:"policy.decision" and event.outcome:"failure"
+    | KEEP trace.id
+    | join type=inner max=0 spans on trace.id spans
+    where spans.event.action:"tool.exec" or spans.event.category:"process"
+  splunk_spl: |
+    index=kirakira sourcetype=audit trace_id=*
+      (kind="policy.decision" AND (result.effect IN ("deny","failure") OR event.outcome="failure"))
+      OR kind IN ("tool.exec","tool.result")
+    | transaction trace_id maxspan=10m
+    | stats
+        dc(eval(if(kind=="policy.decision","x",null()))) AS denies
+        dc(eval(if(match(kind,"tool\\.(exec|result)"),"y",null()))) AS tools BY trace_id
+    | where denies>0 AND tools>0
+  sigma: |
+    title: Audit Deny Followed By Write Hint
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      deny:
+        event.action|contains:
+          - "policy.decision"
+        event.outcome|contains:
+          - "failure"
+      write_followup:
+        event.category|contains:
+          - "process"
+        event.action|contains:
+          - "tool.exec"
+      condition: deny and write_followup
+    fields:
+      - trace.id

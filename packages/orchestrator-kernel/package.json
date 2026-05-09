@@ -1,0 +1,28 @@
+{
+  "name": "@kirakira/orchestrator-kernel",
+  "version": "0.1.0",
+  "description": "Task graph orchestration kernel for Kirakira agent",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" },
+    "./daemon-orchestrator": { "import": "./dist/daemon-orchestrator.js", "types": "./dist/daemon-orchestrator.d.ts" }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/daemon-orchestrator.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/core": "workspace:*",
+    "@kirakira/agent-runtime": "workspace:*",
+    "@kirakira/event-store": "workspace:*",
+    "@kirakira/policy-engine": "workspace:*",
+    "p-queue": "^8.0.1",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsup": "^8.4.0"
+  }
+}

@@ -1,0 +1,64 @@
+version: "1.0"
+description: "Kirakira Agent Audit Event to Elastic Common Schema mapping"
+
+mappings:
+  - source: "ts"
+    target: "@timestamp"
+
+  - source: "kind"
+    target: "event.action"
+    transform: "direct"
+
+  - source: "kind"
+    target: "event.category"
+    transform:
+      "policy.decision": "configuration"
+      "approval.request": "authentication"
+      "approval.decision": "authentication"
+      "tool.exec": "process"
+      "tool.result": "process"
+      "sandbox.transition": "configuration"
+      "config.change": "configuration"
+      "session.start": "session"
+      "session.end": "session"
+      "error": "error"
+
+  - source: "result.effect"
+    target: "event.outcome"
+    transform:
+      "allow": "success"
+      "deny": "failure"
+      "escalate": "unknown"
+
+  - source: "actor.user_id"
+    target: "user.id"
+
+  - source: "subject.command_base"
+    target: "process.name"
+
+  - source: "subject.tool_name"
+    target: "process.executable"
+
+  - source: "trace_id"
+    target: "trace.id"
+
+  - source: "decision_id"
+    target: "labels.kirakira.policy_decision_id"
+
+  - source: "integrity.bundle_digest"
+    target: "code_signature.digest"
+
+  - source: "subject.mcp_server_id"
+    target: "labels.kirakira.mcp_server_id"
+
+  - source: "subject.model_provider"
+    target: "labels.kirakira.model_provider"
+
+  - source: "subject.model_name"
+    target: "labels.kirakira.model_name"
+
+  - source: "result.sandbox_profile"
+    target: "labels.kirakira.sandbox_profile"
+
+  - source: "result.approval_status"
+    target: "labels.kirakira.approval_status"

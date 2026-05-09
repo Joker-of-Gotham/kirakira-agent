@@ -1,0 +1,49 @@
+{
+  "mcpServers": {
+    "filesystem-core": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
+    },
+    "filesystem-search": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-ripgrep@latest"
+      ],
+      "env": {
+        "NODE_NO_WARNINGS": "1"
+      }
+    },
+    "filesystem-git": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "/home/dev/workspace"
+      ]
+    },
+    "filesystem-patch": {
+      "command": "node",
+      "args": [
+        "packages/mcp-filesystem-patch/dist/index.js",
+        "--workspace",
+        "."
+      ]
+    },
+    "filesystem-artifact": {
+      "command": "node",
+      "args": [
+        "packages/mcp-filesystem-artifact/dist/index.js",
+        "--workspace",
+        "."
+      ]
+    }
+  }
+}

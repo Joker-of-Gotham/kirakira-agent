@@ -1,0 +1,30 @@
+id: "Kirakira-SIEM-004"
+name: "Non-Allowlist Domain Egress"
+description: >
+  Network request or MCP URL resolution targeting a hostname outside the egress allowlist,
+  particularly when sandbox network mode is constrained.
+severity: "high"
+mitre_attack:
+  - "T1071"
+queries:
+  kql: |
+    event.category:"process" AND event.action:("tool.exec","tool.result")
+    AND labels.kirakira.sandbox_network_mode:("blocked","restricted")
+    AND dns.question.name:* AND NOT labels.kirakira.egress_allowed:"true"
+  splunk_spl: |
+    index=kirakira sourcetype=audit kind IN ("network.request","tool.exec")
+      NOT [| inputlookup kirakira_dns_allowlist.csv | fields domain | rename domain AS allowed_domain]
+      | eval host=lower(remote_host)| where NOT match(host,allowed_regex)
+  sigma: |
+    title: Egress To Non Approved Domain
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      net:
+        event.action|startswith:
+          - "tool."
+        labels.kirakira.sandbox_network_mode|contains:
+          - "restricted"
+      condition: net

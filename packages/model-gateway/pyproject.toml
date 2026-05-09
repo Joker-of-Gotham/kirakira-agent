@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kirakira-model-gateway"
+version = "0.1.0"
+description = "OpenAI-compatible model gateway: JSON-RPC over stdio for TypeScript CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "openai>=1.0",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "pyyaml>=6.0",
+    "httpx>=0.27",
+    "opentelemetry-api>=1.22.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.22.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+kirakira-model-gateway = "kirakira_model_gateway.server:main"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["kirakira_model_gateway"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/kirakira_model_gateway", "pyproject.toml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

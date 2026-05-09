@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "github": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    },
+    "research": {
+      "type": "http",
+      "url": "https://mcp.company.internal/research",
+      "headers": { "Authorization": "Bearer ${RESEARCH_TOKEN}" }
+    }
+  }
+}

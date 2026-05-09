@@ -1,0 +1,28 @@
+{
+  "name": "@kirakira/runtime-daemon",
+  "version": "0.1.0",
+  "description": "Local runtime daemon for Kirakira agent orchestration",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/core": "workspace:*",
+    "@kirakira/agent-runtime": "workspace:*",
+    "@kirakira/event-store": "workspace:*",
+    "@kirakira/orchestrator-kernel": "workspace:*",
+    "ulid": "^2.3.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.8.3",
+    "tsup": "^8.4.0"
+  }
+}

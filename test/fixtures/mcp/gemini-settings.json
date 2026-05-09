@@ -1,0 +1,5 @@
+{
+  "mcpServers": {
+    "web": { "command": "npx", "args": ["-y", "@anthropic/mcp-server-web"] }
+  }
+}

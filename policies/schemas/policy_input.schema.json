@@ -1,0 +1,404 @@
+{
+  "$ref": "#/definitions/policy_input",
+  "definitions": {
+    "policy_input": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "default": "kirakira.policyinput.v1"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "trace_id": {
+          "type": "string"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "principal": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string"
+            },
+            "org_id": {
+              "type": "string"
+            },
+            "roles": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "groups": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "authn_method": {
+              "type": "string",
+              "enum": [
+                "sso",
+                "api_key",
+                "token"
+              ]
+            },
+            "device_trust": {
+              "type": "string",
+              "enum": [
+                "managed",
+                "unmanaged",
+                "unknown"
+              ]
+            },
+            "interactive": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "user_id",
+            "roles",
+            "authn_method",
+            "device_trust",
+            "interactive"
+          ],
+          "additionalProperties": false
+        },
+        "workspace": {
+          "type": "object",
+          "properties": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "root": {
+              "type": "string"
+            },
+            "vcs": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "branch": {
+                  "type": "string"
+                },
+                "dirty": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "provider",
+                "branch",
+                "dirty"
+              ],
+              "additionalProperties": false
+            },
+            "labels": {
+              "type": "object",
+              "properties": {
+                "data_classification": {
+                  "type": "string"
+                },
+                "repo_trust": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "workspace_id",
+            "root"
+          ],
+          "additionalProperties": false
+        },
+        "action": {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "tool.call",
+                "file.write",
+                "shell.exec",
+                "model.invoke",
+                "package.install",
+                "network.request"
+              ]
+            },
+            "tool_type": {
+              "type": "string",
+              "enum": [
+                "shell",
+                "mcp",
+                "skill-script",
+                "file",
+                "model",
+                "registry"
+              ]
+            },
+            "tool_name": {
+              "type": "string"
+            },
+            "operation": {
+              "type": "string"
+            },
+            "raw": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "env": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                }
+              },
+              "additionalProperties": false
+            },
+            "normalized": {
+              "type": "object",
+              "properties": {
+                "command_ast_hash": {
+                  "type": "string"
+                },
+                "command_base": {
+                  "type": "string"
+                },
+                "flags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "subcommands": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "write_paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "read_paths": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "network": {
+                  "type": "object",
+                  "properties": {
+                    "required": {
+                      "type": "boolean"
+                    },
+                    "domains": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "protocol": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "required",
+                    "domains"
+                  ],
+                  "additionalProperties": false
+                },
+                "destructive": {
+                  "type": "boolean"
+                },
+                "interpreter_handoff": {
+                  "type": "boolean"
+                },
+                "pipeline_depth": {
+                  "type": "number"
+                },
+                "redirection_targets": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "flags",
+                "subcommands",
+                "write_paths",
+                "read_paths",
+                "destructive",
+                "interpreter_handoff",
+                "pipeline_depth",
+                "redirection_targets"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "kind",
+            "tool_type",
+            "tool_name",
+            "operation"
+          ],
+          "additionalProperties": false
+        },
+        "target": {
+          "type": "object",
+          "properties": {
+            "resource_type": {
+              "type": "string"
+            },
+            "resources": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "owner": {
+                    "type": "string"
+                  },
+                  "classification": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "resource_type",
+            "resources"
+          ],
+          "additionalProperties": false
+        },
+        "context": {
+          "type": "object",
+          "properties": {
+            "source": {
+              "type": "string"
+            },
+            "invoker": {
+              "type": "string"
+            },
+            "subagent_id": {
+              "type": "string"
+            },
+            "mcp_server": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "issuer": {
+                  "type": "string"
+                },
+                "trust_tier": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "skill": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "fingerprint": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "model": {
+              "type": "object",
+              "properties": {
+                "provider": {
+                  "type": "string"
+                },
+                "model": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "prior_decisions": {
+              "type": "object",
+              "properties": {
+                "fingerprint_hit": {
+                  "type": "boolean"
+                },
+                "approval_template_hit": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "fingerprint_hit",
+                "approval_template_hit"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "risk": {
+          "type": "object",
+          "properties": {
+            "interpreter_summary": {
+              "type": "string"
+            },
+            "signals": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "signals"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "request_id",
+        "session_id",
+        "trace_id",
+        "timestamp",
+        "principal",
+        "workspace",
+        "action"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

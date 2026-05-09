@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.116.0
+    command: ["--config=/etc/otel/config.yaml"]
+    volumes:
+      - ./collector-prod.yaml:/etc/otel/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+      - "8888:8888"
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    ports:
+      - "3200:3200"
+    volumes:
+      - tempo-data:/var/tempo
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=kirakira-dev
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  tempo-data:
+  grafana-data:

@@ -1,0 +1,23 @@
+id: "Kirakira-SIEM-001"
+name: "Post-Approval Execution"
+description: "Detects tool execution events that lack a corresponding approval decision recorded in ECS labels."
+severity: "high"
+mitre_attack:
+  - "T1548"
+queries:
+  kql: |
+    event.action:"tool.exec" AND NOT labels.kirakira.approval_id:*
+  splunk_spl: |
+    index=kirakira sourcetype=audit kind="tool.exec" NOT approval_id=*
+  sigma: |
+    title: Post-Approval Execution Detection
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      selection:
+        event.action: "tool.exec"
+      filter:
+        labels.kirakira.approval_id: "*"
+      condition: selection and not filter

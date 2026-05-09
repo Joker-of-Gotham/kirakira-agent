@@ -1,0 +1,30 @@
+{
+  "name": "@kirakira/agent-runtime",
+  "version": "0.1.0",
+  "description": "ReAct-style agent execution runtime for Kirakira",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/core": "workspace:*",
+    "@kirakira/event-store": "workspace:*",
+    "@kirakira/mcp-adapter": "workspace:*",
+    "@kirakira/policy-engine": "workspace:*",
+    "@kirakira/skill-runtime": "workspace:*",
+    "better-sqlite3": "^11.8.1",
+    "p-queue": "^8.0.1",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "typescript": "^5.8.3",
+    "tsup": "^8.4.0"
+  }
+}

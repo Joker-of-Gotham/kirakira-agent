@@ -1,0 +1,162 @@
+{
+  "$ref": "#/definitions/sandbox_profile",
+  "definitions": {
+    "sandbox_profile": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "default": "kirakira.sandbox.v1"
+        },
+        "name": {
+          "type": "string"
+        },
+        "platforms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "linux",
+              "macos",
+              "windows"
+            ]
+          }
+        },
+        "filesystem": {
+          "type": "object",
+          "properties": {
+            "root_mode": {
+              "type": "string",
+              "enum": [
+                "workspace",
+                "temp",
+                "none"
+              ]
+            },
+            "read_only_mounts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "read_write_mounts": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "deny_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "root_mode",
+            "read_only_mounts",
+            "read_write_mounts",
+            "deny_paths"
+          ],
+          "additionalProperties": false
+        },
+        "network": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": [
+                "off",
+                "allowlist",
+                "per-server",
+                "full"
+              ]
+            },
+            "domains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "process": {
+          "type": "object",
+          "properties": {
+            "seccomp": {
+              "type": "string",
+              "enum": [
+                "default-deny",
+                "permissive"
+              ]
+            },
+            "max_cpu_seconds": {
+              "type": "number"
+            },
+            "max_memory_mb": {
+              "type": "number"
+            },
+            "allow_exec": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "seccomp",
+            "max_cpu_seconds",
+            "max_memory_mb",
+            "allow_exec"
+          ],
+          "additionalProperties": false
+        },
+        "secrets": {
+          "type": "object",
+          "properties": {
+            "exposed": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "exposed"
+          ],
+          "additionalProperties": false
+        },
+        "egress_proxy": {
+          "type": "string"
+        },
+        "copyout": {
+          "type": "object",
+          "properties": {
+            "require_post_review": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "require_post_review"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name",
+        "platforms",
+        "filesystem",
+        "network",
+        "process",
+        "secrets",
+        "copyout"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,28 @@
+id: "Kirakira-SIEM-008"
+name: "Audit Ledger Chain Integrity Failure"
+description: >
+  Ingest-side detection when audit verifier reports prev_hash mismatch, recomputed entry_hash
+  drift, or failed checkpoint verification.
+severity: "critical"
+mitre_attack:
+  - "T1565"
+queries:
+  kql: |
+    labels.kirakira.audit_verify_status:"ERROR" OR event.action:"audit.chain_break"
+    OR error.type:"audit_chain_failure"
+  splunk_spl: |
+    index=kirakira_audit sourcetype=verifier
+      chain_status="broken" OR verify_result="INVALID"
+  sigma: |
+    title: Broken Audit Hash Chain
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit-verifier
+    detection:
+      fail:
+        event.action|startswith:
+          - "audit.chain"
+        event.outcome|contains:
+          - "failure"
+      condition: fail

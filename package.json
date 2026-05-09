@@ -1,0 +1,39 @@
+{
+  "name": "kirakira-agent-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "kirakira-agent": "./packages/cli/bin/run.js"
+  },
+  "description": "Kirakira Agent Platform — modular orchestration, runtime, and tooling for AI agents",
+  "scripts": {
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "lint": "turbo lint",
+    "llm:select": "node scripts/select-llm-provider.mjs",
+    "start": "node packages/cli/bin/run.js chat",
+    "cli": "node packages/cli/bin/run.js",
+    "doctor": "node packages/cli/bin/run.js doctor",
+    "test": "vitest run",
+    "test:integration": "vitest run test/integration",
+    "clean": "turbo clean",
+    "dev": "turbo dev"
+  },
+  "devDependencies": {
+    "@kirakira/cli": "workspace:*",
+    "@kirakira/event-store": "workspace:*",
+    "@kirakira/memory-core": "workspace:*",
+    "@kirakira/memory-store": "workspace:*",
+    "@types/node": "22.15.0",
+    "postgres": "^3.4.0",
+    "turbo": "^2.9.8",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.1",
+    "zod": "^3.25.0"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

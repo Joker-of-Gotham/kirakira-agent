@@ -1,0 +1,198 @@
+{
+  "$ref": "#/definitions/audit_event",
+  "definitions": {
+    "audit_event": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "const": "kirakira.audit.v1",
+          "default": "kirakira.audit.v1"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "ts": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "segment": {
+          "type": "string"
+        },
+        "prev_hash": {
+          "type": "string"
+        },
+        "entry_hash": {
+          "type": "string"
+        },
+        "trace_id": {
+          "type": "string"
+        },
+        "decision_id": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "policy.decision",
+            "approval.request",
+            "approval.decision",
+            "tool.exec",
+            "tool.result",
+            "sandbox.transition",
+            "config.change",
+            "session.start",
+            "session.end",
+            "error"
+          ]
+        },
+        "actor": {
+          "type": "object",
+          "properties": {
+            "user_id": {
+              "type": "string"
+            },
+            "interactive": {
+              "type": "boolean"
+            },
+            "agent_id": {
+              "type": "string"
+            },
+            "subagent_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "user_id",
+            "interactive"
+          ],
+          "additionalProperties": false
+        },
+        "subject": {
+          "type": "object",
+          "properties": {
+            "tool_type": {
+              "type": "string"
+            },
+            "tool_name": {
+              "type": "string"
+            },
+            "command_base": {
+              "type": "string"
+            },
+            "mcp_server_id": {
+              "type": "string"
+            },
+            "skill_id": {
+              "type": "string"
+            },
+            "model_provider": {
+              "type": "string"
+            },
+            "model_name": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "result": {
+          "type": "object",
+          "properties": {
+            "effect": {
+              "type": "string",
+              "enum": [
+                "allow",
+                "deny",
+                "escalate"
+              ]
+            },
+            "approval_required": {
+              "type": "boolean"
+            },
+            "approval_status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "denied",
+                "expired",
+                "revoked"
+              ]
+            },
+            "sandbox_profile": {
+              "type": "string"
+            },
+            "reason_codes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "success",
+                "error",
+                "pending"
+              ]
+            },
+            "error_message": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "token_in": {
+              "type": "number"
+            },
+            "token_out": {
+              "type": "number"
+            },
+            "cost_usd": {
+              "type": "number"
+            },
+            "latency_ms": {
+              "type": "number"
+            }
+          },
+          "additionalProperties": false
+        },
+        "integrity": {
+          "type": "object",
+          "properties": {
+            "bundle_id": {
+              "type": "string"
+            },
+            "bundle_digest": {
+              "type": "string"
+            },
+            "input_hash": {
+              "type": "string"
+            },
+            "output_hash": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "event_id",
+        "ts",
+        "segment",
+        "prev_hash",
+        "entry_hash",
+        "trace_id",
+        "kind",
+        "actor",
+        "subject",
+        "result"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

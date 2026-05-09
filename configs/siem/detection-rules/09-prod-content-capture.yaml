@@ -1,0 +1,28 @@
+id: "Kirakira-SIEM-009"
+name: "Content Capture Enabled In Production Workspace"
+description: >
+  Full prompt/response capture (kirakira.capture.content) observed where environment tier is prod
+  and policy ordinarily forbids retaining raw content.
+severity: "medium"
+mitre_attack:
+  - "T1119"
+queries:
+  kql: |
+    labels.kirakira.environment:"production" AND kirakira.capture.content:true
+    AND event.category:("session","process","error")
+  splunk_spl: |
+    index=kirakira workspace_tier="prod" capture_content_enabled=true
+      (kind IN ("session.start","config.change") OR metrics.capture_level="full")
+  sigma: |
+    title: Production Full Content Capture
+    status: experimental
+    logsource:
+      product: kirakira-agent
+      service: audit
+    detection:
+      prod_capture:
+        labels.kirakira.environment|startswith:
+          - "prod"
+        event.action:
+          - config.change
+      condition: prod_capture

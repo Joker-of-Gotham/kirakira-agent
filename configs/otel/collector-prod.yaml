@@ -1,0 +1,96 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  # Redaction: remove sensitive attributes
+  redaction/kirakira:
+    allow_all_keys: false
+    allowed_keys:
+      - "service.name"
+      - "gen_ai.operation.name"
+      - "gen_ai.system"
+      - "gen_ai.request.model"
+      - "gen_ai.usage.input_tokens"
+      - "gen_ai.usage.output_tokens"
+      - "gen_ai.response.finish_reasons"
+      - "kirakira.session.id"
+      - "kirakira.workspace.id"
+      - "kirakira.policy.bundle_id"
+      - "kirakira.policy.decision_id"
+      - "kirakira.approval.id"
+      - "kirakira.approval.scope"
+      - "kirakira.sandbox.profile"
+      - "kirakira.sandbox.network_mode"
+      - "kirakira.mcp.server_id"
+      - "kirakira.skill.id"
+      - "kirakira.skill.version"
+      - "kirakira.risk.level"
+      - "kirakira.risk.claims_count"
+      - "kirakira.audit.event_id"
+      - "kirakira.audit.chain_prev"
+      - "kirakira.capture.content"
+      - "error.type"
+      - "error.message"
+    blocked_values:
+      - "Bearer [A-Za-z0-9\\-._~+/]+"
+      - "sk-[A-Za-z0-9]{20,}"
+      - "ghp_[A-Za-z0-9]{36}"
+
+  # Tail sampling
+  tail_sampling/kirakira:
+    decision_wait: 10s
+    num_traces: 10000
+    policies:
+      - name: deny-always
+        type: string_attribute
+        string_attribute:
+          key: "kirakira.policy.decision_id"
+          values: []
+          enabled_regex_matching: false
+          invert_match: true
+      - name: error-always
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: high-latency
+        type: latency
+        latency:
+          threshold_ms: 4000
+      - name: default-probabilistic
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 5
+
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+    send_batch_max_size: 2048
+
+exporters:
+  otlp/tempo:
+    endpoint: "tempo:4317"
+    tls:
+      insecure: true
+  
+  clickhouse:
+    endpoint: "tcp://clickhouse:9000"
+    database: kirakira_traces
+    ttl: 90d
+    create_schema: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [redaction/kirakira, tail_sampling/kirakira, batch]
+      exporters: [otlp/tempo, clickhouse]
+  telemetry:
+    logs:
+      level: warn
+    metrics:
+      address: "0.0.0.0:8888"

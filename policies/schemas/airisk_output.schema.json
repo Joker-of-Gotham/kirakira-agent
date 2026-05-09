@@ -1,0 +1,151 @@
+{
+  "$ref": "#/definitions/airisk_output",
+  "definitions": {
+    "airisk_output": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "default": "kirakira.airisk.v1"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "classification": {
+          "type": "object",
+          "properties": {
+            "action_family": {
+              "type": "string"
+            },
+            "side_effect_level": {
+              "type": "string",
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "destructive": {
+              "type": "boolean"
+            },
+            "network_required": {
+              "type": "boolean"
+            },
+            "external_content_dependency": {
+              "type": "boolean"
+            },
+            "secret_exposure_risk": {
+              "type": "string",
+              "enum": [
+                "none",
+                "low",
+                "medium",
+                "high"
+              ]
+            },
+            "workspace_escape_risk": {
+              "$ref": "#/definitions/airisk_output/properties/classification/properties/secret_exposure_risk"
+            },
+            "supply_chain_risk": {
+              "$ref": "#/definitions/airisk_output/properties/classification/properties/secret_exposure_risk"
+            }
+          },
+          "required": [
+            "action_family",
+            "side_effect_level",
+            "destructive",
+            "network_required",
+            "external_content_dependency",
+            "secret_exposure_risk",
+            "workspace_escape_risk",
+            "supply_chain_risk"
+          ],
+          "additionalProperties": false
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ]
+              },
+              "confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "evidence": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "code",
+              "severity",
+              "confidence",
+              "evidence"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "recommended_obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "canonical_fingerprint_material": {
+          "type": "object",
+          "properties": {
+            "action_family": {
+              "type": "string"
+            },
+            "write_paths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "network_domains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tool_type": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "action_family",
+            "write_paths",
+            "network_domains",
+            "tool_type"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "request_id",
+        "classification",
+        "claims",
+        "recommended_obligations"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

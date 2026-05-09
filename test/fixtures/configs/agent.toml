@@ -1,0 +1,21 @@
+schema_version = 1
+workspace_name = "test-workspace"
+trust = "trusted"
+
+[model]
+default = "test-model"
+fallback = "test-model"
+
+[output]
+default = "human"
+exec_default = "json"
+
+[approvals]
+mode = "ask"
+
+[skills]
+discover = [".kirakira/skills"]
+
+[compat]
+read_claude = true
+read_cursor = true

@@ -1,0 +1,26 @@
+{
+  "name": "@kirakira/policy-engine",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --format esm --dts --clean",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/core": "workspace:*",
+    "@kirakira/audit-ledger": "workspace:*",
+    "blake3": "^2.1.7"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "tsup": "^8.4.0"
+  }
+}

@@ -1,0 +1,173 @@
+{
+  "$ref": "#/definitions/policy_decision",
+  "definitions": {
+    "policy_decision": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string",
+          "default": "kirakira.decision.v1"
+        },
+        "decision_id": {
+          "type": "string"
+        },
+        "request_id": {
+          "type": "string"
+        },
+        "effect": {
+          "type": "string",
+          "enum": [
+            "allow",
+            "deny",
+            "escalate"
+          ]
+        },
+        "reason_codes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "bundle_id": {
+              "type": "string"
+            },
+            "revision": {
+              "type": "string"
+            },
+            "package": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "bundle_id",
+            "revision",
+            "package"
+          ],
+          "additionalProperties": false
+        },
+        "approval": {
+          "type": "object",
+          "properties": {
+            "required": {
+              "type": "boolean"
+            },
+            "mode": {
+              "type": "string",
+              "enum": [
+                "none",
+                "human",
+                "auto",
+                "template"
+              ]
+            },
+            "template_id": {
+              "type": "string"
+            },
+            "cacheable": {
+              "type": "boolean"
+            },
+            "ttl_seconds": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "required",
+            "mode",
+            "cacheable"
+          ],
+          "additionalProperties": false
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sandbox",
+                  "approval",
+                  "trace_redaction",
+                  "audit_append",
+                  "reason_required",
+                  "copyout_review",
+                  "network_allowlist",
+                  "secret_projection",
+                  "notify"
+                ]
+              },
+              "profile": {
+                "type": "string"
+              },
+              "policy": {
+                "type": "string"
+              },
+              "channel": {
+                "type": "string"
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "scope": {
+                "type": "string",
+                "enum": [
+                  "once",
+                  "session",
+                  "workspace",
+                  "policy-window"
+                ]
+              },
+              "min_length": {
+                "type": "number"
+              },
+              "domains": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "type"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "explain": {
+          "type": "object",
+          "properties": {
+            "summary": {
+              "type": "string"
+            },
+            "matched_rules": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "summary",
+            "matched_rules"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "decision_id",
+        "request_id",
+        "effect",
+        "reason_codes",
+        "policy",
+        "approval",
+        "obligations",
+        "explain"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}
