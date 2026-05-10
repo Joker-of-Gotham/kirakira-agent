@@ -2,6 +2,9 @@ import { execa } from "execa";
 
 import type { McpStdioTransport } from "@kirakira/core";
 
+const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
+const STDERR_TAIL_MAX = 4_000;
+
 /**
  * Encode a JSON-RPC message as newline-delimited JSON (official MCP SDK format).
  * Falls back to Content-Length framing when `legacy` mode is used.
@@ -131,16 +134,24 @@ export class StdioMcpTransport {
   private serverInfo?: { name?: string; version?: string };
   private notificationQueue: unknown[] = [];
   private notificationHandler?: (notification: unknown) => void;
+  private stderrTail = "";
+  private stopped = false;
 
   constructor(private readonly transport: McpStdioTransport) {}
 
-  async start(): Promise<void> {
+  async start(startupTimeoutMs = DEFAULT_STARTUP_TIMEOUT_MS): Promise<void> {
+    this.stopped = false;
+    this.stderrTail = "";
     this.subprocess = execa(this.transport.command, this.transport.args, {
       env: { ...process.env, ...this.transport.env },
       stdin: "pipe",
       stdout: "pipe",
       stderr: "pipe",
       reject: false,
+    });
+
+    this.subprocess.stderr?.on("data", (chunk: Buffer) => {
+      this.appendStderr(chunk);
     });
 
     this.subprocess.stdout?.on("data", (chunk: Buffer) => {
@@ -150,12 +161,26 @@ export class StdioMcpTransport {
       }
     });
 
+    this.subprocess.once("error", (err: Error) => {
+      this.rejectPending(this.formatTransportError("Stdio MCP process failed", err));
+    });
+
+    this.subprocess.once("exit", (code: number | null, signal: NodeJS.Signals | null) => {
+      this.subprocess = undefined;
+      if (this.stopped) return;
+      const reason =
+        signal !== null
+          ? `Stdio MCP process exited with signal ${signal}`
+          : `Stdio MCP process exited with code ${code ?? "unknown"}`;
+      this.rejectPending(this.formatTransportError(reason));
+    });
+
     try {
       const initResult = await this.request("initialize", {
         protocolVersion: "2024-11-05",
         capabilities: {},
         clientInfo: { name: "kirakira-agent", version: "0.1.0" },
-      });
+      }, startupTimeoutMs);
       const parsed = parseInitializeResult(initResult);
       this.serverCapabilities = parsed.capabilities;
       this.serverInfo = parsed.serverInfo;
@@ -164,6 +189,25 @@ export class StdioMcpTransport {
       await this.stop();
       throw err;
     }
+  }
+
+  private appendStderr(chunk: Buffer): void {
+    this.stderrTail = (this.stderrTail + chunk.toString("utf8")).slice(-STDERR_TAIL_MAX);
+  }
+
+  private formatTransportError(message: string, cause?: Error): string {
+    const command = [this.transport.command, ...this.transport.args].join(" ");
+    const causeText = cause ? `: ${cause.message}` : "";
+    const stderr = this.stderrTail.trim();
+    const stderrText = stderr ? `; stderr: ${stderr.slice(-1_200)}` : "";
+    return `${message}${causeText} (${command})${stderrText}`;
+  }
+
+  private rejectPending(message: string): void {
+    for (const pending of this.pending.values()) {
+      pending.reject(new Error(message));
+    }
+    this.pending.clear();
   }
 
   private sendNotification(method: string, params?: unknown): void {
@@ -212,24 +256,58 @@ export class StdioMcpTransport {
     return this.notificationQueue.splice(0, this.notificationQueue.length);
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
+  async request(method: string, params?: unknown, timeoutMs?: number): Promise<unknown> {
     if (!this.subprocess?.stdin) {
       throw new Error("Stdio MCP transport not started");
     }
     const id = this.nextId++;
     const payload = { jsonrpc: "2.0", id, method, params };
     const encoded = encodeJsonRpcMessage(payload);
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const result = new Promise<unknown>((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const clear = () => {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+      };
+      this.pending.set(id, {
+        resolve: (v) => {
+          clear();
+          resolve(v);
+        },
+        reject: (e) => {
+          clear();
+          reject(e);
+        },
+      });
+      if (timeoutMs !== undefined && timeoutMs > 0) {
+        timer = setTimeout(() => {
+          this.pending.delete(id);
+          reject(new Error(this.formatTransportError(`${method} timed out after ${timeoutMs}ms`)));
+        }, timeoutMs);
+      }
     });
-    this.subprocess.stdin.write(encoded);
+    try {
+      this.subprocess.stdin.write(encoded);
+    } catch (err) {
+      if (timer !== undefined) clearTimeout(timer);
+      this.pending.delete(id);
+      throw new Error(
+        this.formatTransportError(
+          `Failed to write ${method} request`,
+          err instanceof Error ? err : undefined,
+        ),
+      );
+    }
     return await result;
   }
 
   async stop(): Promise<void> {
+    this.stopped = true;
+    this.rejectPending("Stdio MCP transport stopped");
     this.subprocess?.kill();
     this.subprocess = undefined;
-    this.pending.clear();
     this.notificationQueue.length = 0;
     this.serverCapabilities = undefined;
     this.serverInfo = undefined;

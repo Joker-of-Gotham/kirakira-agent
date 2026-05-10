@@ -1,0 +1,19 @@
+{
+  "kirakira": {
+    "config": {
+      "org_defaults": {
+        "default_sandbox_profile": "read-only",
+        "default_approval_mode": "human",
+        "interactive_required_for_destructive": true,
+        "max_auto_approvals_per_session": 20,
+        "approval_ttl_seconds": 3600,
+        "content_capture_enabled": false,
+        "audit_enabled": true,
+        "trace_enabled": true,
+        "fail_closed_mode": true,
+        "break_glass_enabled": false,
+        "break_glass_requires_mfa": true
+      }
+    }
+  }
+}

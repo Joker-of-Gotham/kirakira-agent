@@ -24,7 +24,7 @@ export default class McpStart extends Command {
 
     if (!existsSync(configPath)) {
       this.error(
-        `No MCP config at ${configPath}. Run 'kirakira-agent mcp add <name>' first.`,
+        `No MCP config at ${configPath}. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.`,
       );
     }
 

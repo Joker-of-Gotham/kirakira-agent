@@ -212,13 +212,13 @@ export class McpGateway {
     const serverNames = this.manager.listServers();
     const errors: string[] = [];
 
-    for (const name of serverNames) {
+    await Promise.all(serverNames.map(async (name) => {
       try {
         await this.manager.startServer(name);
       } catch (err) {
         errors.push(`${name}: ${err instanceof Error ? err.message : String(err)}`);
       }
-    }
+    }));
 
     await this.refreshToolCache();
 
@@ -413,16 +413,20 @@ export class McpGateway {
 
   /** Get summary of gateway state for TUI display. */
   getSummary(): {
-    servers: Array<{ name: string; health: string; toolCount: number }>;
+    servers: Array<{ name: string; health: string; toolCount: number; error?: string }>;
     totalTools: number;
     aliases: number;
   } {
     const serverNames = this.manager.listServers();
-    const servers = serverNames.map((name) => ({
-      name,
-      health: this.manager.getHealth(name),
-      toolCount: this.serverToolCache.get(name)?.length ?? 0,
-    }));
+    const servers = serverNames.map((name) => {
+      const error = this.manager.getLastError(name);
+      return {
+        name,
+        health: this.manager.getHealth(name),
+        toolCount: this.serverToolCache.get(name)?.length ?? 0,
+        ...(error !== undefined ? { error } : {}),
+      };
+    });
 
     return {
       servers,

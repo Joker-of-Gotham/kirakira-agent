@@ -4,9 +4,11 @@ import type { TuiMode } from "./types.js";
 import { MODE_META } from "./types.js";
 import type { TuiTheme } from "./theme.js";
 import type { Attachment } from "../parser/mention.js";
+import { Spinner } from "./motion.js";
 
 interface InputAreaProps {
   value: string;
+  cursorIndex: number;
   mode: TuiMode;
   thinking: boolean;
   focused?: boolean;
@@ -15,6 +17,7 @@ interface InputAreaProps {
   attachments?: Attachment[];
   taskCount?: number;
   tokenCount?: number;
+  activeToolName?: string;
 }
 
 function shorten(value: string, max: number): string {
@@ -36,9 +39,9 @@ function ContextLine({
     .join("  ");
 
   return (
-    <Box paddingX={2} backgroundColor={theme.colors.surfaceSunken}>
+    <Box paddingX={4} height={1} overflow="hidden" backgroundColor={theme.colors.bg} width="100%">
       <Text color={theme.colors.textTertiary}>context </Text>
-      <Text color={theme.colors.textSecondary}>{rendered}</Text>
+      <Text color={theme.colors.textSecondary} wrap="truncate-end">{rendered}</Text>
       {attachments.length > 4 && (
         <Text color={theme.colors.textTertiary}> +{attachments.length - 4}</Text>
       )}
@@ -46,8 +49,52 @@ function ContextLine({
   );
 }
 
+function clampCursor(value: string, cursorIndex: number): number {
+  return Math.max(0, Math.min(value.length, cursorIndex));
+}
+
+function EditableText({
+  value,
+  cursorIndex,
+  focused,
+  theme,
+}: {
+  value: string;
+  cursorIndex: number;
+  focused: boolean;
+  theme: TuiTheme;
+}): React.ReactElement {
+  if (!value) {
+    return <Text color={theme.colors.textTertiary}>Ask anything...</Text>;
+  }
+
+  const cursor = clampCursor(value, cursorIndex);
+  const before = value.slice(0, cursor);
+  const current = value.slice(cursor, cursor + 1);
+  const after = value.slice(cursor + 1);
+
+  return (
+    <>
+      {before && <Text color={theme.colors.fg}>{before}</Text>}
+      {focused ? (
+        current ? (
+          <Text color={theme.colors.textInverse} backgroundColor={theme.colors.brand}>
+            {current}
+          </Text>
+        ) : (
+          <Text color={theme.colors.brand}>_</Text>
+        )
+      ) : current ? (
+        <Text color={theme.colors.fg}>{current}</Text>
+      ) : null}
+      {after && <Text color={theme.colors.fg}>{after}</Text>}
+    </>
+  );
+}
+
 export function InputArea({
   value,
+  cursorIndex,
   mode,
   thinking,
   focused = true,
@@ -56,58 +103,84 @@ export function InputArea({
   attachments = [],
   taskCount = 0,
   tokenCount,
+  activeToolName,
 }: InputAreaProps): React.ReactElement {
   const meta = MODE_META[mode];
   const cols = process.stdout.columns ?? 80;
-  const isCompact = cols < 84;
+  const isCompact = cols < 92;
   const promptColor = thinking ? theme.colors.warning : focused ? theme.colors.brand : theme.colors.textTertiary;
   const statusText = thinking
-    ? "working..."
+    ? activeToolName
+      ? `tool ${shorten(activeToolName, 20)}`
+      : "working"
     : value
-      ? "Enter send"
-      : "/ commands  @ files  ! shell";
+      ? "enter send"
+      : "/ commands";
+  const primaryText = thinking
+    ? activeToolName
+      ? `running ${shorten(activeToolName, 40)}`
+      : "model is working"
+    : value || "Ask anything...";
+  const modelLabel = model ? shorten(model, isCompact ? 18 : 24) : "model";
 
   return (
-    <Box flexDirection="column" marginTop={0}>
+    <Box flexDirection="column" flexShrink={0} marginTop={0}>
       {focused && <ContextLine attachments={attachments} theme={theme} />}
 
-      <Box paddingX={2} paddingY={0} backgroundColor={theme.colors.surfaceRaised} justifyContent="space-between">
-        <Box flexGrow={1}>
-          <Text color={promptColor} bold>{meta.label}</Text>
-          <Text color={theme.colors.textTertiary}> {">"} </Text>
-          {thinking ? (
-            <Text color={theme.colors.warning}>waiting for model response</Text>
-          ) : value ? (
-            <Text color={theme.colors.fg}>{value}</Text>
-          ) : (
-            <Text color={theme.colors.textTertiary}>Ask anything...</Text>
-          )}
-          {focused && !thinking && value && <Text color={theme.colors.brand}>_</Text>}
-        </Box>
-
-        {!isCompact && (
-          <Box marginLeft={2}>
-            {model && (
-              <>
-                <Text color={theme.colors.textTertiary}>{shorten(model, 24)}</Text>
-                <Text color={theme.colors.textTertiary}> | </Text>
-              </>
-            )}
-            {taskCount > 0 && (
-              <>
-                <Text color={theme.colors.info}>{taskCount} running</Text>
-                <Text color={theme.colors.textTertiary}> | </Text>
-              </>
-            )}
-            {tokenCount !== undefined && tokenCount > 0 && (
-              <>
-                <Text color={theme.colors.textTertiary}>{tokenCount} tokens</Text>
-                <Text color={theme.colors.textTertiary}> | </Text>
-              </>
-            )}
-            <Text color={theme.colors.textTertiary}>{statusText}</Text>
+      <Box paddingX={4} flexShrink={0} backgroundColor={theme.colors.bg} width="100%">
+        <Box flexDirection="row" flexShrink={0} backgroundColor={theme.colors.surfaceRaised} width="100%">
+          <Box width={1} flexShrink={0} backgroundColor={theme.colors.brand} />
+          <Box width="100%" flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" paddingX={2}>
+            <Box height={1} overflow="hidden">
+              {thinking && (
+                <>
+                  <Spinner active color={activeToolName ? theme.colors.tool : theme.colors.reasoning} />
+                  <Text> </Text>
+                </>
+              )}
+              {!thinking && (
+                <>
+                  <Text color={theme.colors.success} bold>$</Text>
+                  <Text color={theme.colors.textTertiary}> </Text>
+                </>
+              )}
+              {thinking ? (
+                <Text color={theme.colors.textSecondary} wrap="truncate-end">
+                  {primaryText}
+                </Text>
+              ) : (
+                <EditableText
+                  value={value}
+                  cursorIndex={cursorIndex}
+                  focused={focused}
+                  theme={theme}
+                />
+              )}
+            </Box>
+            <Box height={1} overflow="hidden" justifyContent="space-between">
+              <Box flexShrink={1} overflow="hidden">
+                <Text color={promptColor} bold>{meta.label}</Text>
+                <Text color={theme.colors.textTertiary}> / </Text>
+                <Text color={theme.colors.textSecondary}>{modelLabel}</Text>
+                {taskCount > 0 && (
+                  <>
+                    <Text color={theme.colors.textTertiary}> / </Text>
+                    <Text color={theme.colors.info}>{taskCount} running</Text>
+                  </>
+                )}
+              </Box>
+              <Box marginLeft={2} flexShrink={0}>
+                {!isCompact && tokenCount !== undefined && tokenCount > 0 && (
+                  <>
+                    <Text color={theme.colors.textTertiary}>{tokenCount} tokens</Text>
+                    <Text color={theme.colors.textTertiary}>  </Text>
+                  </>
+                )}
+                <Text color={theme.colors.textTertiary}>{statusText}</Text>
+              </Box>
+            </Box>
           </Box>
-        )}
+        </Box>
       </Box>
     </Box>
   );

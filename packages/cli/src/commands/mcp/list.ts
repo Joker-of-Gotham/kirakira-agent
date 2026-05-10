@@ -15,7 +15,7 @@ export default class McpList extends Command {
     const configPath = getMcpConfigPath(process.cwd());
 
     if (!existsSync(configPath)) {
-      this.log("No .mcp.json found. Run 'kirakira-agent mcp add' to configure a server.");
+      this.log("No .mcp.json found. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.");
       return;
     }
 

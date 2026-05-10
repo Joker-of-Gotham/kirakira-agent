@@ -28,7 +28,7 @@ func main() {
 
 	healthSvc := health.New(engine)
 
-	server, err := pdp.NewServer(cfg.SocketPath, engine, healthSvc)
+	server, err := pdp.NewServer(cfg.SocketPath, cfg.ListenAddr, engine, healthSvc)
 	if err != nil {
 		slog.Error("failed to create server", "error", err)
 		os.Exit(1)
@@ -48,7 +48,11 @@ func main() {
 		}()
 	}
 
-	slog.Info("kirakirad started", "socket", cfg.SocketPath, "bundle", cfg.BundlePath)
+	if cfg.ListenAddr != "" {
+		slog.Info("kirakirad started", "addr", cfg.ListenAddr, "bundle", cfg.BundlePath)
+	} else {
+		slog.Info("kirakirad started", "socket", cfg.SocketPath, "bundle", cfg.BundlePath)
+	}
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

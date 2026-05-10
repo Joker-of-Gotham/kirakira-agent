@@ -4,6 +4,7 @@ import type { TuiMode } from "./types.js";
 import { MODE_META } from "./types.js";
 import type { FocusArea } from "./key-handler.js";
 import type { TuiTheme } from "./theme.js";
+import { useTicker } from "./hooks/useTicker.js";
 
 interface StatusBarProps {
   workspaceName: string;
@@ -18,13 +19,32 @@ interface StatusBarProps {
   focusArea: FocusArea;
   scrollOffset: number;
   timelineLength: number;
+  scrollLimit?: number;
   theme: TuiTheme;
   totalTasks?: number;
   completedTasks?: number;
+  thinking?: boolean;
+  mcpReady?: boolean;
+  mcpHealthy?: number;
+  mcpTotal?: number;
+  activeToolName?: string;
 }
 
-function shorten(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, Math.max(0, max - 3))}...` : value;
+function fit(value: string, width: number): string {
+  if (width <= 0) return "";
+  if (value.length <= width) return value;
+  if (width <= 1) return value.slice(0, width);
+  if (width <= 3) return value.slice(0, width);
+  return `${value.slice(0, Math.max(0, width - 3))}...`;
+}
+
+function pad(value: string, width: number): string {
+  const fitted = fit(value, width);
+  return `${fitted}${" ".repeat(Math.max(0, width - fitted.length))}`;
+}
+
+function compactPathLabel(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 export function StatusBar({
@@ -40,87 +60,77 @@ export function StatusBar({
   focusArea,
   scrollOffset,
   timelineLength,
+  scrollLimit = timelineLength,
   theme,
   totalTasks = 0,
   completedTasks = 0,
+  thinking = false,
+  mcpReady = true,
+  mcpHealthy = 0,
+  mcpTotal = 0,
+  activeToolName,
 }: StatusBarProps): React.ReactElement {
+  const cols = Math.max(40, process.stdout.columns ?? 80);
+  const innerWidth = Math.max(1, cols - 4);
   const meta = MODE_META[mode];
-  const cols = process.stdout.columns ?? 80;
-  const isCompact = cols < 80;
   const branch = gitBranch && gitBranch !== "?" ? gitBranch : "";
   const showProgress = totalTasks > 0 && completedTasks < totalTasks;
-  const progressWidth = 10;
-  const progressFilled = totalTasks > 0
-    ? Math.round((completedTasks / totalTasks) * progressWidth)
-    : 0;
-  const progressBar = showProgress
-    ? `${"=".repeat(progressFilled)}${"-".repeat(progressWidth - progressFilled)}`
-    : "";
+  const busy = thinking || taskCount > 0 || (!mcpReady && mcpTotal > 0);
+  const tick = useTicker(busy, 120);
+  const spin = busy ? ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"][tick % 10] ?? "⠋" : "";
+  const compact = cols < 96;
+
+  const workspace = compactPathLabel(workspaceName);
+  const left = compact
+    ? "kirakira"
+    : `kirakira / ${workspace}${branch ? ` @ ${branch}` : ""}`;
+
+  const middleParts: string[] = [];
+  if (busy) {
+    middleParts.push(activeToolName ? `${spin} ${activeToolName}` : `${spin}`);
+  }
+  if (showProgress) {
+    middleParts.push(`tasks ${completedTasks}/${totalTasks}`);
+  } else if (taskCount > 0) {
+    middleParts.push(`tasks ${taskCount}`);
+  }
+  if (mcpTotal > 0 && (!mcpReady || mcpHealthy < mcpTotal)) {
+    middleParts.push(!mcpReady ? `mcp starting ${mcpHealthy}/${mcpTotal}` : `mcp ${mcpHealthy}/${mcpTotal}`);
+  }
+  if (pendingApprovals > 0) middleParts.push(`approval ${pendingApprovals}`);
+  if (memoryHits > 0) middleParts.push(`mem ${memoryHits}`);
+  if (focusArea === "scroll" || scrollOffset > 0) {
+    middleParts.push(`scroll ${scrollOffset}/${scrollLimit}`);
+  }
+  const middle = middleParts.join("  ");
+
+  const rightParts = [meta.label, model];
+  if (!compact && trust !== "trusted") rightParts.push(trust);
+  if (!compact) rightParts.push(`ses ${traceId.slice(0, 8)}`);
+  const right = rightParts.join("  ");
+
+  const minRight = Math.min(compact ? 10 : 20, innerWidth);
+  const rightWidth = Math.min(Math.max(minRight, right.length), Math.max(10, Math.floor(innerWidth * 0.32)));
+  const middleCap = Math.max(0, innerWidth - rightWidth - 2);
+  const desiredMiddle = middle ? Math.min(middle.length, compact ? 18 : 30, middleCap) : 0;
+  const leftWidth = Math.max(0, innerWidth - rightWidth - desiredMiddle - (desiredMiddle > 0 ? 2 : 1));
+  const middleWidth = Math.max(0, innerWidth - rightWidth - leftWidth - 2);
+
+  const leftText = middleWidth > 0 ? pad(left, leftWidth) : pad(left, Math.max(0, innerWidth - rightWidth - 1));
+  const middleText = middleWidth > 0 ? pad(middle, middleWidth) : "";
+  const rightText = fit(right, rightWidth);
 
   return (
-    <Box width="100%" paddingX={2} justifyContent="space-between" backgroundColor={theme.colors.surfaceRaised}>
-      <Box>
-        {focusArea === "scroll" && (
-          <Text color={theme.colors.warning} bold>
-            SCROLL{scrollOffset > 0 ? ` ${scrollOffset}/${timelineLength}` : ""}{"  "}
-          </Text>
-        )}
-        {pendingApprovals > 0 && (
-          <Text color={theme.colors.approval} bold>approval {pendingApprovals}{"  "}</Text>
-        )}
-        <Text color={theme.colors.brand} bold>kirakira</Text>
-        <Text color={theme.colors.textTertiary}> / </Text>
-        {!isCompact && (
-          <>
-            <Text color={theme.colors.textSecondary}>{shorten(workspaceName, 22)}</Text>
-            {branch && (
-              <>
-                <Text color={theme.colors.textTertiary}> @ </Text>
-                <Text color={theme.colors.textSecondary}>{shorten(branch, 18)}</Text>
-              </>
-            )}
-            <Text color={theme.colors.textTertiary}> | </Text>
-          </>
-        )}
-        <Text color={meta.color} bold>{meta.label}</Text>
-        <Text color={theme.colors.textTertiary}> | </Text>
-        <Text color={theme.colors.textSecondary}>{shorten(model, isCompact ? 18 : 28)}</Text>
-      </Box>
-
-      {showProgress && !isCompact && (
-        <Box>
-          <Text color={theme.colors.info}>{progressBar} {completedTasks}/{totalTasks}</Text>
-        </Box>
+    <Box width={cols} height={1} flexShrink={0} overflow="hidden" paddingX={2} backgroundColor={theme.colors.surfaceSunken}>
+      <Text color={theme.colors.brand} bold wrap="truncate-end">{leftText}</Text>
+      <Text color={theme.colors.textTertiary}> </Text>
+      {middleWidth > 0 && (
+        <>
+          <Text color={busy ? theme.colors.accentMuted : theme.colors.textTertiary} wrap="truncate-end">{middleText}</Text>
+          <Text color={theme.colors.textTertiary}> </Text>
+        </>
       )}
-
-      <Box>
-        {taskCount > 0 && (
-          <>
-            <Text color={theme.colors.info}>tasks {taskCount}</Text>
-            <Text color={theme.colors.textTertiary}> | </Text>
-          </>
-        )}
-        {!isCompact && (
-          <>
-            <Text color={theme.colors.textTertiary}>session </Text>
-            <Text color={theme.colors.textSecondary}>{traceId.slice(0, 8)}</Text>
-            <Text color={theme.colors.textTertiary}> | </Text>
-          </>
-        )}
-        {memoryHits > 0 && (
-          <>
-            <Text color={theme.colors.memory}>mem {memoryHits}</Text>
-            <Text color={theme.colors.textTertiary}> | </Text>
-          </>
-        )}
-        {trust !== "trusted" && (
-          <>
-            <Text color={theme.colors.warning}>{trust}</Text>
-            <Text color={theme.colors.textTertiary}> | </Text>
-          </>
-        )}
-        <Text dimColor color={theme.colors.textTertiary}>Ctrl+C</Text>
-      </Box>
+      <Text color={theme.colors.textTertiary} wrap="truncate-end">{rightText}</Text>
     </Box>
   );
 }

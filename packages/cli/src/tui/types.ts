@@ -28,6 +28,7 @@ export type TimelineEventKind =
   | "tool"
   | "tool_call"
   | "tool_result"
+  | "thinking"
   | "skill"
   | "approval"
   | "error"
@@ -40,10 +41,24 @@ export interface TimelineEntry {
   text: string;
 }
 
+export type ActiveToolStatus = "running" | "completed" | "failed";
+
+export interface ActiveToolRun {
+  id: string;
+  name: string;
+  argsPreview: string;
+  startedAt: number;
+  status: ActiveToolStatus;
+  latencyMs?: number;
+  error?: string;
+}
+
 export interface McpServerStatus {
   name: string;
   transport: string;
   healthy: boolean;
+  health?: string;
+  error?: string;
 }
 
 export interface SkillEntry {
@@ -165,15 +180,15 @@ export type ApprovalKeyAction =
   | { decision: "details" };
 
 export const MODE_META: Record<TuiMode, { label: string; color: string; icon: string; desc: string }> = {
-  agent: { label: "agent", color: "#7DDC9A", icon: "●", desc: "Full autonomy — read, write, execute" },
-  ask:   { label: "ask",   color: "#7AD7FF", icon: "?", desc: "Read-only Q&A — no tool execution" },
-  plan:  { label: "plan",  color: "#E8B45E", icon: "◆", desc: "Planning — analysis without writes" },
-  debug: { label: "debug", color: "#FF5F87", icon: "◈", desc: "Debug — verbose traces and diagnostics" },
+  agent: { label: "agent", color: "#7DDC9A", icon: "A", desc: "Full autonomy: read, write, execute" },
+  ask: { label: "ask", color: "#7AD7FF", icon: "?", desc: "Read-only Q&A: no tool execution" },
+  plan: { label: "plan", color: "#E8B45E", icon: "P", desc: "Planning: analysis without writes" },
+  debug: { label: "debug", color: "#FF5F87", icon: "D", desc: "Debug: verbose traces and diagnostics" },
 };
 
 export const DENSITY_SPACING: Record<DensityMode, { lineGap: number; cardGap: number }> = {
   spacious: { lineGap: 2, cardGap: 3 },
-  default:  { lineGap: 1, cardGap: 2 },
-  compact:  { lineGap: 0, cardGap: 1 },
-  dense:    { lineGap: 0, cardGap: 0 },
+  default: { lineGap: 1, cardGap: 2 },
+  compact: { lineGap: 0, cardGap: 1 },
+  dense: { lineGap: 0, cardGap: 0 },
 };

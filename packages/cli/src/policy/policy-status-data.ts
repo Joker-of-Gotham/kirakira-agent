@@ -14,7 +14,7 @@ import { fileExists } from "../lib/ledger-utils.js";
 export interface PolicyStatusData {
   bundleId: string;
   signatureStatus: string;
-  transport: "embedded" | "ipc";
+  transport: "embedded" | "ipc" | "tcp";
   pdpHealthStatus: PdpHealth["status"] | "unknown";
   pdpHealthy: boolean;
   airiskLatencyMsDisplay: string;
@@ -58,7 +58,10 @@ export async function collectPolicyStatusData(options: {
     const pdpProbe = await createPdpClient();
     const health = await pdpProbe.health();
     await pdpProbe.close();
-    transport = health.mode === "ipc" ? "ipc" : "embedded";
+    transport =
+      health.mode === "ipc" || health.mode === "tcp"
+        ? health.mode
+        : "embedded";
     if (health.bundleId) bundleId = health.bundleId;
     pdpHealthStatus = health.status;
   } catch {
@@ -66,7 +69,7 @@ export async function collectPolicyStatusData(options: {
   }
 
   const sigNextToBundle =
-    transport === "ipc"
+    transport === "ipc" || transport === "tcp"
       ? "see remote PDP bundle artifact"
       : (await fileExists(join(homedir(), ".kirakira", ".signatures.json")))
         ? "~/.kirakira/.signatures.json present"

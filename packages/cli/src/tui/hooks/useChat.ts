@@ -3,7 +3,7 @@ import {
   chatCompleteMultiTurnStream,
 } from "../../gateway/openai-complete.js";
 import type { ProviderConfig } from "../../gateway/openai-complete.js";
-import type { TimelineEntry } from "../types.js";
+import type { ActiveToolRun, TimelineEntry } from "../types.js";
 import type { McpToolDescriptor } from "./useMcp.js";
 import {
   buildToolSystemPrompt,
@@ -43,6 +43,7 @@ interface UseChatReturn {
   thinking: boolean;
   thinkingText: string;
   streamingContent: string;
+  activeTool: ActiveToolRun | null;
   sendChat: (text: string, model: string) => Promise<{
     ok: boolean;
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
@@ -57,6 +58,14 @@ interface UseChatReturn {
 }
 
 const MAX_TOOL_ROUNDS = 10;
+const TOOL_PREVIEW_LENGTH = 2000;
+
+function previewValue(value: unknown, max = TOOL_PREVIEW_LENGTH): string {
+  const raw = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  return (raw ?? "")
+    .trim()
+    .slice(0, max);
+}
 
 export function useChat(options?: UseChatOptions): UseChatReturn {
   const providerRef = useRef(options?.providerConfig);
@@ -73,6 +82,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
   const [thinking, setThinking] = useState(false);
   const [thinkingText, setThinkingText] = useState("");
   const [streamingContent, setStreamingContent] = useState("");
+  const [activeTool, setActiveTool] = useState<ActiveToolRun | null>(null);
 
   const addTimelineEntry = useCallback((entry: TimelineEntry) => {
     setTimeline((prev) => [...prev, entry]);
@@ -109,6 +119,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     setThinking(true);
     setThinkingText("");
     setStreamingContent("");
+    setActiveTool(null);
 
     let currentMessages = newMessages;
     let finalUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
@@ -117,6 +128,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     try {
       while (round < MAX_TOOL_ROUNDS) {
         round++;
+        let roundThinking = "";
 
         const result = await chatCompleteMultiTurnStream(
           {
@@ -128,6 +140,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
           },
           {
             onThinking(chunk) {
+              roundThinking += chunk;
               setThinkingText((prev) => prev + chunk);
             },
             onContent(chunk) {
@@ -137,6 +150,18 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
         );
 
         finalUsage = result.usage;
+
+        if (roundThinking.trim()) {
+          setTimeline((prev) => [
+            ...prev,
+            {
+              id: nextId(),
+              ts: nowIso(),
+              kind: "thinking",
+              text: roundThinking.trim(),
+            },
+          ]);
+        }
 
         if (!callTool || !hasToolCalls(result.text)) {
           const proseText = stripToolCalls(result.text) || result.text;
@@ -162,27 +187,41 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
 
         const resultParts: string[] = [];
         for (const tc of toolCalls) {
+          const toolRun: ActiveToolRun = {
+            id: nextId(),
+            name: tc.name,
+            argsPreview: JSON.stringify(tc.arguments).slice(0, TOOL_PREVIEW_LENGTH),
+            startedAt: Date.now(),
+            status: "running",
+          };
+          setActiveTool(toolRun);
           setTimeline((prev) => [
             ...prev,
             {
-              id: nextId(),
+              id: toolRun.id,
               ts: nowIso(),
-              kind: "tool_call" as TimelineEntry["kind"],
-              text: `⚙ ${tc.name}(${JSON.stringify(tc.arguments).slice(0, 120)})`,
+              kind: "tool_call",
+              text: `call ${tc.name} ${toolRun.argsPreview}`,
             },
           ]);
 
           const tcResult = await callTool(tc.name, tc.arguments);
+          setActiveTool({
+            ...toolRun,
+            status: tcResult.ok ? "completed" : "failed",
+            latencyMs: tcResult.latencyMs,
+            error: tcResult.error,
+          });
 
           setTimeline((prev) => [
             ...prev,
             {
               id: nextId(),
               ts: nowIso(),
-              kind: "tool_result" as TimelineEntry["kind"],
+              kind: "tool_result",
               text: tcResult.ok
-                ? `✓ ${tc.name} (${tcResult.latencyMs}ms)`
-                : `✗ ${tc.name}: ${tcResult.error ?? "error"}`,
+                ? `done ${tc.name} ${tcResult.latencyMs}ms ${previewValue(tcResult.content)}`
+                : `fail ${tc.name}: ${tcResult.error ?? "error"}`,
             },
           ]);
 
@@ -200,6 +239,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
       setThinking(false);
       setThinkingText("");
       setStreamingContent("");
+      setActiveTool(null);
       return { ok: true, usage: finalUsage };
     } catch (e) {
       setMessages((prev) => prev.slice(0, messages.length));
@@ -211,6 +251,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
       setThinking(false);
       setThinkingText("");
       setStreamingContent("");
+      setActiveTool(null);
       return { ok: false };
     }
   }, [messages]);
@@ -220,6 +261,8 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     const transcript = messages.map((m) => `${m.role}: ${m.content}`).join("\n\n");
     setThinking(true);
     setThinkingText("");
+    setStreamingContent("");
+    setActiveTool(null);
     try {
       const result = await chatCompleteMultiTurnStream(
         {
@@ -251,11 +294,14 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     }
     setThinking(false);
     setThinkingText("");
+    setStreamingContent("");
+    setActiveTool(null);
   }, [messages, addSystemTimeline]);
 
   const clearHistory = useCallback(() => {
     setMessages([]);
     setTimeline([]);
+    setActiveTool(null);
   }, []);
 
   const restoreMessages = useCallback((msgs: Array<{ role: string; content: string }>) => {
@@ -263,10 +309,11 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     const entries: TimelineEntry[] = msgs.map((m) => ({
       id: nextId(),
       ts: nowIso(),
-      kind: (m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system") as TimelineEntry["kind"],
+      kind: m.role === "user" ? "user" : m.role === "assistant" ? "agent" : "system",
       text: m.content,
     }));
     setTimeline(entries);
+    setActiveTool(null);
   }, []);
 
   const snapshot = useCallback((): ChatSnapshot => ({
@@ -280,6 +327,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     setThinking(false);
     setThinkingText("");
     setStreamingContent("");
+    setActiveTool(null);
   }, []);
 
   return {
@@ -288,6 +336,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
     thinking,
     thinkingText,
     streamingContent,
+    activeTool,
     sendChat,
     compact,
     clearHistory,

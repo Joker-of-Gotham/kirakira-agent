@@ -30,7 +30,7 @@ function Row({
   color: string;
 }): React.ReactElement {
   return (
-    <Box justifyContent="space-between">
+    <Box justifyContent="space-between" height={1} overflow="hidden">
       <Text color={color}>{label}</Text>
       <Text color={color}>{value}</Text>
     </Box>
@@ -54,30 +54,33 @@ export function SidebarPanel({
     <Box
       width={Math.max(24, width)}
       flexDirection="column"
-      paddingX={2}
+      paddingX={1}
       paddingY={1}
       marginRight={1}
-      backgroundColor={theme.colors.surfaceSunken}
+      backgroundColor={theme.colors.bg}
     >
-      <Text color={theme.colors.fg} bold>Workspace</Text>
-      <Text color={theme.colors.textTertiary}>{shorten(sessionId, Math.max(12, width - 4))}</Text>
+      <Box>
+        <Text color={theme.colors.brand}>|</Text>
+        <Text color={theme.colors.fg} bold> workspace</Text>
+      </Box>
+      <Text color={theme.colors.textTertiary}>  {shorten(sessionId, Math.max(12, width - 4))}</Text>
 
       <Box marginTop={1} flexDirection="column">
-        <Text color={theme.colors.textSecondary} bold>Activity</Text>
+        <Text color={theme.colors.textSecondary}>activity</Text>
         <Row label="running" value={tasksRunning} color={tasksRunning > 0 ? theme.colors.warning : theme.colors.textTertiary} />
         <Row label="queued" value={tasksQueued} color={theme.colors.textTertiary} />
         <Row label="subagents" value={subagentRunning} color={theme.colors.textTertiary} />
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text color={theme.colors.textSecondary} bold>Context</Text>
+        <Text color={theme.colors.textSecondary}>context</Text>
         <Row label="mcp" value={mcpCount} color={theme.colors.textTertiary} />
         <Row label="skills" value={skillCount} color={theme.colors.textTertiary} />
         <Row label="memory" value={memoryHits} color={theme.colors.textTertiary} />
       </Box>
 
       <Box marginTop={1} flexDirection="column">
-        <Text color={theme.colors.textSecondary} bold>Governance</Text>
+        <Text color={theme.colors.textSecondary}>policy</Text>
         <Row label="approvals" value={pendingApprovals} color={pendingApprovals > 0 ? theme.colors.approval : theme.colors.textTertiary} />
         <Row label="spans" value={traceSpansOpen} color={theme.colors.textTertiary} />
       </Box>

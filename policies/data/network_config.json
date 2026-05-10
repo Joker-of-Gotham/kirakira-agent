@@ -1,0 +1,28 @@
+{
+  "kirakira": {
+    "config": {
+      "network_allowlist": [
+        "*.github.com",
+        "*.githubusercontent.com",
+        "api.openai.com",
+        "api.anthropic.com",
+        "*.npmjs.org",
+        "registry.npmjs.org",
+        "pypi.org",
+        "files.pythonhosted.org"
+      ],
+      "secret_patterns": [
+        "**/.ssh/**",
+        "**/.aws/**",
+        "**/.gnupg/**",
+        "**/.config/gcloud/**",
+        "**/.azure/**",
+        "**/credentials*",
+        "**/*secret*",
+        "**/*token*",
+        "**/.env",
+        "**/.env.*"
+      ]
+    }
+  }
+}

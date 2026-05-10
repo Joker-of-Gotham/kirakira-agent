@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildTimelineLines } from "../../../../packages/cli/src/tui/timeline-lines.js";
 
 describe("timeline-lines", () => {
-  it("builds line-level transcript from a single long agent message", () => {
+  it("keeps a long agent response as a single assistant card", () => {
     const lines = buildTimelineLines({
       entries: [
         {
@@ -24,8 +24,8 @@ describe("timeline-lines", () => {
       width: 48,
     });
 
-    // Even with only one entry, line-level rendering should expose many rows for scrolling.
-    expect(lines.length).toBeGreaterThan(4);
+    expect(lines.length).toBe(1);
+    expect(lines[0]?.lane).toBe("agent");
     expect(lines.some((l) => l.text.includes("尾声"))).toBe(true);
   });
 
@@ -57,7 +57,7 @@ describe("timeline-lines", () => {
     expect(maxConsecutiveBlank).toBeLessThanOrEqual(1);
   });
 
-  it("appends thinking preview lines", () => {
+  it("appends a thinking card with the latest summary line", () => {
     const lines = buildTimelineLines({
       entries: [],
       thinking: true,
@@ -66,8 +66,8 @@ describe("timeline-lines", () => {
     });
 
     expect(lines[0]?.text).toContain("thinking");
-    expect(lines.some((l) => l.text.includes("hidden"))).toBe(true);
     expect(lines.some((l) => l.text.includes("line7"))).toBe(true);
+    expect(lines.every((l) => l.lane === "thinking")).toBe(true);
   });
 
   it("hides tool/system lines when details is off", () => {

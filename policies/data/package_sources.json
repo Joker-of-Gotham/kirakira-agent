@@ -1,0 +1,27 @@
+{
+  "kirakira": {
+    "config": {
+      "package_sources": {
+        "npm_allowlist": [
+          "registry.npmjs.org",
+          "npm.pkg.github.com"
+        ],
+        "pypi_allowlist": [
+          "pypi.org",
+          "files.pythonhosted.org"
+        ],
+        "cargo_allowlist": [
+          "crates.io",
+          "static.crates.io"
+        ],
+        "go_allowlist": [
+          "proxy.golang.org",
+          "sum.golang.org"
+        ],
+        "denied_sources": [],
+        "require_lockfile": true,
+        "require_provenance": false
+      }
+    }
+  }
+}

@@ -31,6 +31,7 @@ export interface UseMcpReturn {
     error?: string;
   }>;
   refresh: () => Promise<void>;
+  reload: () => Promise<void>;
 }
 
 export function useMcp(workspaceRoot: string): UseMcpReturn {
@@ -54,9 +55,13 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
   }, []);
 
   async function startMcp(): Promise<void> {
+    setReady(false);
+    setError(undefined);
     const configPath = getMcpConfigPath(workspaceRoot);
     if (!existsSync(configPath)) {
       setError("No .mcp.json found");
+      setServers([]);
+      setTools([]);
       setReady(true);
       return;
     }
@@ -66,6 +71,8 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
       raw = readFileSync(configPath, "utf-8");
     } catch (e) {
       setError(`Failed to read ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
+      setServers([]);
+      setTools([]);
       setReady(true);
       return;
     }
@@ -75,20 +82,28 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
       configs = parseMcpConfigJson(raw);
     } catch (e) {
       setError(`Invalid .mcp.json: ${e instanceof Error ? e.message : String(e)}`);
+      setServers([]);
+      setTools([]);
       setReady(true);
       return;
     }
 
     if (configs.length === 0) {
+      setServers([]);
+      setTools([]);
       setReady(true);
       return;
     }
+
+    await gatewayRef.current?.stopAll().catch(() => {});
+    gatewayRef.current = null;
 
     setServers(
       configs.map((c) => ({
         name: c.name,
         transport: c.transport.kind,
         healthy: false,
+        health: "starting",
       })),
     );
 
@@ -100,8 +115,9 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
 
     try {
       await gateway.startAll();
-    } catch {
+    } catch (e) {
       // partial start is OK
+      setError(e instanceof Error ? e.message : String(e));
     }
 
     syncState(gateway);
@@ -115,6 +131,8 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
         name: s.name,
         transport: "stdio",
         healthy: s.health === "healthy",
+        health: s.health,
+        error: s.error,
       })),
     );
     setTools(
@@ -157,5 +175,11 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
     syncState(gw);
   }, []);
 
-  return { servers, tools, ready, error, callTool, refresh };
+  const reload = useCallback(async () => {
+    await gatewayRef.current?.stopAll().catch(() => {});
+    gatewayRef.current = null;
+    await startMcp();
+  }, [workspaceRoot]);
+
+  return { servers, tools, ready, error, callTool, refresh, reload };
 }

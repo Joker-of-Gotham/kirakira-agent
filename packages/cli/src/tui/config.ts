@@ -54,7 +54,7 @@ export interface LoadedTuiConfig {
 }
 
 export const DEFAULT_TUI_CONFIG: TuiConfig = {
-  theme: "graphite",
+  theme: "kirakira",
   mouse: true,
   diffStyle: "auto",
   density: "default",
@@ -81,7 +81,7 @@ export const DEFAULT_TUI_CONFIG: TuiConfig = {
     toolDetails: "compact",
     showReasoning: "summary",
     showPolicyBadges: true,
-    compactCards: false,
+    compactCards: true,
   },
   keybinds: {
     leader: "ctrl+x",
