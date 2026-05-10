@@ -147,4 +147,6 @@ decision := {
 	"approval": approvals.result,
 	"sandbox_profile": sandbox.profile,
 	"obligations": obligations.result,
+} if {
+	true
 }

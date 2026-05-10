@@ -28,7 +28,7 @@ export default class McpTools extends Command {
     const configPath = getMcpConfigPath(process.cwd());
 
     if (!existsSync(configPath)) {
-      this.error(`No MCP config at ${configPath}. Run 'kirakira-agent mcp add' first.`);
+      this.error(`No MCP config at ${configPath}. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.`);
     }
 
     const raw = await readFile(configPath, "utf-8");
@@ -61,6 +61,9 @@ export default class McpTools extends Command {
       for (const srv of summary.servers) {
         const icon = srv.health === "healthy" ? "✓" : srv.health === "stopped" ? "○" : "✗";
         this.log(`  ${icon} ${srv.name} (${srv.toolCount} tools, ${srv.health})`);
+        if (srv.error) {
+          this.log(`      ${srv.error}`);
+        }
       }
 
       this.log("");

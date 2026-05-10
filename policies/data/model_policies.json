@@ -1,0 +1,14 @@
+{
+  "kirakira": {
+    "config": {
+      "model_policies": {
+        "allowed_providers": ["openai", "anthropic", "azure", "ollama", "vllm"],
+        "cost_caps": {
+          "per_session_usd": 10.0,
+          "per_day_usd": 50.0
+        },
+        "denied_models": []
+      }
+    }
+  }
+}

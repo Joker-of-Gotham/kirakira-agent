@@ -30,13 +30,14 @@ interface PackageSpec {
  */
 function detectPackage(spec: string, extraArgs: string[]): PackageSpec {
   const trimmed = spec.trim();
+  const resolvedExtraArgs = defaultArgsForPackage(trimmed, extraArgs);
 
   if (trimmed.startsWith("node:")) {
     const localPath = trimmed.slice(5);
     return {
       serverName: deriveNameFromPath(localPath),
       command: "node",
-      args: [localPath, ...extraArgs],
+      args: [localPath, ...resolvedExtraArgs],
       env: {},
     };
   }
@@ -46,7 +47,7 @@ function detectPackage(spec: string, extraArgs: string[]): PackageSpec {
     return {
       serverName: deriveNameFromPkg(pkg),
       command: "uvx",
-      args: [pkg, ...extraArgs],
+      args: [pkg, ...resolvedExtraArgs],
       env: {},
     };
   }
@@ -56,7 +57,7 @@ function detectPackage(spec: string, extraArgs: string[]): PackageSpec {
     return {
       serverName: deriveNameFromPkg(pkg),
       command: "bunx",
-      args: [pkg, ...extraArgs],
+      args: [pkg, ...resolvedExtraArgs],
       env: { NODE_NO_WARNINGS: "1" },
     };
   }
@@ -64,9 +65,9 @@ function detectPackage(spec: string, extraArgs: string[]): PackageSpec {
   const isNpm = trimmed.startsWith("@") || trimmed.match(/^[a-z0-9@]/);
   if (isNpm) {
     return {
-      serverName: deriveNameFromPkg(trimmed),
+      serverName: deriveServerName(trimmed),
       command: "npx",
-      args: ["-y", trimmed, ...extraArgs],
+      args: ["-y", trimmed, ...resolvedExtraArgs],
       env: { NODE_NO_WARNINGS: "1" },
     };
   }
@@ -74,9 +75,22 @@ function detectPackage(spec: string, extraArgs: string[]): PackageSpec {
   return {
     serverName: deriveNameFromPath(trimmed),
     command: trimmed,
-    args: [...extraArgs],
+    args: [...resolvedExtraArgs],
     env: {},
   };
+}
+
+function defaultArgsForPackage(spec: string, extraArgs: string[]): string[] {
+  if (extraArgs.length > 0) return [...extraArgs];
+  if (spec.includes("server-filesystem")) {
+    return [process.env.KIRAKIRA_WORKSPACE_ROOT || "."];
+  }
+  return [];
+}
+
+function deriveServerName(pkg: string): string {
+  if (pkg.includes("@modelcontextprotocol/server-filesystem")) return "filesystem-core";
+  return deriveNameFromPkg(pkg);
 }
 
 function deriveNameFromPkg(pkg: string): string {
@@ -103,11 +117,11 @@ export default class McpAdd extends Command {
   static override description =
     "Add an MCP server — auto-configures from a package name\n\n" +
     "Examples:\n" +
-    "  $ kirakira-agent mcp add @modelcontextprotocol/server-memory\n" +
-    "  $ kirakira-agent mcp add @modelcontextprotocol/server-filesystem -- .\n" +
-    "  $ kirakira-agent mcp add mcp-ripgrep@latest\n" +
-    "  $ kirakira-agent mcp add pypi:mcp-server-fetch\n" +
-    "  $ kirakira-agent mcp add node:./my-server/dist/index.js\n";
+    "  $ pnpm start -- mcp add @modelcontextprotocol/server-memory\n" +
+    "  $ pnpm start -- mcp add @modelcontextprotocol/server-filesystem\n" +
+    "  $ pnpm start -- mcp add mcp-ripgrep@latest\n" +
+    "  $ pnpm start -- mcp add pypi:mcp-server-fetch\n" +
+    "  $ pnpm start -- mcp add node:./my-server/dist/index.js\n";
 
   static override strict = false;
 

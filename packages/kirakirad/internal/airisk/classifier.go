@@ -8,15 +8,15 @@ import (
 
 // ClassificationRule binds a named profile to matching logic and deltas.
 type ClassificationRule struct {
-	ActionFamily           string
-	MatchFunc              func(ActionInput) bool
-	SideEffect             string
-	Destructive            bool
-	NetworkRequired        bool
-	ExternalContentDep     bool
-	SecretExposureRisk     string // empty skips merge
-	WorkspaceEscapeRisk    string
-	SupplyChainRisk        string
+	ActionFamily        string
+	MatchFunc           func(ActionInput) bool
+	SideEffect          string
+	Destructive         bool
+	NetworkRequired     bool
+	ExternalContentDep  bool
+	SecretExposureRisk  string // empty skips merge
+	WorkspaceEscapeRisk string
+	SupplyChainRisk     string
 }
 
 // ActionInput captures the PDP-facing AIRISK normalization.
@@ -38,11 +38,11 @@ type ActionInput struct {
 
 type airRule struct {
 	ClassificationRule
-	ClaimCode string
-	ClaimSeverity string
+	ClaimCode       string
+	ClaimSeverity   string
 	ClaimConfidence float64
-	Obligations []string
-	evidenceKind string
+	Obligations     []string
+	evidenceKind    string
 }
 
 // defaultRules documents the thirteen ordered AIRISK classification rules.
@@ -199,7 +199,7 @@ func packageInstall(ai ActionInput) bool {
 		return strings.Contains(txt, " install") || strings.Contains(ft, "install")
 	case "conda", "mamba":
 		return strings.Contains(txt, "install")
-	case "apk", "apt-get", "apt", "dnf", "yum", "zypper", "apk":
+	case "apk", "apt-get", "apt", "dnf", "yum", "zypper":
 		return strings.Contains(txt+" "+ft, "install") || strings.Contains(txt, "upgrade")
 	case "cargo", "gem", "composer", "helm":
 		return strings.Contains(txt+" "+ft, "install") || strings.Contains(ft, "add")
@@ -450,23 +450,23 @@ func deriveSideEffect(ar airRule, ai ActionInput) string {
 func pickFamilyPriority(current string, cand string) string {
 	priority := func(name string) int {
 		table := map[string]int{
-			"unset":                1,
-			"general_unclassified": 2,
-			"shell_readonly":       5,
-			"mcp_read":             14,
+			"unset":                 1,
+			"general_unclassified":  2,
+			"shell_readonly":        5,
+			"mcp_read":              14,
 			"shell_workspace_write": 35,
-			"network_fetch":        41,
-			"package_install":      54,
-			"model_invoke":         53,
-			"skill_script":         53,
-			"config_modify":        54,
-			"vcs_push":             72,
-			"file_delete":          73,
-			"mcp_write":            77,
-			"secret_touch":         82,
-			"interpreter_handoff":  90,
-			"workspace_escape":     93,
-			"path_escape":          93,
+			"network_fetch":         41,
+			"package_install":       54,
+			"model_invoke":          53,
+			"skill_script":          53,
+			"config_modify":         54,
+			"vcs_push":              72,
+			"file_delete":           73,
+			"mcp_write":             77,
+			"secret_touch":          82,
+			"interpreter_handoff":   90,
+			"workspace_escape":      93,
+			"path_escape":           93,
 		}
 		if v, ok := table[name]; ok {
 			return v
@@ -567,11 +567,11 @@ func ruleSecretTouch() airRule {
 			WorkspaceEscapeRisk: "high",
 			MatchFunc:           secretTouch,
 		},
-		ClaimCode:          "AIRISK-SECRET-TOUCH",
-		ClaimSeverity:      "critical",
-		ClaimConfidence:    0.9,
-		Obligations:        []string{"mask_logs_tokens", "use_ephemeral_secrets_store"},
-		evidenceKind:       "paths",
+		ClaimCode:       "AIRISK-SECRET-TOUCH",
+		ClaimSeverity:   "critical",
+		ClaimConfidence: 0.9,
+		Obligations:     []string{"mask_logs_tokens", "use_ephemeral_secrets_store"},
+		evidenceKind:    "paths",
 	}
 }
 
@@ -584,11 +584,11 @@ func ruleFileDelete() airRule {
 			WorkspaceEscapeRisk: "medium",
 			MatchFunc:           fileDelete,
 		},
-		ClaimCode:          "AIRISK-DESTROY-FILES",
-		ClaimSeverity:      "critical",
-		ClaimConfidence:    0.93,
-		Obligations:        []string{"confirm_path_boundary"},
-		evidenceKind:       "destructive_targets",
+		ClaimCode:       "AIRISK-DESTROY-FILES",
+		ClaimSeverity:   "critical",
+		ClaimConfidence: 0.93,
+		Obligations:     []string{"confirm_path_boundary"},
+		evidenceKind:    "destructive_targets",
 	}
 }
 
@@ -601,11 +601,11 @@ func ruleWorkspaceEscapeSurface() airRule {
 			WorkspaceEscapeRisk: "high",
 			MatchFunc:           workspaceEscape,
 		},
-		ClaimCode:          "AIRISK-WORKSPACE-ESCAPE",
-		ClaimSeverity:      "high",
-		ClaimConfidence:    0.91,
-		Obligations:        []string{"enforce_chroot_workspace"},
-		evidenceKind:       "paths",
+		ClaimCode:       "AIRISK-WORKSPACE-ESCAPE",
+		ClaimSeverity:   "high",
+		ClaimConfidence: 0.91,
+		Obligations:     []string{"enforce_chroot_workspace"},
+		evidenceKind:    "paths",
 	}
 }
 
@@ -621,11 +621,11 @@ func ruleVCSPush() airRule {
 			WorkspaceEscapeRisk: "",
 			MatchFunc:           vcsPush,
 		},
-		ClaimCode:          "AIRISK-VCS-PUSH",
-		ClaimSeverity:      "high",
-		ClaimConfidence:    0.82,
-		Obligations:        []string{"require_branch_protections_ci"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-VCS-PUSH",
+		ClaimSeverity:   "high",
+		ClaimConfidence: 0.82,
+		Obligations:     []string{"require_branch_protections_ci"},
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -641,11 +641,11 @@ func rulePackageInstall() airRule {
 			WorkspaceEscapeRisk: "",
 			MatchFunc:           packageInstall,
 		},
-		ClaimCode:          "AIRISK-PACKAGE-FETCH",
-		ClaimSeverity:      "medium",
-		ClaimConfidence:    0.88,
-		Obligations:        []string{"verify_lockfiles"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-PACKAGE-FETCH",
+		ClaimSeverity:   "medium",
+		ClaimConfidence: 0.88,
+		Obligations:     []string{"verify_lockfiles"},
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -661,11 +661,11 @@ func ruleNetworkFetch() airRule {
 			WorkspaceEscapeRisk: "",
 			MatchFunc:           networkFetch,
 		},
-		ClaimCode:          "AIRISK-NETWORK",
-		ClaimSeverity:      "medium",
-		ClaimConfidence:    0.78,
-		Obligations:        []string{"apply_egress_allowlist"},
-		evidenceKind:       "network_domains",
+		ClaimCode:       "AIRISK-NETWORK",
+		ClaimSeverity:   "medium",
+		ClaimConfidence: 0.78,
+		Obligations:     []string{"apply_egress_allowlist"},
+		evidenceKind:    "network_domains",
 	}
 }
 
@@ -680,30 +680,30 @@ func ruleSkillScript() airRule {
 			SupplyChainRisk:     "medium",
 			WorkspaceEscapeRisk: "",
 		},
-		ClaimCode:          "AIRISK-SKILL",
-		ClaimSeverity:      "medium",
-		ClaimConfidence:    0.74,
-		Obligations:        []string{"sandbox_skill_runtime"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-SKILL",
+		ClaimSeverity:   "medium",
+		ClaimConfidence: 0.74,
+		Obligations:     []string{"sandbox_skill_runtime"},
+		evidenceKind:    "cmd",
 	}
 }
 
 func ruleModelInvoke() airRule {
 	return airRule{
 		ClassificationRule: ClassificationRule{
-			ActionFamily:        "model_invoke",
-			MatchFunc:           modelTool,
-			SideEffect:          "",
-			NetworkRequired:     true,
-			ExternalContentDep:  true,
-			SecretExposureRisk:  "medium",
-			SupplyChainRisk:     "medium",
+			ActionFamily:       "model_invoke",
+			MatchFunc:          modelTool,
+			SideEffect:         "",
+			NetworkRequired:    true,
+			ExternalContentDep: true,
+			SecretExposureRisk: "medium",
+			SupplyChainRisk:    "medium",
 		},
-		ClaimCode:          "AIRISK-MODEL",
-		ClaimSeverity:      "medium",
-		ClaimConfidence:    0.8,
-		Obligations:        []string{"apply_inference_controls"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-MODEL",
+		ClaimSeverity:   "medium",
+		ClaimConfidence: 0.8,
+		Obligations:     []string{"apply_inference_controls"},
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -718,11 +718,11 @@ func ruleConfigModify() airRule {
 			WorkspaceEscapeRisk: "medium",
 			MatchFunc:           configModify,
 		},
-		ClaimCode:          "AIRISK-CONFIG",
-		ClaimSeverity:      "medium",
-		ClaimConfidence:    0.77,
-		Obligations:        []string{"require_infra_review"},
-		evidenceKind:       "paths",
+		ClaimCode:       "AIRISK-CONFIG",
+		ClaimSeverity:   "medium",
+		ClaimConfidence: 0.77,
+		Obligations:     []string{"require_infra_review"},
+		evidenceKind:    "paths",
 	}
 }
 
@@ -737,11 +737,11 @@ func ruleMCPWrite() airRule {
 			WorkspaceEscapeRisk: "medium",
 			MatchFunc:           mcpWrite,
 		},
-		ClaimCode:          "AIRISK-MCP-WRITE",
-		ClaimSeverity:      "high",
-		ClaimConfidence:    0.92,
-		Obligations:        []string{"record_mcp_payloads"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-MCP-WRITE",
+		ClaimSeverity:   "high",
+		ClaimConfidence: 0.92,
+		Obligations:     []string{"record_mcp_payloads"},
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -755,10 +755,10 @@ func ruleMCPRead() airRule {
 			SupplyChainRisk:    "low",
 			MatchFunc:          mcpRead,
 		},
-		ClaimCode:          "AIRISK-MCP-READ",
-		ClaimSeverity:      "low",
-		ClaimConfidence:    0.66,
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-MCP-READ",
+		ClaimSeverity:   "low",
+		ClaimConfidence: 0.66,
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -772,11 +772,11 @@ func ruleShellWorkspaceWrite() airRule {
 			WorkspaceEscapeRisk: "low",
 			MatchFunc:           workspaceWrite,
 		},
-		ClaimCode:          "AIRISK-SHELL-WRITE",
-		ClaimSeverity:      "low",
-		ClaimConfidence:    0.7,
-		Obligations:        []string{"collect_diffs"},
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-SHELL-WRITE",
+		ClaimSeverity:   "low",
+		ClaimConfidence: 0.7,
+		Obligations:     []string{"collect_diffs"},
+		evidenceKind:    "cmd",
 	}
 }
 
@@ -789,9 +789,9 @@ func ruleShellReadonly() airRule {
 			ExternalContentDep: false,
 			MatchFunc:          shellReadonly,
 		},
-		ClaimCode:          "AIRISK-SHELL-READONLY",
-		ClaimSeverity:      "informational",
-		ClaimConfidence:    0.63,
-		evidenceKind:       "cmd",
+		ClaimCode:       "AIRISK-SHELL-READONLY",
+		ClaimSeverity:   "informational",
+		ClaimConfidence: 0.63,
+		evidenceKind:    "cmd",
 	}
 }

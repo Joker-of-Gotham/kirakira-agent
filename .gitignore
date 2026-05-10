@@ -40,6 +40,7 @@ coverage/
 .kirakira/cache/
 .kirakira/tmp/
 .kirakira/state/
+.kirakira/runtime-image.hash
 
 # Python
 __pycache__/
@@ -73,7 +74,7 @@ logs/
 tmp/
 temp/
 .docker-data/
-data/
+/data/
 
 # Generated policy artifacts
 policies/bundle.tar.gz

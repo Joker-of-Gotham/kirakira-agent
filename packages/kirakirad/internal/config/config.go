@@ -9,6 +9,7 @@ import (
 
 type Config struct {
 	SocketPath string
+	ListenAddr string
 	BundlePath string
 	LogLevel   slog.Level
 	HealthPort int
@@ -17,10 +18,11 @@ type Config struct {
 func Parse() *Config {
 	homeDir, _ := os.UserHomeDir()
 	defaultSocket := filepath.Join(homeDir, ".kirakira", "kirakirad.sock")
-	defaultBundle := filepath.Join(".", "policies")
+	defaultBundle := envOrDefault("KIRAKIRA_POLICY_BUNDLE", filepath.Join(".", "policies"))
 
 	cfg := &Config{}
 	flag.StringVar(&cfg.SocketPath, "socket", defaultSocket, "Unix socket path")
+	flag.StringVar(&cfg.ListenAddr, "addr", os.Getenv("KIRAKIRA_PDP_ADDR"), "TCP listen address, for example :17777 (overrides --socket)")
 	flag.StringVar(&cfg.BundlePath, "bundle", defaultBundle, "OPA bundle path")
 	flag.IntVar(&cfg.HealthPort, "health-port", 0, "HTTP health check port (0 = disabled)")
 
@@ -39,4 +41,11 @@ func Parse() *Config {
 	}
 
 	return cfg
+}
+
+func envOrDefault(name string, fallback string) string {
+	if v := os.Getenv(name); v != "" {
+		return v
+	}
+	return fallback
 }

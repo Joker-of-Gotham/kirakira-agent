@@ -114,6 +114,13 @@ export default class Chat extends Command {
     trust: string,
     tuiConfig: TuiConfig,
   ): Promise<void> {
+    process.env.FORCE_COLOR ??= "3";
+    process.env.COLORTERM ??= "truecolor";
+    process.env.TERM ??= "xterm-256color";
+    if (process.env.KIRAKIRA_ALLOW_NO_COLOR !== "1") {
+      delete process.env.NO_COLOR;
+    }
+
     const { render } = await import("ink");
     const React = await import("react");
     const { App } = await import("../tui/App.js");
@@ -128,8 +135,8 @@ export default class Chat extends Command {
         tuiConfig,
         providerConfig,
       }),
-      // Keep main screen buffer (opencode dense/repl-like ergonomics in IDE terminals).
-      { exitOnCtrlC: true, alternateScreen: false },
+      // Keep animation and status refreshes inside one frame-buffered terminal surface.
+      { exitOnCtrlC: true, alternateScreen: true },
     );
 
     await waitUntilExit();

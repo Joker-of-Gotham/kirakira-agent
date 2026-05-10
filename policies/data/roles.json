@@ -1,0 +1,28 @@
+{
+  "kirakira": {
+    "config": {
+      "roles": {
+        "viewer": {
+          "permissions": ["read"],
+          "sandbox_profiles": ["plan-only", "read-only"]
+        },
+        "developer": {
+          "permissions": ["read", "write", "execute"],
+          "sandbox_profiles": ["plan-only", "read-only", "workspace-write", "workspace-write-net"]
+        },
+        "repo_writer": {
+          "permissions": ["read", "write", "execute", "vcs_push"],
+          "sandbox_profiles": ["plan-only", "read-only", "workspace-write", "workspace-write-net"]
+        },
+        "security_reviewer": {
+          "permissions": ["read", "write", "execute", "vcs_push", "secret_read", "audit_export"],
+          "sandbox_profiles": ["plan-only", "read-only", "workspace-write", "workspace-write-net", "mcp-read", "mcp-write"]
+        },
+        "org_admin": {
+          "permissions": ["read", "write", "execute", "vcs_push", "secret_read", "audit_export", "policy_manage", "user_manage"],
+          "sandbox_profiles": ["plan-only", "read-only", "workspace-write", "workspace-write-net", "mcp-read", "mcp-write", "microvm-highrisk"]
+        }
+      }
+    }
+  }
+}

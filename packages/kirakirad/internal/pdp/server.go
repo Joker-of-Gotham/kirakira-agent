@@ -25,10 +25,10 @@ type JsonRpcRequest struct {
 
 // JsonRpcResponse models a compact JSON-RPC 2.0 response.
 type JsonRpcResponse struct {
-	Jsonrpc string       `json:"jsonrpc"`
-	Result  interface{}  `json:"result,omitempty"`
-	Error   *RpcError    `json:"error,omitempty"`
-	ID      interface{}  `json:"id"`
+	Jsonrpc string      `json:"jsonrpc"`
+	Result  interface{} `json:"result,omitempty"`
+	Error   *RpcError   `json:"error,omitempty"`
+	ID      interface{} `json:"id"`
 }
 
 // RpcError conveys JSON-RPC error objects.
@@ -39,6 +39,8 @@ type RpcError struct {
 
 // Server serves JSON-RPC 2.0 over a UNIX domain socket.
 type Server struct {
+	network     string
+	address     string
 	socketPath  string
 	listener    net.Listener
 	engine      *Engine
@@ -48,29 +50,50 @@ type Server struct {
 	closedOnce  sync.Once
 }
 
-// NewServer binds a UNIX listener and prepares the PDP server.
-func NewServer(socketPath string, engine *Engine, healthSvc health.HealthChecker) (*Server, error) {
-	if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
-		return nil, err
+// NewServer binds either a TCP listener or a UNIX listener and prepares the PDP server.
+func NewServer(socketPath string, listenAddr string, engine *Engine, healthSvc health.HealthChecker) (*Server, error) {
+	network := "unix"
+	address := socketPath
+	logDir := filepath.Dir(socketPath)
+
+	if listenAddr != "" {
+		network = "tcp"
+		address = listenAddr
+	} else {
+		if err := os.MkdirAll(filepath.Dir(socketPath), 0o755); err != nil {
+			return nil, err
+		}
+		_ = os.Remove(socketPath)
 	}
-	_ = os.Remove(socketPath)
-	ln, err := net.Listen("unix", socketPath)
+
+	ln, err := net.Listen(network, address)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(socketPath, 0o600); err != nil {
-		_ = ln.Close()
-		_ = os.Remove(socketPath)
-		return nil, err
+	if network == "unix" {
+		if err := os.Chmod(socketPath, 0o600); err != nil {
+			_ = ln.Close()
+			_ = os.Remove(socketPath)
+			return nil, err
+		}
 	}
 
-	logPath := filepath.Join(filepath.Dir(socketPath), "decision-log.jsonl")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		_ = ln.Close()
+		if network == "unix" {
+			_ = os.Remove(socketPath)
+		}
+		return nil, err
+	}
+	logPath := filepath.Join(logDir, "decision-log.jsonl")
 	dl, logErr := NewDecisionLog(logPath)
 	if logErr != nil {
 		slog.Warn("decision log unavailable, continuing without", "error", logErr)
 	}
 
 	return &Server{
+		network:     network,
+		address:     address,
 		socketPath:  socketPath,
 		listener:    ln,
 		engine:      engine,
@@ -90,7 +113,7 @@ func (s *Server) Serve() error {
 				return nil
 			default:
 				if s.listener != nil {
-					slog.Warn("unix accept failed", "error", err)
+					slog.Warn("pdp accept failed", "network", s.network, "error", err)
 				}
 				return err
 			}
@@ -109,7 +132,9 @@ func (s *Server) Close() error {
 				errOut = err
 			}
 		}
-		_ = os.Remove(s.socketPath)
+		if s.network == "unix" {
+			_ = os.Remove(s.socketPath)
+		}
 	})
 	return errOut
 }
@@ -162,6 +187,12 @@ func (s *Server) methodEvaluate(req *JsonRpcRequest) JsonRpcResponse {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			return rpcErr(req.ID, InvalidParams.Code, "invalid evaluate params")
 		}
+		if p.Input == nil {
+			var direct map[string]interface{}
+			if err := json.Unmarshal(req.Params, &direct); err == nil {
+				p.Input = direct
+			}
+		}
 	}
 	ctx := context.Background()
 	out, err := s.engine.Evaluate(ctx, p.Input)
@@ -185,7 +216,21 @@ func (s *Server) methodEvaluate(req *JsonRpcRequest) JsonRpcResponse {
 
 func (s *Server) methodHealth(req *JsonRpcRequest) JsonRpcResponse {
 	st := s.health.Check()
-	return JsonRpcResponse{Jsonrpc: jsonrpcVersion, Result: map[string]interface{}{"status": st}, ID: req.ID}
+	mode := "ipc"
+	if s.network == "tcp" {
+		mode = "tcp"
+	}
+	return JsonRpcResponse{
+		Jsonrpc: jsonrpcVersion,
+		Result: map[string]interface{}{
+			"status":         st.Status,
+			"bundleId":       st.BundleID,
+			"bundleRevision": st.Revision,
+			"lastDecisionAt": st.LastEval,
+			"mode":           mode,
+		},
+		ID: req.ID,
+	}
 }
 
 func (s *Server) methodReload(req *JsonRpcRequest) JsonRpcResponse {

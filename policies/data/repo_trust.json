@@ -1,0 +1,26 @@
+{
+  "kirakira": {
+    "config": {
+      "repo_trust": {
+        "trusted": {
+          "vcs_push_allowed": true,
+          "external_write_allowed": false,
+          "auto_approve_workspace_write": true,
+          "require_approval_for_net": false
+        },
+        "untrusted": {
+          "vcs_push_allowed": false,
+          "external_write_allowed": false,
+          "auto_approve_workspace_write": false,
+          "require_approval_for_net": true
+        },
+        "ask": {
+          "vcs_push_allowed": false,
+          "external_write_allowed": false,
+          "auto_approve_workspace_write": false,
+          "require_approval_for_net": true
+        }
+      }
+    }
+  }
+}

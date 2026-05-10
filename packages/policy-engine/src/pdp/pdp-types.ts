@@ -11,7 +11,7 @@ export interface PdpHealth {
   bundleId?: string;
   bundleRevision?: string;
   lastDecisionAt?: string;
-  mode: "embedded" | "ipc" | "embedded-opa" | "embedded-baseline";
+  mode: "embedded" | "ipc" | "tcp" | "embedded-opa" | "embedded-baseline";
 }
 
 export interface PdpError {

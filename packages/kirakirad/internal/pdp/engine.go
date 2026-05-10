@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -22,7 +23,7 @@ import (
 	"lukechampine.com/blake3"
 )
 
-const decisionQuery = `decision := data.kirakira.authz.main.decision`
+const decisionQuery = `data.kirakira.authz.main.decision`
 
 // Engine wraps a prepared OPA evaluation for the Kirakira authz decision endpoint.
 type Engine struct {
@@ -77,11 +78,17 @@ func (e *Engine) Evaluate(ctx context.Context, input map[string]interface{}) (ma
 	e.lastEval = now
 	e.mu.Unlock()
 
-	if len(results) == 0 || len(results[0].Bindings) == 0 {
+	if len(results) == 0 {
 		return map[string]interface{}{}, nil
 	}
 
-	raw := results[0].Bindings["decision"]
+	var raw interface{}
+	if len(results[0].Expressions) > 0 {
+		raw = results[0].Expressions[0].Value
+	}
+	if raw == nil {
+		raw = results[0].Bindings["decision"]
+	}
 	if raw == nil {
 		return map[string]interface{}{}, nil
 	}
@@ -97,6 +104,7 @@ func unwrapDecision(v interface{}) (map[string]interface{}, bool) {
 	if v == nil {
 		return nil, false
 	}
+	v = normalizeOPAJSON(v)
 	if m, ok := v.(map[string]interface{}); ok {
 		return m, true
 	}
@@ -109,6 +117,31 @@ func unwrapDecision(v interface{}) (map[string]interface{}, bool) {
 		return nil, false
 	}
 	return m, true
+}
+
+func normalizeOPAJSON(v interface{}) interface{} {
+	switch x := v.(type) {
+	case ast.Value:
+		j, err := ast.JSON(x)
+		if err != nil {
+			return v
+		}
+		return normalizeOPAJSON(j)
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(x))
+		for k, v := range x {
+			out[k] = normalizeOPAJSON(v)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(x))
+		for i, v := range x {
+			out[i] = normalizeOPAJSON(v)
+		}
+		return out
+	default:
+		return v
+	}
 }
 
 // ReloadBundle atomically reloads policy and data from disk.
@@ -198,7 +231,7 @@ func loadBundle(bundlePath string) (*ast.Compiler, storage.Store, [32]byte, stri
 
 func loadDirectoryBundle(abs string) (*ast.Compiler, storage.Store, [32]byte, string, string, error) {
 	fl := loader.NewFileLoader().WithFollowSymlinks(true)
-	res, err := fl.Filtered([]string{abs}, nil)
+	res, err := fl.Filtered([]string{abs}, policyDirectoryFilter(abs))
 	if err != nil {
 		return nil, nil, [32]byte{}, "", "", fmt.Errorf("load policy bundle: %w", err)
 	}
@@ -222,6 +255,50 @@ func loadDirectoryBundle(abs string) (*ast.Compiler, storage.Store, [32]byte, st
 	}
 
 	return cmp, st, sum, rev, abs, nil
+}
+
+func policyDirectoryFilter(root string) loader.Filter {
+	return func(abspath string, _ fs.FileInfo, _ int) bool {
+		rel, err := filepath.Rel(root, abspath)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			rootSlash := strings.TrimRight(filepath.ToSlash(root), "/")
+			pathSlash := filepath.ToSlash(abspath)
+			rootLower := strings.ToLower(rootSlash)
+			pathLower := strings.ToLower(pathSlash)
+
+			switch {
+			case pathLower == rootLower:
+				rel = "."
+			case strings.HasPrefix(pathLower, rootLower+"/"):
+				rel = pathSlash[len(rootSlash)+1:]
+			case strings.HasSuffix(pathLower, "/policies"):
+				rel = "."
+			default:
+				const marker = "/policies/"
+				idx := strings.LastIndex(pathLower, marker)
+				if idx < 0 {
+					return true
+				}
+				rel = pathSlash[idx+len(marker):]
+			}
+		}
+		rel = filepath.ToSlash(rel)
+		if rel == "." {
+			return false
+		}
+
+		first := rel
+		if i := strings.IndexByte(rel, '/'); i >= 0 {
+			first = rel[:i]
+		}
+
+		switch first {
+		case ".manifest", "data", "policy":
+			return false
+		default:
+			return true
+		}
+	}
 }
 
 func digestLoaderResult(root string, res *loader.Result) [32]byte {
