@@ -1,8 +1,8 @@
 import wrapAnsi from "wrap-ansi";
 import type { TimelineEntry } from "./types.js";
-import { renderMarkdownToAnsi } from "./md-render.js";
 import type { ToolDetailsLevel, ThinkingDisplay, DensityMode } from "./config.js";
 import { DENSITY_SPACING } from "./types.js";
+import type { TuiTheme } from "./theme.js";
 
 export interface TimelineRenderLine {
   id: string;
@@ -10,12 +10,20 @@ export interface TimelineRenderLine {
   color?: string;
   dim?: boolean;
   bold?: boolean;
+  lane?: "user" | "agent" | "meta" | "tool" | "thinking" | "error";
+  kind?: TimelineEntry["kind"];
+  accentColor?: string;
+  backgroundColor?: string;
 }
 
 interface LineStyle {
   color?: string;
   dim?: boolean;
   bold?: boolean;
+  lane?: "user" | "agent" | "meta" | "tool" | "thinking" | "error";
+  kind?: TimelineEntry["kind"];
+  accentColor?: string;
+  backgroundColor?: string;
 }
 
 function wrapLine(text: string, width: number): string[] {
@@ -62,6 +70,19 @@ function pushGap(lines: TimelineRenderLine[], id: string, density: DensityMode):
   }
 }
 
+function pushCard(
+  out: TimelineRenderLine[],
+  id: string,
+  text: string,
+  style: LineStyle = {},
+): void {
+  out.push({
+    id,
+    text,
+    ...style,
+  });
+}
+
 function collapseExtraBlankLines(lines: TimelineRenderLine[]): TimelineRenderLine[] {
   const out: TimelineRenderLine[] = [];
   let prevBlank = false;
@@ -82,6 +103,7 @@ export function buildTimelineLines(params: {
   detailsLevel?: ToolDetailsLevel;
   thinkingMode?: ThinkingDisplay;
   density?: DensityMode;
+  theme?: TuiTheme;
 }): TimelineRenderLine[] {
   const {
     entries,
@@ -91,7 +113,9 @@ export function buildTimelineLines(params: {
     detailsLevel = "compact",
     thinkingMode = "summary",
     density = "default",
+    theme,
   } = params;
+  const colors = theme?.colors;
 
   const lines: TimelineRenderLine[] = [];
   let previousMajor: TimelineEntry["kind"] | null = null;
@@ -115,25 +139,64 @@ export function buildTimelineLines(params: {
     }
 
     if (entry.kind === "user") {
-      pushPrefixed(lines, entry.id, entry.text, "> ", "  ", width, { bold: true, color: "#7AA2F7" });
+      pushCard(lines, entry.id, entry.text, {
+        bold: true,
+        color: colors?.fg,
+        lane: "user",
+        kind: entry.kind,
+        accentColor: colors?.brand ?? "#7DDC9A",
+        backgroundColor: colors?.surfaceRaised,
+      });
     } else if (entry.kind === "agent") {
-      pushPrefixed(lines, entry.id, renderMarkdownToAnsi(entry.text), "  ", "  ", width);
+      pushCard(lines, entry.id, entry.text, { color: colors?.fg, lane: "agent", kind: entry.kind });
+    } else if (entry.kind === "thinking") {
+      if (thinkingMode === "off") {
+        previousMajor = major ? entry.kind : previousMajor;
+        continue;
+      }
+      const textLines = entry.text.split("\n").map((line) => line.trim()).filter(Boolean);
+      const text = thinkingMode === "summary"
+        ? textLines.at(-1) ?? entry.text
+        : textLines.slice(-8).join("\n");
+      pushCard(lines, entry.id, text, {
+        dim: true,
+        color: colors?.reasoning ?? "#CBA6F7",
+        lane: "thinking",
+        kind: entry.kind,
+        accentColor: colors?.reasoning ?? "#CBA6F7",
+        backgroundColor: colors?.surfaceRaised,
+      });
     } else if (entry.kind === "system") {
       const text = detailsLevel === "compact" ? entry.text.split("\n")[0] ?? entry.text : entry.text;
-      pushPrefixed(lines, entry.id, text, "- ", "  ", width, { dim: true });
+      pushPrefixed(lines, entry.id, text, "  - ", "    ", width, { dim: true, color: colors?.system, lane: "meta", kind: entry.kind });
     } else if (entry.kind === "tool" || entry.kind === "tool_call") {
       const text = detailsLevel === "compact" ? entry.text.split("\n")[0] ?? entry.text : entry.text;
-      pushPrefixed(lines, entry.id, text, "  tool ", "       ", width, { dim: true, color: "#9ECE6A" });
+      pushCard(lines, entry.id, text, {
+        dim: true,
+        color: colors?.tool ?? "#9ECE6A",
+        lane: "tool",
+        kind: entry.kind,
+        accentColor: colors?.tool ?? "#9ECE6A",
+        backgroundColor: colors?.surfaceRaised,
+      });
     } else if (entry.kind === "tool_result") {
-      const text = detailsLevel === "compact" ? entry.text.split("\n")[0] ?? entry.text : entry.text;
-      pushPrefixed(lines, entry.id, text, "  result ", "         ", width, { dim: true, color: "#9ECE6A" });
+      const text = detailsLevel === "compact" ? entry.text : entry.text;
+      const failed = /^fail\b/.test(text);
+      pushCard(lines, entry.id, text, {
+        dim: true,
+        color: failed ? colors?.danger ?? "#F7768E" : colors?.success ?? "#9ECE6A",
+        lane: "tool",
+        kind: entry.kind,
+        accentColor: failed ? colors?.danger ?? "#F7768E" : colors?.success ?? "#9ECE6A",
+        backgroundColor: colors?.surfaceRaised,
+      });
     } else if (entry.kind === "skill") {
       const text = detailsLevel === "compact" ? entry.text.split("\n")[0] ?? entry.text : entry.text;
-      pushPrefixed(lines, entry.id, text, "  skill ", "        ", width, { dim: true });
+      pushPrefixed(lines, entry.id, text, "  +  ", "     ", width, { dim: true, color: colors?.info, lane: "meta", kind: entry.kind });
     } else if (entry.kind === "approval") {
-      pushPrefixed(lines, entry.id, entry.text, "  approval ", "           ", width, { color: "#E6B450" });
+      pushPrefixed(lines, entry.id, entry.text, "  !  ", "     ", width, { color: colors?.approval ?? "#E6B450", lane: "meta", kind: entry.kind });
     } else if (entry.kind === "error") {
-      pushPrefixed(lines, entry.id, entry.text, "x ", "  ", width, { color: "#F7768E" });
+      pushCard(lines, entry.id, entry.text, { color: colors?.danger ?? "#F7768E", lane: "error", kind: entry.kind });
     } else {
       pushPrefixed(lines, entry.id, entry.text, "", "", width);
     }
@@ -144,18 +207,41 @@ export function buildTimelineLines(params: {
   if (thinking && thinkingMode !== "off") {
     const text = (thinkingText ?? "").trim();
     if (lines.length > 0) lines.push({ id: "thinking_gap", text: "" });
-    lines.push({ id: "thinking_title", text: "thinking...", color: "#E6B450", dim: true });
+    lines.push({
+      id: "thinking_title",
+      text: "thinking...",
+      color: colors?.reasoning ?? "#E6B450",
+      dim: true,
+      lane: "thinking",
+      kind: "thinking",
+      accentColor: colors?.reasoning ?? "#E6B450",
+      backgroundColor: colors?.surfaceRaised,
+    });
 
     if (text) {
       const textLines = text.split("\n");
       if (thinkingMode === "summary") {
         const summary = textLines.map((line) => line.trim()).filter(Boolean).at(-1);
         if (summary) {
-          pushPrefixed(lines, "thinking_summary", summary, "  ", "  ", width, { dim: true });
+          pushPrefixed(lines, "thinking_summary", summary, "", "", width, {
+            dim: true,
+            lane: "thinking",
+            kind: "thinking",
+            color: colors?.textSecondary,
+            accentColor: colors?.reasoning,
+            backgroundColor: colors?.surfaceRaised,
+          });
         }
       } else {
         for (const [index, line] of textLines.slice(-6).entries()) {
-          pushPrefixed(lines, `thinking_${index}`, line, "  ", "  ", width, { dim: true });
+          pushPrefixed(lines, `thinking_${index}`, line, "", "", width, {
+            dim: true,
+            lane: "thinking",
+            kind: "thinking",
+            color: colors?.textSecondary,
+            accentColor: colors?.reasoning,
+            backgroundColor: colors?.surfaceRaised,
+          });
         }
       }
     }

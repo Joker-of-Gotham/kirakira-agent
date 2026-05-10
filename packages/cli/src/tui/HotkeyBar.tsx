@@ -7,52 +7,46 @@ interface HotkeyBarProps {
   paletteActive: boolean;
   focusArea: FocusArea;
   theme: TuiTheme;
-  leaderLabel: string;
+  toolResultsExpanded: boolean;
 }
 
 function K({ children, theme }: { children: string; theme: TuiTheme }): React.ReactElement {
   return <Text color={theme.colors.textSecondary}>{children}</Text>;
 }
 
+function HintBar({ children, theme }: { children: React.ReactNode; theme: TuiTheme }): React.ReactElement {
+  return (
+    <Box height={1} flexShrink={0} overflow="hidden" paddingX={4} backgroundColor={theme.colors.bg} justifyContent="flex-end">
+      <Text color={theme.colors.textTertiary} wrap="truncate-end">{children}</Text>
+    </Box>
+  );
+}
+
 export function HotkeyBar({
   paletteActive,
   focusArea,
   theme,
-  leaderLabel,
+  toolResultsExpanded,
 }: HotkeyBarProps): React.ReactElement {
-  const cols = process.stdout.columns ?? 80;
-  const isCompact = cols < 84;
-
   if (focusArea === "scroll") {
     return (
-      <Box paddingX={2} backgroundColor={theme.colors.surfaceRaised}>
-        <Text color={theme.colors.textTertiary}>
-          <K theme={theme}>Up/Down</K> line  <K theme={theme}>PgUp/PgDn</K> page  <K theme={theme}>g/G</K> top/end  <K theme={theme}>Esc</K> input
-        </Text>
-      </Box>
+      <HintBar theme={theme}>
+        <K theme={theme}>/</K> commands  <K theme={theme}>ctrl+r</K> {toolResultsExpanded ? "collapse tool details" : "expand tool details"}
+      </HintBar>
     );
   }
 
   if (paletteActive) {
     return (
-      <Box paddingX={2} backgroundColor={theme.colors.surfaceRaised}>
-        <Text color={theme.colors.textTertiary}>
-          <K theme={theme}>Up/Down</K> select  <K theme={theme}>Tab</K> complete  <K theme={theme}>Esc</K> cancel  <K theme={theme}>Enter</K> send
-        </Text>
-      </Box>
+      <HintBar theme={theme}>
+        <K theme={theme}>/</K> command palette
+      </HintBar>
     );
   }
 
   return (
-    <Box paddingX={2} backgroundColor={theme.colors.surfaceRaised}>
-      <Text color={theme.colors.textTertiary}>
-        <K theme={theme}>/</K> commands  <K theme={theme}>/models</K> provider  <K theme={theme}>@</K> context  <K theme={theme}>!</K> shell
-        {!isCompact && (
-          <>
-            {"  "}<K theme={theme}>PgUp/PgDn</K> scroll  <K theme={theme}>{`${leaderLabel} b`}</K> sidebar
-          </>
-        )}
-      </Text>
-    </Box>
+    <HintBar theme={theme}>
+      <K theme={theme}>/</K> commands  <K theme={theme}>ctrl+r</K> {toolResultsExpanded ? "collapse tool details" : "expand tool details"}
+    </HintBar>
   );
 }

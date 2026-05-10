@@ -50,7 +50,8 @@ export interface SlashContext {
   requestExit: () => void;
   mcpAdd?: (pkg: string) => Promise<void>;
   mcpRefresh?: () => Promise<void>;
-  mcpServers: Array<{ name: string; healthy: boolean }>;
+  mcpReady: boolean;
+  mcpServers: Array<{ name: string; healthy: boolean; health?: string }>;
   mcpToolCount: number;
 }
 
@@ -354,6 +355,10 @@ export function useSlash(ctx: SlashContext): UseSlashReturn {
         const arg = args.trim();
         if (!arg || arg === "status") {
           ctx.showDrawer("mcp");
+          if (!ctx.mcpReady) {
+            ctx.addSystemTimeline(`MCP: starting ${ctx.mcpServers.length} servers...`);
+            return;
+          }
           const healthy = ctx.mcpServers.filter((s) => s.healthy).length;
           ctx.addSystemTimeline(
             `MCP: ${healthy}/${ctx.mcpServers.length} servers, ${ctx.mcpToolCount} tools → right panel`,
@@ -370,23 +375,34 @@ export function useSlash(ctx: SlashContext): UseSlashReturn {
           if (ctx.mcpAdd) {
             await ctx.mcpAdd(pkg);
           } else {
-            ctx.addSystemTimeline("MCP hot-add not available — use: kirakira-agent mcp add " + pkg);
+            ctx.addSystemTimeline("MCP hot-add not available; restart with: pnpm start -- mcp add " + pkg);
           }
           return;
         }
         if (arg === "refresh" || arg === "reload") {
-          ctx.addSystemTimeline("MCP: refreshing tool cache…");
+          ctx.addSystemTimeline("MCP: reloading servers and tool cache…");
           if (ctx.mcpRefresh) {
             await ctx.mcpRefresh();
-            ctx.addSystemTimeline("MCP: refresh done");
+            ctx.addSystemTimeline("MCP: reload done");
           }
           ctx.showDrawer("mcp");
           return;
         }
         if (arg === "list" || arg === "ls") {
           ctx.showDrawer("mcp");
+          if (!ctx.mcpReady) {
+            if (ctx.mcpServers.length === 0) {
+              ctx.addSystemTimeline("MCP STARTING servers");
+              return;
+            }
+            for (const s of ctx.mcpServers) {
+              ctx.addSystemTimeline(`MCP STARTING ${s.name}`);
+            }
+            return;
+          }
           for (const s of ctx.mcpServers) {
-            ctx.addSystemTimeline(`  ${s.healthy ? "✓" : "✗"} ${s.name}`);
+            const status = s.healthy ? "OK" : "ERR";
+            ctx.addSystemTimeline(`MCP ${status} ${s.name}`);
           }
           return;
         }

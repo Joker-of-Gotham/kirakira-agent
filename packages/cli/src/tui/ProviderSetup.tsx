@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
@@ -13,6 +13,7 @@ import {
 } from "../gateway/provider-catalog.js";
 import type { LlmProvider } from "../gateway/provider-catalog.js";
 import type { TuiTheme } from "./theme.js";
+import { isPrintableTextInput, isLikelyMouseInput, TuiMouseInputDecoder } from "./mouse.js";
 
 interface ProviderSetupProps {
   workspaceRoot: string;
@@ -35,6 +36,7 @@ export function ProviderSetup({
   const [modelIndex, setModelIndex] = useState(0);
   const [modelFilter, setModelFilter] = useState("");
   const [status, setStatus] = useState("Choose a provider to configure this workspace.");
+  const mouseDecoder = useRef(new TuiMouseInputDecoder());
 
   const provider = LLM_PROVIDERS[providerIndex]!;
   const filteredModels = useMemo(() => {
@@ -105,6 +107,11 @@ export function ProviderSetup({
   };
 
   useInput((input, key) => {
+    if (mouseDecoder.current.hasPending() || isLikelyMouseInput(input)) {
+      const decoded = mouseDecoder.current.feed(input);
+      if (decoded.consumed) return;
+    }
+
     if (key.ctrl && input.toLowerCase() === "c") {
       app.exit();
       return;
@@ -161,7 +168,7 @@ export function ProviderSetup({
         void loadModels();
         return;
       }
-      if (!key.ctrl && !key.meta && input) {
+      if (!key.ctrl && !key.meta && isPrintableTextInput(input)) {
         setApiKey((prev) => prev + input);
       }
       return;
@@ -195,7 +202,7 @@ export function ProviderSetup({
         void saveSelection();
         return;
       }
-      if (!key.ctrl && !key.meta && input && !/^\d$/u.test(input)) {
+      if (!key.ctrl && !key.meta && isPrintableTextInput(input) && !/^\d$/u.test(input)) {
         setModelFilter((prev) => prev + input);
         setModelIndex(0);
       }

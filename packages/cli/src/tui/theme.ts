@@ -153,6 +153,76 @@ function colorsFromSemantic(s: SemanticTokens): ThemeColors {
 /* ── Built-in theme presets ─────────────────────────────────── */
 
 const BUILTIN_THEMES: Record<string, TuiTheme> = {
+  kirakira: {
+    name: "kirakira",
+    mode: "dark",
+    colors: colorsFromSemantic({
+      surface: { base: "#151313", raised: "#2E2B2A", overlay: "#383432", sunken: "#211F1E" },
+      border:  { subtle: "#46403D", default: "#5A514D", strong: "#C9A49D" },
+      text:    { primary: "#F0ECE6", secondary: "#CEC5BE", tertiary: "#9B908A", inverse: "#151313" },
+      accent:  { default: "#C9A49D", muted: "#D8BBB3", subtle: "#3B302F" },
+      status:  { success: "#9FB59D", warning: "#C6B68F", error: "#CF9C98", info: "#9BB1B8" },
+      memory: "#9BB8AF", reasoning: "#B9AABE", tool: "#9BAFC0", approval: "#D0B58E",
+      diff: { add: "#A9BFA5", del: "#CF9C98" },
+    }),
+  },
+
+  opencode: {
+    name: "opencode",
+    mode: "dark",
+    colors: colorsFromSemantic({
+      surface: { base: "#0A0A0A", raised: "#141414", overlay: "#1E1E1E", sunken: "#0A0A0A" },
+      border:  { subtle: "#3C3C3C", default: "#484848", strong: "#606060" },
+      text:    { primary: "#EEEEEE", secondary: "#B8B8B8", tertiary: "#808080", inverse: "#0A0A0A" },
+      accent:  { default: "#FAB283", muted: "#FFC09F", subtle: "#282828" },
+      status:  { success: "#7FD88F", warning: "#F5A742", error: "#E06C75", info: "#56B6C2" },
+      memory: "#56B6C2", reasoning: "#9D7CD8", tool: "#5C9CF5", approval: "#F5A742",
+      diff: { add: "#4FD6BE", del: "#C53B53" },
+    }),
+  },
+
+  catppuccin: {
+    name: "catppuccin",
+    mode: "dark",
+    colors: colorsFromSemantic({
+      surface: { base: "#1E1E2E", raised: "#313244", overlay: "#45475A", sunken: "#181825" },
+      border:  { subtle: "#45475A", default: "#585B70", strong: "#89B4FA" },
+      text:    { primary: "#CDD6F4", secondary: "#A6ADC8", tertiary: "#7F849C", inverse: "#11111B" },
+      accent:  { default: "#89B4FA", muted: "#74C7EC", subtle: "#313244" },
+      status:  { success: "#A6E3A1", warning: "#F9E2AF", error: "#F38BA8", info: "#94E2D5" },
+      memory: "#94E2D5", reasoning: "#CBA6F7", tool: "#89B4FA", approval: "#FAB387",
+      diff: { add: "#A6E3A1", del: "#F38BA8" },
+    }),
+  },
+
+  "tokyo-night": {
+    name: "tokyo-night",
+    mode: "dark",
+    colors: colorsFromSemantic({
+      surface: { base: "#1A1B26", raised: "#24283B", overlay: "#2F3549", sunken: "#16161E" },
+      border:  { subtle: "#3B4261", default: "#565F89", strong: "#7AA2F7" },
+      text:    { primary: "#C0CAF5", secondary: "#A9B1D6", tertiary: "#6B7394", inverse: "#16161E" },
+      accent:  { default: "#7AA2F7", muted: "#7DCFFF", subtle: "#283457" },
+      status:  { success: "#9ECE6A", warning: "#E0AF68", error: "#F7768E", info: "#7DCFFF" },
+      memory: "#7DCFFF", reasoning: "#BB9AF7", tool: "#73DACA", approval: "#E0AF68",
+      diff: { add: "#9ECE6A", del: "#F7768E" },
+    }),
+  },
+
+  nord: {
+    name: "nord",
+    mode: "dark",
+    colors: colorsFromSemantic({
+      surface: { base: "#2E3440", raised: "#3B4252", overlay: "#434C5E", sunken: "#242933" },
+      border:  { subtle: "#4C566A", default: "#5E81AC", strong: "#88C0D0" },
+      text:    { primary: "#ECEFF4", secondary: "#D8DEE9", tertiary: "#A7B1C2", inverse: "#2E3440" },
+      accent:  { default: "#88C0D0", muted: "#81A1C1", subtle: "#3B5366" },
+      status:  { success: "#A3BE8C", warning: "#EBCB8B", error: "#BF616A", info: "#8FBCBB" },
+      memory: "#8FBCBB", reasoning: "#B48EAD", tool: "#88C0D0", approval: "#D08770",
+      diff: { add: "#A3BE8C", del: "#BF616A" },
+    }),
+  },
+
   graphite: {
     name: "graphite",
     mode: "dark",
@@ -230,7 +300,7 @@ const BUILTIN_THEMES: Record<string, TuiTheme> = {
   },
 };
 
-BUILTIN_THEMES["opencode-dark"] = BUILTIN_THEMES["midnight"]!;
+BUILTIN_THEMES["opencode-dark"] = BUILTIN_THEMES["opencode"]!;
 BUILTIN_THEMES["opencode-light"] = BUILTIN_THEMES["paper"]!;
 
 /* ── System theme detection ─────────────────────────────────── */
@@ -254,7 +324,7 @@ function detectSystemMode(): "dark" | "light" {
 
 function fillSemanticDefaults(colors: Partial<ThemeColors>, isDark: boolean): ThemeColors {
   const fallback = isDark
-    ? BUILTIN_THEMES["midnight"]!.colors
+    ? BUILTIN_THEMES["kirakira"]!.colors
     : BUILTIN_THEMES["paper"]!.colors;
   return {
     bg:             colors.bg             ?? fallback.bg,
@@ -360,13 +430,13 @@ export function listThemeNames(workspaceRoot: string): string[] {
 export function resolveTheme(themeName: string, workspaceRoot: string): TuiTheme {
   if (themeName === "system") {
     const mode = detectSystemMode();
-    return mode === "light" ? BUILTIN_THEMES["paper"]! : BUILTIN_THEMES["midnight"]!;
+    return mode === "light" ? BUILTIN_THEMES["paper"]! : BUILTIN_THEMES["kirakira"]!;
   }
 
   const custom = tryLoadCustomTheme(themeName, workspaceRoot);
   if (custom) return custom;
 
-  return BUILTIN_THEMES[themeName] ?? BUILTIN_THEMES["midnight"]!;
+  return BUILTIN_THEMES[themeName] ?? BUILTIN_THEMES["kirakira"]!;
 }
 
 export function modeColor(theme: TuiTheme, mode: TuiMode): string {
