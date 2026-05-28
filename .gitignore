@@ -41,6 +41,7 @@ coverage/
 .kirakira/tmp/
 .kirakira/state/
 .kirakira/runtime-image.hash
+.kirakira/workspace-build.hash
 
 # Python
 __pycache__/

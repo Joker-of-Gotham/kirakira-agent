@@ -7,6 +7,14 @@ interface HomeScreenProps {
   children: React.ReactNode;
 }
 
+const PIXEL_HEART = [
+  "  ▄██▄   ▄██▄  ",
+  " ██████ ██████ ",
+  "  ▀█████████▀  ",
+  "    ▀█████▀    ",
+  "      ▀▀▀      ",
+];
+
 const LOGO = [
   "██╗  ██╗██╗██████╗  █████╗ ██╗  ██╗██╗██████╗  █████╗",
   "██║ ██╔╝██║██╔══██╗██╔══██╗██║ ██╔╝██║██╔══██╗██╔══██╗",
@@ -16,27 +24,42 @@ const LOGO = [
   "╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝",
 ];
 
+const COMPACT_LOGO = [
+  "██╗ ██╗██╗█████╗  █████╗",
+  "██║██╔╝██║██╔══██╗██╔══██╗",
+  "████╔╝ ██║█████╔╝ ███████║",
+  "██╔██╗ ██║██╔═██╗ ██╔══██║",
+  "██║ ██╗██║██║ ██╗ ██║  ██║",
+  "╚═╝ ╚═╝╚═╝╚═╝ ╚═╝ ╚═╝  ╚═╝",
+];
+
 export function HomeScreen({ theme, children }: HomeScreenProps): React.ReactElement {
   const cols = process.stdout.columns ?? 80;
-  const compact = cols < 92;
-  const visibleLogo = compact
-    ? [
-        "██╗  ██╗██╗██████╗  █████╗",
-        "██║ ██╔╝██║██╔══██╗██╔══██╗",
-        "█████╔╝ ██║██████╔╝███████║",
-        "██╔═██╗ ██║██╔══██╗██╔══██║",
-        "██║  ██╗██║██║  ██║██║  ██║",
-        "╚═╝  ╚═╝╚═╝╚═╝  ╚═╝╚═╝  ╚═╝",
-      ]
-    : LOGO;
+  const compact = cols < 100;
+  const visibleLogo = compact ? COMPACT_LOGO : LOGO;
 
   return (
-    <Box flexDirection="column" flexGrow={1} justifyContent="center" paddingX={4} backgroundColor={theme.colors.bg}>
-      <Box flexDirection="column" alignItems="center" marginBottom={2}>
+    <Box
+      flexDirection="column"
+      flexGrow={1}
+      justifyContent="center"
+      paddingX={compact ? 3 : 6}
+      backgroundColor={theme.colors.bg}
+    >
+      <Box flexDirection="column" alignItems="center" marginBottom={3}>
+        {!compact && (
+          <Box flexDirection="column" alignItems="center" marginBottom={1}>
+            {PIXEL_HEART.map((line, index) => (
+              <Text key={`heart_${index}`} color={theme.colors.brand} bold>
+                {line}
+              </Text>
+            ))}
+          </Box>
+        )}
         {visibleLogo.map((line, index) => (
           <Text
             key={`${line}_${index}`}
-            color={index === visibleLogo.length - 1 ? theme.colors.textTertiary : theme.colors.fg}
+            color={index === visibleLogo.length - 1 ? theme.colors.accentMuted : theme.colors.brand}
             bold
           >
             {line}
@@ -46,8 +69,8 @@ export function HomeScreen({ theme, children }: HomeScreenProps): React.ReactEle
       <Box flexDirection="column" width="100%">
         {children}
       </Box>
-      <Box justifyContent="center" marginTop={1}>
-        <Text color={theme.colors.textTertiary}>type / for commands · /mcp opens MCPs · ctrl+r toggles tool details</Text>
+      <Box justifyContent="center" marginTop={2}>
+        <Text color={theme.colors.textTertiary}>type / for commands  ·  /mcp opens MCPs</Text>
       </Box>
     </Box>
   );

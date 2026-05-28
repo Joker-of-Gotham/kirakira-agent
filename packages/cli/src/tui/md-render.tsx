@@ -172,7 +172,7 @@ function tokenizeInline(text: string, baseKind: InlineKind = "plain"): InlineTok
     if ((token.startsWith("**") && token.endsWith("**")) || (token.startsWith("__") && token.endsWith("__"))) {
       tokens.push({ kind: "bold", text: token.slice(2, -2) });
     } else if (token.startsWith("`") && token.endsWith("`")) {
-      tokens.push({ kind: "code", text: token.slice(1, -1) });
+      tokens.push({ kind: "code", text: ` ${token.slice(1, -1)} ` });
     } else {
       tokens.push({ kind: "italic", text: token.slice(1, -1) });
     }

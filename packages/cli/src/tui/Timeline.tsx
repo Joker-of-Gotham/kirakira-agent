@@ -6,9 +6,8 @@ import type { TimelineRenderLine } from "./timeline-lines.js";
 import type { TuiTheme } from "./theme.js";
 import type { ActiveToolRun } from "./types.js";
 import type { ThinkingDisplay } from "./config.js";
-import { AnimatedDots, Spinner, StatusPill } from "./motion.js";
-import { useTicker } from "./hooks/useTicker.js";
 import { MarkdownText, estimateMarkdownRows } from "./md-render.js";
+import { useTicker } from "./hooks/useTicker.js";
 
 interface SessionResumeItem {
   id: string;
@@ -38,7 +37,7 @@ interface TimelineProps {
 type ToolKind = "shell" | "edit" | "read" | "search" | "git" | "memory" | "generic";
 
 type ToolCardRow =
-  | { type: "header"; title: string; area: string; method: string; latency?: string; tone: "success" | "danger" | "tool" }
+  | { type: "header"; state: "running" | "done" | "failed"; title: string; area: string; method: string; latency?: string }
   | { type: "target"; text: string }
   | { type: "preview"; text: string; color: string }
   | { type: "more"; hiddenCount: number };
@@ -49,14 +48,6 @@ export interface VisibleTimelineSlice {
   startRow: number;
   rowCount: number;
   totalRows: number;
-}
-
-function lastUsefulLine(text: string): string {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-  return lines.at(-1) ?? "";
 }
 
 function shorten(value: string, max: number): string {
@@ -83,13 +74,52 @@ function wrapPlainRows(text: string, width: number): string[] {
   return rows.length > 0 ? rows : [""];
 }
 
-function parseToolCall(text: string): { verb: "call" | "done" | "fail" | "tool"; name: string; rest: string } {
-  const match = /^(call|done|fail)\s+([^\s:]+):?\s*(.*)$/iu.exec(text.trim());
-  if (!match) return { verb: "tool", name: "tool", rest: text.trim() };
+function splitFinishedToolTail(tail: string): { name: string; rest: string } | null {
+  const match = /\s(\d+ms)\s+([\s\S]*)$/u.exec(tail);
+  if (!match || match.index === undefined) return null;
+  const name = tail.slice(0, match.index).trim();
+  if (!name) return null;
   return {
-    verb: (match[1] as "call" | "done" | "fail") ?? "tool",
-    name: match[2] ?? "tool",
-    rest: match[3] ?? "",
+    name,
+    rest: `${match[1] ?? ""} ${match[2] ?? ""}`.trim(),
+  };
+}
+
+function parseToolCall(text: string): { verb: "running" | "call" | "done" | "fail" | "tool"; name: string; rest: string } {
+  const trimmed = text.trim();
+  const match = /^(running|call|done|fail)\s+([\s\S]+)$/iu.exec(trimmed);
+  if (!match) return { verb: "tool", name: "tool", rest: trimmed };
+
+  const verb = (match[1] as "running" | "call" | "done" | "fail") ?? "tool";
+  const tail = (match[2] ?? "").trim();
+  if (verb === "fail") {
+    const finished = splitFinishedToolTail(tail);
+    if (finished) return { verb, ...finished };
+    const colon = tail.indexOf(":");
+    if (colon > 0) {
+      return { verb, name: tail.slice(0, colon).trim(), rest: tail.slice(colon + 1).trim() };
+    }
+  }
+
+  if (verb === "done") {
+    const finished = splitFinishedToolTail(tail);
+    if (finished) return { verb, ...finished };
+  }
+
+  const jsonStart = tail.search(/\s[\[{]/u);
+  if (jsonStart >= 0) {
+    return {
+      verb,
+      name: tail.slice(0, jsonStart).trim() || "tool",
+      rest: tail.slice(jsonStart).trim(),
+    };
+  }
+
+  const parts = tail.split(/\s+/u);
+  return {
+    verb,
+    name: parts.shift() ?? "tool",
+    rest: parts.join(" "),
   };
 }
 
@@ -122,11 +152,21 @@ function stringField(obj: Record<string, unknown> | null, keys: string[]): strin
   return undefined;
 }
 
+function recordField(obj: Record<string, unknown> | null, keys: string[]): Record<string, unknown> | null {
+  if (!obj) return null;
+  for (const key of keys) {
+    const value = asRecord(obj[key]);
+    if (value) return value;
+  }
+  return null;
+}
+
 function classifyTool(name: string, value: unknown): ToolKind {
   const args = asRecord(value);
+  const nestedArgs = recordField(args, ["args"]);
   const lower = name.toLowerCase();
-  if (lower.includes("shell") || lower.includes("exec") || stringField(args, ["command", "cmd", "script"])) return "shell";
-  if (lower.includes("patch") || lower.includes("edit") || lower.includes("write") || stringField(args, ["patch", "diff"])) return "edit";
+  if (lower.includes("shell") || lower.includes("exec") || stringField(args, ["command", "cmd", "script"]) || stringField(nestedArgs, ["command", "cmd", "script"])) return "shell";
+  if (lower.includes("patch") || lower.includes("edit") || lower.includes("write") || stringField(args, ["patch", "diff"]) || stringField(nestedArgs, ["patch", "diff"])) return "edit";
   if (lower.includes("read") || lower.includes("list") || lower.includes("tree")) return "read";
   if (lower.includes("search") || lower.includes("grep") || lower.includes("rg")) return "search";
   if (lower.includes("git")) return "git";
@@ -192,6 +232,36 @@ function compactJson(value: unknown): string {
   }
 }
 
+function resultPayload(record: Record<string, unknown> | null, parsedValue: unknown): unknown {
+  if (!record) return parsedValue;
+  if (record.error) return record.error;
+  for (const key of ["content", "result", "output", "stdout", "stderr", "structuredContent"]) {
+    if (record[key] !== undefined) return record[key];
+  }
+  return parsedValue;
+}
+
+function argumentPreviewLines(args: Record<string, unknown> | null, maxLines: number): string[] {
+  if (!args) return [];
+  const keys = ["command", "cmd", "script", "path", "paths", "file", "target", "directory", "cwd", "url", "query", "pattern"];
+  const lines: string[] = [];
+  for (const key of keys) {
+    const raw = args[key];
+    if (raw === undefined) continue;
+    if (typeof raw === "string" && raw.trim()) {
+      lines.push(`${key}: ${decodeEscapedText(raw)}`);
+    } else if (Array.isArray(raw)) {
+      const values = raw
+        .map((item) => typeof item === "string" ? decodeEscapedText(item) : "")
+        .filter(Boolean)
+        .slice(0, 3);
+      if (values.length > 0) lines.push(`${key}: ${values.join(", ")}`);
+    }
+    if (lines.length >= maxLines) break;
+  }
+  return lines;
+}
+
 function summarizeStructuredValue(value: unknown, maxLines: number): string[] {
   if (typeof value === "string") {
     const decoded = decodeEscapedText(value);
@@ -201,22 +271,47 @@ function summarizeStructuredValue(value: unknown, maxLines: number): string[] {
   }
 
   if (Array.isArray(value)) {
-    return value.slice(0, maxLines).map((item) => {
+    const rows: string[] = [];
+    for (const item of value) {
       const record = asRecord(item);
       if (record) {
+        const text = stringField(record, ["text", "output", "stdout", "stderr", "result", "content"]);
+        if (text) {
+          rows.push(...previewLinesFromText(decodeEscapedText(text), maxLines - rows.length));
+          if (rows.length >= maxLines) break;
+          continue;
+        }
         const name = stringField(record, ["name", "path", "file", "title", "id"]);
         const type = stringField(record, ["type", "kind", "mode"]);
         const size = stringField(record, ["size", "length"]);
         if (name || type) {
-          return [name, type, size].filter(Boolean).join("  ");
+          rows.push([name, type, size].filter(Boolean).join("  "));
+          if (rows.length >= maxLines) break;
+          continue;
         }
       }
-      return compactJson(item);
-    });
+      rows.push(compactJson(item));
+      if (rows.length >= maxLines) break;
+    }
+    return rows;
   }
 
   const record = asRecord(value);
   if (!record) return [];
+
+  if (
+    (record.args !== undefined || record.arguments !== undefined) &&
+    (record.content !== undefined ||
+      record.result !== undefined ||
+      record.output !== undefined ||
+      record.stdout !== undefined ||
+      record.stderr !== undefined ||
+      record.structuredContent !== undefined ||
+      record.error !== undefined)
+  ) {
+    const payload = resultPayload(record, value);
+    if (payload !== value) return summarizeStructuredValue(payload, maxLines);
+  }
 
   const contentText = extractContentText(record);
   if (contentText) {
@@ -233,11 +328,17 @@ function summarizeStructuredValue(value: unknown, maxLines: number): string[] {
     .filter(Boolean);
   if (fields.length > 0) return fields.slice(0, maxLines);
 
-  try {
-    return previewLinesFromText(JSON.stringify(value, null, 2), maxLines);
-  } catch {
-    return [String(value)];
-  }
+  const compactFields = Object.entries(record)
+    .map(([key, raw]) => {
+      if (typeof raw === "string" && raw.trim()) return `${key}: ${decodeEscapedText(raw)}`;
+      if (typeof raw === "number" || typeof raw === "boolean") return `${key}: ${String(raw)}`;
+      if (Array.isArray(raw)) return `${key}: ${raw.length} item${raw.length === 1 ? "" : "s"}`;
+      return "";
+    })
+    .filter(Boolean);
+  if (compactFields.length > 0) return compactFields.slice(0, maxLines);
+
+  return ["result available"];
 }
 
 function extractContentText(value: unknown): string | undefined {
@@ -264,20 +365,12 @@ function extractContentText(value: unknown): string | undefined {
 }
 
 function splitToolName(name: string): { area: string; method: string } {
-  const cleaned = name.replace(/^mcp[:._-]*/iu, "");
-  const parts = cleaned.split(/__|[:.]/u).filter(Boolean);
+  const cleaned = name.replace(/^mcp[:._-]*/iu, "").replace(/\s*\/\s*/gu, ".");
+  const parts = cleaned.split(/__|[:.]/u).map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2) {
     return { area: parts[0] ?? "mcp", method: parts.slice(1).join(".") };
   }
   return { area: "mcp", method: cleaned || name };
-}
-
-function compactToolArgsPreview(text: string): string {
-  const parsed = tryParseJson(text);
-  const lines = parsed !== null
-    ? summarizeStructuredValue(parsed, 1)
-    : previewLinesFromText(decodeEscapedText(text), 1);
-  return lines[0] ?? "";
 }
 
 function previewColorForLine(line: string, theme: TuiTheme): string {
@@ -288,57 +381,77 @@ function previewColorForLine(line: string, theme: TuiTheme): string {
   return theme.colors.textSecondary;
 }
 
-function buildToolCardRows(line: TimelineRenderLine, expanded: boolean, theme: TuiTheme): ToolCardRow[] {
+function expandPreviewRows(lines: string[], expanded: boolean, width: number): string[] {
+  if (!expanded) return lines;
+  const out: string[] = [];
+  for (const line of lines) {
+    out.push(...wrapPlainRows(line, Math.max(12, width - 8)));
+  }
+  return out;
+}
+
+function buildToolCardRows(line: TimelineRenderLine, expanded: boolean, theme: TuiTheme, width: number): ToolCardRow[] {
   const parsed = parseToolCall(line.text);
   const { latency, body } = stripLatency(parsed.rest);
   const parsedValue = parseJsonTail(body || parsed.rest);
   const record = asRecord(parsedValue);
-  const kind = classifyTool(parsed.name, parsedValue);
+  const argsRecord = recordField(record, ["args"]) ?? record;
+  const kind = classifyTool(parsed.name, argsRecord ?? parsedValue);
   const toolName = splitToolName(parsed.name);
-  const command = stringField(record, ["command", "cmd", "script"]);
-  const patch = stringField(record, ["patch", "diff"]);
-  const path = stringField(record, ["path", "file", "filePath", "file_path", "target", "relativePath", "directory", "cwd", "url"]);
-  const title = parsed.verb === "done"
-    ? `${toolLabel(kind)} completed`
+  const command = stringField(argsRecord, ["command", "cmd", "script"]);
+  const patch = stringField(record, ["patch", "diff"]) ?? stringField(argsRecord, ["patch", "diff"]);
+  const path = stringField(record, ["path", "file", "filePath", "file_path", "target", "relativePath", "directory", "cwd", "url"])
+    ?? stringField(argsRecord, ["path", "file", "filePath", "file_path", "target", "relativePath", "directory", "cwd", "url"]);
+  const title = toolLabel(kind);
+  const state = parsed.verb === "done"
+    ? "done"
     : parsed.verb === "fail"
-      ? `${toolLabel(kind)} failed`
-      : `${toolLabel(kind)} call`;
-  const tone: "success" | "danger" | "tool" = parsed.verb === "done"
-    ? "success"
-    : parsed.verb === "fail"
-      ? "danger"
-      : "tool";
-  const previewLimit = expanded ? 18 : 4;
-  const fullPreview = command && parsed.verb === "call"
+      ? "failed"
+      : "running";
+  const previewLimit = expanded ? 2000 : 4;
+  const summaryLimit = expanded ? 2000 : previewLimit + 8;
+  const fullPreview = command && (parsed.verb === "call" || parsed.verb === "running")
     ? [`$ ${decodeEscapedText(command)}`]
     : patch
-      ? previewLinesFromText(decodeEscapedText(patch), previewLimit + 8)
-      : parsedValue !== null
-        ? summarizeStructuredValue(parsedValue, previewLimit + 8)
+      ? previewLinesFromText(decodeEscapedText(patch), summaryLimit)
+      : parsedValue !== null && state !== "running"
+        ? summarizeStructuredValue(resultPayload(record, parsedValue), summaryLimit)
+        : parsedValue !== null && state === "running"
+          ? argumentPreviewLines(argsRecord, summaryLimit)
         : body
-          ? previewLinesFromText(decodeEscapedText(body), previewLimit + 8)
+          ? previewLinesFromText(decodeEscapedText(body), summaryLimit)
           : parsed.rest
-            ? previewLinesFromText(decodeEscapedText(parsed.rest), previewLimit + 8)
+            ? previewLinesFromText(decodeEscapedText(parsed.rest), summaryLimit)
             : [];
-  const preview = fullPreview.slice(0, previewLimit);
+  const wrappedPreview = expandPreviewRows(fullPreview, expanded, width);
+  const preview = wrappedPreview.slice(0, previewLimit);
   const rows: ToolCardRow[] = [{
     type: "header",
     title,
+    state,
     area: toolName.area,
     method: toolName.method,
     latency,
-    tone,
   }];
 
-  const target = path ?? (command && parsed.verb !== "call" ? command : undefined);
+  const target = path ?? (command && parsed.verb !== "call" && parsed.verb !== "running" ? command : undefined);
   if (target) rows.push({ type: "target", text: decodeEscapedText(target) });
   for (const item of preview) {
     rows.push({ type: "preview", text: item, color: previewColorForLine(item, theme) });
   }
-  if (fullPreview.length > preview.length) {
-    rows.push({ type: "more", hiddenCount: fullPreview.length - preview.length });
+  if (wrappedPreview.length > preview.length) {
+    rows.push({ type: "more", hiddenCount: wrappedPreview.length - preview.length });
   }
   return rows;
+}
+
+function toolStateLabel(state: "running" | "done" | "failed", tick: number): string {
+  if (state === "running") {
+    const frames = ["running", "running.", "running..", "running..."];
+    return frames[tick % frames.length] ?? "running";
+  }
+  if (state === "failed") return "failed";
+  return "done";
 }
 
 function buildLineRows(line: TimelineRenderLine, width: number, expandedToolResults: boolean, theme: TuiTheme): number {
@@ -350,7 +463,7 @@ function buildLineRows(line: TimelineRenderLine, width: number, expandedToolResu
   if (line.lane === "agent") return estimateMarkdownRows(line.text, innerWidth);
   if (line.lane === "error") return wrapPlainRows(line.text, innerWidth).length;
   if (line.lane === "thinking") return 1;
-  if (line.lane === "tool") return buildToolCardRows(line, expandedToolResults, theme).length;
+  if (line.lane === "tool") return buildToolCardRows(line, expandedToolResults, theme, width).length;
   return wrapPlainRows(line.text, width).length;
 }
 
@@ -454,18 +567,21 @@ function ToolCard({
   expanded,
   startRow,
   rowCount,
+  width,
 }: {
   line: TimelineRenderLine;
   theme: TuiTheme;
   expanded: boolean;
   startRow: number;
   rowCount: number;
+  width: number;
 }): React.ReactElement {
   const parsed = parseToolCall(line.text);
   const parsedValue = parseJsonTail(stripLatency(parsed.rest).body || parsed.rest);
   const kind = classifyTool(parsed.name, parsedValue);
   const accent = toolAccent(kind, parsed.verb, theme);
-  const rows = buildToolCardRows(line, expanded, theme).slice(startRow, startRow + rowCount);
+  const tick = useTicker(parsed.verb === "running" || parsed.verb === "call", 180);
+  const rows = buildToolCardRows(line, expanded, theme, width).slice(startRow, startRow + rowCount);
 
   return (
     <Box
@@ -479,9 +595,12 @@ function ToolCard({
       <Box width="100%" flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" paddingX={2}>
         {rows.map((row, rowIndex) => {
           if (row.type === "header") {
+            const stateColor = row.state === "running"
+              ? [theme.colors.tool, theme.colors.info, theme.colors.memory][tick % 3] ?? theme.colors.tool
+              : accent;
             return (
               <Box key={`tool_header_${rowIndex}`} width="100%" height={1} overflow="hidden">
-                <StatusPill label={parsed.verb === "call" ? "running" : parsed.verb} tone={row.tone} theme={theme} />
+                <Text color={stateColor} bold>{toolStateLabel(row.state, tick)}</Text>
                 <Text color={theme.colors.textTertiary}>  </Text>
                 <Box flexShrink={1} overflow="hidden">
                   <Text color={accent} bold>{row.title}</Text>
@@ -522,7 +641,7 @@ function ToolCard({
               paddingX={1}
               backgroundColor={theme.colors.surfaceOverlay}
             >
-              <Text color={row.color} wrap="truncate-end">{shorten(row.text, 160)}</Text>
+              <Text color={row.color} wrap="truncate-end">{expanded ? row.text : shorten(row.text, 160)}</Text>
             </Box>
           );
         })}
@@ -553,82 +672,6 @@ function MessageCard({
       <Box width={1} flexShrink={0} backgroundColor={accent} />
       <Box width="100%" flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" paddingX={2}>
         {children}
-      </Box>
-    </Box>
-  );
-}
-
-function ActivityPanel({
-  thinking,
-  thinkingText,
-  streamingContent,
-  thinkingMode,
-  activeTool,
-  theme,
-}: {
-  thinking: boolean;
-  thinkingText: string;
-  streamingContent: string;
-  thinkingMode: ThinkingDisplay;
-  activeTool: ActiveToolRun | null;
-  theme: TuiTheme;
-}): React.ReactElement | null {
-  const hasActivity = thinking || activeTool !== null;
-  const tick = useTicker(hasActivity, 250);
-  if (!hasActivity) return null;
-
-  const hasStreamingContent = streamingContent.trim().length > 0;
-  const toolRunning = activeTool?.status === "running";
-  const color = activeTool
-    ? activeTool.status === "failed"
-      ? theme.colors.danger
-      : theme.colors.tool
-    : hasStreamingContent
-      ? theme.colors.agent
-      : theme.colors.reasoning;
-  const label = activeTool
-    ? activeTool.status === "running"
-      ? "tool call"
-      : activeTool.status === "failed"
-        ? "tool failed"
-        : "tool done"
-    : hasStreamingContent
-      ? "streaming"
-      : "thinking";
-  const elapsedMs = activeTool ? Math.max(0, Date.now() - activeTool.startedAt) : tick;
-  const preview = activeTool
-    ? `${activeTool.name} ${compactToolArgsPreview(activeTool.argsPreview)}`
-    : hasStreamingContent
-      ? lastUsefulLine(streamingContent)
-      : thinkingMode === "off"
-        ? "Model is working"
-        : lastUsefulLine(thinkingText) || "Model is working";
-  const tone = activeTool?.status === "failed" ? "danger" : activeTool ? "tool" : hasStreamingContent ? "info" : "reasoning";
-
-  return (
-    <Box width="100%" marginTop={1} flexShrink={0} flexDirection="row" backgroundColor={theme.colors.surfaceRaised}>
-      <Box width={1} flexShrink={0} backgroundColor={color} />
-      <Box width="100%" flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden" paddingX={2}>
-        <Box height={1} overflow="hidden">
-          <Spinner active={thinking || toolRunning} color={color} />
-          <Text color={color} bold> {label}</Text>
-          <AnimatedDots active={thinking || toolRunning} color={theme.colors.textTertiary} />
-          <Text color={theme.colors.textTertiary}>  </Text>
-          <StatusPill label={activeTool?.status ?? "active"} tone={tone} theme={theme} />
-        </Box>
-        <Box height={1} overflow="hidden">
-          <Text color={theme.colors.textSecondary} wrap="truncate-end">
-            {shorten(preview, 120)}
-          </Text>
-          {activeTool && (
-            <Text color={theme.colors.textTertiary} dimColor>
-              {"  "}
-              {activeTool.latencyMs !== undefined
-                ? `${activeTool.latencyMs}ms`
-                : `${Math.floor(elapsedMs / 1000)}s`}
-            </Text>
-          )}
-        </Box>
       </Box>
     </Box>
   );
@@ -681,6 +724,7 @@ function TimelineLine({
         expanded={expandedToolResults}
         startRow={startRow}
         rowCount={rowCount}
+        width={contentWidth + 4}
       />
     );
   }
@@ -742,17 +786,10 @@ export function Timeline({
   visibleCount,
   theme,
   resumeItems = [],
-  thinking = false,
-  thinkingText = "",
-  streamingContent = "",
-  thinkingMode = "summary",
-  activeTool = null,
   expandedToolResults = false,
   contentWidth,
 }: TimelineProps): React.ReactElement {
-  const hasActivity = thinking || activeTool !== null;
-  const activityRows = hasActivity ? 4 : 0;
-  const effectiveVisibleCount = Math.max(1, visibleCount - activityRows);
+  const effectiveVisibleCount = Math.max(1, visibleCount);
   const renderWidth = Math.max(20, contentWidth ?? (process.stdout.columns ?? 80) - 12);
   const { visible } = selectVisibleTimelineLines(
     lines,
@@ -792,15 +829,6 @@ export function Timeline({
       ))}
 
       <Box flexGrow={1} />
-
-      <ActivityPanel
-        thinking={thinking}
-        thinkingText={thinkingText}
-        streamingContent={streamingContent}
-        thinkingMode={thinkingMode}
-        activeTool={activeTool}
-        theme={theme}
-      />
     </Box>
   );
 }

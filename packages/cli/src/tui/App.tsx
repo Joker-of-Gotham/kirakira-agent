@@ -1,13 +1,18 @@
 import React, { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import { execSync } from "node:child_process";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { readdirSync } from "node:fs";
+import type { SessionEvent } from "@kirakira/core";
 
 import { StatusBar } from "./StatusBar.js";
 import { Timeline, measureTimelineRows } from "./Timeline.js";
 import { ContextDrawer } from "./ContextDrawer.js";
-import { InputArea } from "./InputArea.js";
+import {
+  InputArea,
+  defaultInputAreaMaxPromptRows,
+  measureInputAreaRows,
+} from "./InputArea.js";
 import { HomeScreen } from "./HomeScreen.js";
 import { ProviderSetup } from "./ProviderSetup.js";
 import { SlashPalette } from "./SlashPalette.js";
@@ -29,7 +34,7 @@ import { useFirstRun } from "./hooks/useFirstRun.js";
 import { useRuntimeStore } from "./hooks/useRuntimeStore.js";
 import type { RuntimeStoreState } from "./runtime-events.js";
 
-import type { InspectorTab, TuiMode, McpServerStatus, SkillEntry } from "./types.js";
+import type { InspectorTab, TuiMode, McpServerStatus, SkillEntry, TimelineEntry } from "./types.js";
 import { SLASH_COMMAND_DEFS } from "./types.js";
 import type { Attachment } from "../parser/mention.js";
 import { classifyMentionToken } from "../parser/mention.js";
@@ -80,7 +85,7 @@ function getGitBranch(cwd: string): string {
       stdio: ["pipe", "pipe", "pipe"],
     }).trim();
   } catch {
-    return "—";
+    return "?";
   }
 }
 
@@ -130,6 +135,100 @@ function maxScrollFor(totalRows: number, visibleCount: number): number {
   return Math.max(0, totalRows - Math.max(1, visibleCount));
 }
 
+function isPassiveStartupEntry(entry: TimelineEntry): boolean {
+  if (entry.kind !== "system") return false;
+  return /^(MCP:|No agent\.toml|Compatible configs:|Configured )/u.test(entry.text);
+}
+
+function mapSessionModeToTui(mode: unknown): TuiMode | null {
+  if (mode === "ask") return "ask";
+  if (mode === "plan") return "plan";
+  if (mode === "exec" || mode === "debug") return "debug";
+  if (mode === "repl" || mode === "agent") return "agent";
+  return null;
+}
+
+function eventData(event: SessionEvent): Record<string, unknown> {
+  return event.data && typeof event.data === "object"
+    ? event.data as Record<string, unknown>
+    : {};
+}
+
+function dataString(event: SessionEvent, keys: string[]): string {
+  const data = eventData(event);
+  for (const key of keys) {
+    const value = data[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function sessionEventsToSnapshot(events: SessionEvent[]): ChatSnapshot {
+  const messages: ChatSnapshot["messages"] = [];
+  const timeline: TimelineEntry[] = [];
+  let chunkBuffer = "";
+
+  events.forEach((event, index) => {
+    const id = `resume_${index}`;
+    if (event.event === "prompt.submit") {
+      const text = dataString(event, ["text", "prompt", "content"]);
+      if (!text) return;
+      messages.push({ role: "user", content: text });
+      timeline.push({ id, ts: event.ts, kind: "user", text });
+      return;
+    }
+
+    if (event.event === "response.chunk") {
+      chunkBuffer += dataString(event, ["text", "delta", "content"]);
+      return;
+    }
+
+    if (event.event === "response.complete") {
+      const text = dataString(event, ["text", "content", "response"]) || chunkBuffer.trim();
+      chunkBuffer = "";
+      if (!text) return;
+      messages.push({ role: "assistant", content: text });
+      timeline.push({ id, ts: event.ts, kind: "agent", text });
+      return;
+    }
+
+    if (event.event === "shell.exec" || event.event === "mcp.invoke") {
+      const data = eventData(event);
+      const name = String(data.name ?? data.tool ?? (event.event === "shell.exec" ? "shell" : "mcp"));
+      const args = data.args ?? data.command ?? data;
+      timeline.push({
+        id,
+        ts: event.ts,
+        kind: "tool_call",
+        text: `call ${name} ${JSON.stringify(args)}`,
+      });
+      return;
+    }
+
+    if (event.event === "shell.result" || event.event === "mcp.result") {
+      const data = eventData(event);
+      const name = String(data.name ?? data.tool ?? (event.event === "shell.result" ? "shell" : "mcp"));
+      const ok = data.ok !== false;
+      const latency = typeof data.latencyMs === "number" ? `${data.latencyMs}ms ` : "";
+      const body = dataString(event, ["text", "output", "result", "error"]) || JSON.stringify(data);
+      timeline.push({
+        id,
+        ts: event.ts,
+        kind: "tool_result",
+        text: `${ok ? "done" : "fail"} ${name} ${latency}${body}`,
+      });
+      return;
+    }
+
+    if (event.event === "error") {
+      const text = dataString(event, ["message", "error", "text"]) || "Unknown session error";
+      timeline.push({ id, ts: event.ts, kind: "error", text });
+    }
+  });
+
+  return { messages, timeline };
+}
+
 /* ================================================================== */
 
 export function App({
@@ -170,6 +269,9 @@ export function App({
   const [drawerVisible, setDrawerVisible] = useState(false);
   const [drawerTab, setDrawerTab] = useState<InspectorTab>("attachments");
   const [drawerQuery, setDrawerQuery] = useState("");
+  const [drawerIndex, setDrawerIndex] = useState(0);
+  const [drawerDetailIndex, setDrawerDetailIndex] = useState(0);
+  const [drawerDetailOpen, setDrawerDetailOpen] = useState(false);
 
   /* ---------- input (centralised) ---------- */
   const [inputValue, setInputValue] = useState("");
@@ -204,6 +306,7 @@ export function App({
 
   const termRows = process.stdout.rows ?? 24;
   const termCols = process.stdout.columns ?? 80;
+  const displayWorkspaceName = basename(workspaceRoot) || workspaceName;
   const timelineChromeWidth = 12;
   const lineWidth = Math.max(24, termCols - timelineChromeWidth);
   const theme = useMemo(() => resolveTheme(themeName, workspaceRoot), [themeName, workspaceRoot]);
@@ -247,7 +350,7 @@ export function App({
     () => measureTimelineRows(timelineLines, lineWidth, toolResultsExpanded, theme),
     [timelineLines, lineWidth, toolResultsExpanded, theme],
   );
-  const hasTimelineContent = timelineLines.length > 0;
+  const hasTimelineContent = chatHook.timeline.some((entry) => !isPassiveStartupEntry(entry));
   const showStatusBar = hasTimelineContent || chatHook.thinking || activeTaskCount > 0 || scrollOffset > 0;
 
   /* scan files on mount */
@@ -388,7 +491,7 @@ export function App({
     if (firstRunChecks && sessionHook.session) {
       if (!firstRunChecks.hasConfig) {
         chatHook.addSystemTimeline(
-          "No agent.toml found — run /about or kirakira-agent config init",
+          "No agent.toml found - run /about or kirakira-agent config init",
         );
       }
       if (firstRunChecks.compatDetected.length > 0) {
@@ -464,21 +567,34 @@ export function App({
       : (mentionActive && !slashActive && filteredMention.length > 0)
         ? Math.min(filteredMention.length + 3, 11)
         : 0;
-  const composerRows = hasTimelineContent ? 2 : 0;
-  const contextRows = hasTimelineContent && focusArea === "input" && attachments.length > 0 ? 1 : 0;
+  const composerMaxPromptRows = defaultInputAreaMaxPromptRows(termRows);
+  const composerRows = hasTimelineContent
+    ? measureInputAreaRows({
+      value: inputValue,
+      cursorIndex,
+      thinking: chatHook.thinking,
+      focused: focusArea === "input",
+      attachments,
+      cols: termCols,
+      maxPromptRows: composerMaxPromptRows,
+      activeToolName: chatHook.activeTool?.name,
+    })
+    : 0;
+  const composerGapRows = hasTimelineContent ? 1 : 0;
   const hotkeyRows = 1;
-  const timelineSafetyRows = hasTimelineContent ? 2 : 0;
+  const timelineSafetyRows = hasTimelineContent ? 1 : 0;
+  const statusGapRows = showStatusBar ? 1 : 0;
   const chromeRows =
     (showStatusBar ? 1 : 0)
+    + statusGapRows
+    + composerGapRows
     + composerRows
-    + contextRows
     + hotkeyRows
     + timelineSafetyRows
     + approvalOverlayRows
     + paletteOverlayRows;
   const visibleCount = Math.max(4, termRows - chromeRows);
-  const activityPanelRows = chatHook.thinking || chatHook.activeTool ? 4 : 0;
-  const transcriptVisibleRows = Math.max(1, visibleCount - activityPanelRows);
+  const transcriptVisibleRows = Math.max(1, visibleCount);
   const timelineMaxScroll = maxScrollFor(timelineRowCount, transcriptVisibleRows);
 
   useEffect(() => {
@@ -493,7 +609,12 @@ export function App({
   /* ---------- drawer helpers ---------- */
   const toggleDrawer = useCallback(() => {
     setDrawerVisible((prev) => {
-      if (!prev) setDrawerQuery("");
+      if (!prev) {
+        setDrawerQuery("");
+        setDrawerIndex(0);
+        setDrawerDetailIndex(0);
+        setDrawerDetailOpen(false);
+      }
       return !prev;
     });
   }, []);
@@ -505,6 +626,9 @@ export function App({
       } else {
         setDrawerTab(tab);
         setDrawerQuery("");
+        setDrawerIndex(0);
+        setDrawerDetailIndex(0);
+        setDrawerDetailOpen(false);
         setDrawerVisible(true);
       }
     },
@@ -567,6 +691,120 @@ export function App({
     return true;
   }, [redoStack, buildSnapshot, restoreSnapshot]);
 
+  const queryMatches = useCallback(
+    (...parts: Array<string | number | boolean | undefined>): boolean => {
+      const q = drawerQuery.trim().toLowerCase();
+      if (!q) return true;
+      return parts
+        .filter((part): part is string | number | boolean => part !== undefined)
+        .some((part) => String(part).toLowerCase().includes(q));
+    },
+    [drawerQuery],
+  );
+
+  const visibleDrawerSessions = useMemo(
+    () => sessions.filter((session) => queryMatches(session.id, session.updatedAt, session.current)),
+    [sessions, queryMatches],
+  );
+
+  const visibleDrawerMcpServers = useMemo(
+    () => mcpServers.filter((server) => {
+      const toolCount = mcpHook.tools.filter((tool) => tool.server === server.name).length;
+      return queryMatches(server.name, server.health, server.error, toolCount);
+    }),
+    [mcpServers, mcpHook.tools, queryMatches],
+  );
+
+  const selectedDrawerMcpServer = visibleDrawerMcpServers[Math.min(drawerIndex, Math.max(0, visibleDrawerMcpServers.length - 1))];
+  const selectedDrawerMcpTools = useMemo(
+    () => selectedDrawerMcpServer
+      ? mcpHook.tools.filter((tool) => tool.server === selectedDrawerMcpServer.name)
+      : [],
+    [mcpHook.tools, selectedDrawerMcpServer],
+  );
+
+  const drawerItemCount = useMemo(() => {
+    if (drawerTab === "attachments") {
+      return attachments.filter((item) => queryMatches(item.kind, item.path)).length;
+    }
+    if (drawerTab === "skills") {
+      return skills.filter((skill) => queryMatches(skill.name, skill.description, skill.active)).length;
+    }
+    if (drawerTab === "mcp") {
+      return visibleDrawerMcpServers.length;
+    }
+    if (drawerTab === "tasks") {
+      return Math.min(12, runtimeStore.state.tasks.filter((task) =>
+        queryMatches(task.id, task.title, task.status, task.subagentId),
+      ).length);
+    }
+    if (drawerTab === "subagents") {
+      return Math.min(12, runtimeStore.state.subagents.filter((subagent) =>
+        queryMatches(subagent.id, subagent.role, subagent.status, subagent.model, subagent.taskId),
+      ).length);
+    }
+    if (drawerTab === "memory") {
+      return Math.min(10, runtimeStore.state.memoryHits.filter((memory) =>
+        queryMatches(memory.id, memory.query, memory.count, ...(memory.topItems ?? [])),
+      ).length);
+    }
+    if (drawerTab === "trace") {
+      return runtimeStore.state.events.filter((event) =>
+        (event.type.startsWith("trace.") || event.type.startsWith("tool.call") || event.type === "error.raised") &&
+        queryMatches(event.eventId, event.type),
+      ).length;
+    }
+    if (drawerTab === "sessions") return Math.min(12, visibleDrawerSessions.length);
+    return 1;
+  }, [
+    attachments,
+    skills,
+    mcpServers,
+    mcpHook.tools,
+    visibleDrawerMcpServers.length,
+    runtimeStore.state.tasks,
+    runtimeStore.state.subagents,
+    runtimeStore.state.memoryHits,
+    runtimeStore.state.events,
+    drawerTab,
+    queryMatches,
+    visibleDrawerSessions.length,
+  ]);
+
+  useEffect(() => {
+    setDrawerIndex((prev) => Math.max(0, Math.min(prev, Math.max(0, drawerItemCount - 1))));
+  }, [drawerItemCount]);
+
+  useEffect(() => {
+    setDrawerDetailIndex((prev) => Math.max(0, Math.min(prev, Math.max(0, selectedDrawerMcpTools.length - 1))));
+  }, [selectedDrawerMcpTools.length]);
+
+  useEffect(() => {
+    setDrawerDetailOpen(false);
+    setDrawerDetailIndex(0);
+  }, [drawerTab, drawerQuery]);
+
+  const resumeSessionById = useCallback(
+    async (id: string): Promise<SessionEvent[]> => {
+      const events = await sessionHook.resume(id);
+      const start = events.find((event) => event.event === "session.start");
+      const data = start ? eventData(start) : {};
+      const resumedModel = typeof data.model === "string" ? data.model : "";
+      const resumedMode = mapSessionModeToTui(data.mode);
+      if (resumedModel) setModel(resumedModel);
+      if (resumedMode) setMode(resumedMode);
+      setUndoStack([]);
+      setRedoStack([]);
+      setAttachments([]);
+      chatHook.restoreSnapshot(sessionEventsToSnapshot(events));
+      setDrawerVisible(false);
+      setDrawerIndex(0);
+      setScrollOffset(0);
+      return events;
+    },
+    [chatHook, sessionHook],
+  );
+
   /* ---------- slash context ---------- */
   const slashCtx = {
     session: sessionHook.session ?? { id: "", traceId: "" },
@@ -599,7 +837,7 @@ export function App({
       await sessionHook.reset(nextModel, nextMode, nextWorkspace);
     },
     compact: chatHook.compact,
-    resumeSession: sessionHook.resume,
+    resumeSession: resumeSessionById,
     undo: () => undoConversation(),
     redo: () => redoConversation(),
     canUndo: undoStack.length > 0,
@@ -945,13 +1183,13 @@ export function App({
           { runId },
         );
 
-        if (result.usage) {
+        if (result.usage || result.text) {
           await appendSessionEvent(sessionHook.session.id, {
             ts: new Date().toISOString(),
             event: "response.complete",
             sessionId: sessionHook.session.id,
             traceId: sessionHook.session.traceId,
-            data: { usage: result.usage },
+            data: { usage: result.usage, text: result.text ?? "" },
           });
         }
       } catch (e) {
@@ -1012,7 +1250,7 @@ export function App({
   );
 
   /* ================================================================ */
-  /* CENTRALISED KEY HANDLER — single useInput for the entire TUI     */
+  /* CENTRALISED KEY HANDLER - single useInput for the entire TUI     */
   /* ================================================================ */
 
   useInput((input, key) => {
@@ -1052,15 +1290,61 @@ export function App({
         return;
       }
       if (key.escape) {
+        if (drawerDetailOpen) {
+          setDrawerDetailOpen(false);
+          return;
+        }
         setDrawerVisible(false);
+        return;
+      }
+      if (key.upArrow) {
+        if (drawerDetailOpen && drawerTab === "mcp") {
+          setDrawerDetailIndex((prev) => Math.max(0, prev - 1));
+        } else {
+          setDrawerIndex((prev) => Math.max(0, prev - 1));
+        }
+        return;
+      }
+      if (key.downArrow) {
+        if (drawerDetailOpen && drawerTab === "mcp") {
+          setDrawerDetailIndex((prev) => Math.min(Math.max(0, selectedDrawerMcpTools.length - 1), prev + 1));
+        } else {
+          setDrawerIndex((prev) => Math.min(Math.max(0, drawerItemCount - 1), prev + 1));
+        }
+        return;
+      }
+      if (key.return) {
+        if (!drawerDetailOpen) {
+          setDrawerDetailOpen(true);
+          setDrawerDetailIndex(0);
+          return;
+        }
+        if (drawerTab === "sessions") {
+          const selected = visibleDrawerSessions[Math.min(drawerIndex, visibleDrawerSessions.length - 1)];
+          if (selected) {
+            void resumeSessionById(selected.id)
+              .then((events) => {
+                chatHook.addSystemTimeline(`Resumed session ${selected.id.slice(0, 12)} (${events.length} events).`);
+              })
+              .catch((e) => {
+                chatHook.addSystemTimeline(`Resume failed: ${e instanceof Error ? e.message : String(e)}`);
+              });
+          }
+        }
         return;
       }
       if (key.backspace) {
         setDrawerQuery((prev) => prev.slice(0, -1));
+        setDrawerIndex(0);
+        setDrawerDetailIndex(0);
+        setDrawerDetailOpen(false);
         return;
       }
       if (!key.ctrl && !key.meta && isPrintableTextInput(input)) {
         setDrawerQuery((prev) => `${prev}${input}`);
+        setDrawerIndex(0);
+        setDrawerDetailIndex(0);
+        setDrawerDetailOpen(false);
         return;
       }
       return;
@@ -1211,9 +1495,9 @@ export function App({
               if (att.kind === "file") att.path = mItem.absolutePath;
               setAttachments((prev) => [...prev, att]);
               if (mItem.category === "file" || mItem.category === "dir") {
-                chatHook.addSystemTimeline(`📎 @${mItem.relativePath} → ${mItem.absolutePath}`);
+                chatHook.addSystemTimeline(`@${mItem.relativePath} -> ${mItem.absolutePath}`);
               } else {
-                chatHook.addSystemTimeline(`📎 @${mItem.relativePath}`);
+                chatHook.addSystemTimeline(`@${mItem.relativePath}`);
               }
             }
           }
@@ -1240,10 +1524,10 @@ export function App({
       >
         <Box>
           <Text color={theme.colors.textSecondary}>kirakira</Text>
-          <Text color={theme.colors.accentMuted}>·</Text>
+          <Text color={theme.colors.accentMuted}> · </Text>
           <Text color={theme.colors.fg} bold>agent</Text>
         </Box>
-        <Text dimColor color={theme.colors.textTertiary}>Initializing session…</Text>
+        <Text dimColor color={theme.colors.textTertiary}>Initializing session...</Text>
       </Box>
     );
   }
@@ -1262,7 +1546,7 @@ export function App({
     <Box flexDirection="column" width={termCols} height={termRows}>
       {showStatusBar && (
         <StatusBar
-          workspaceName={workspaceName}
+          workspaceName={displayWorkspaceName}
           gitBranch={gitBranch}
           trust={trust}
           model={model}
@@ -1285,6 +1569,7 @@ export function App({
           activeToolName={chatHook.activeTool?.name}
         />
       )}
+      {showStatusBar && <Box height={1} flexShrink={0} />}
 
       {/* ---- main area (flexible, clipped) ---- */}
       <Box flexGrow={1} flexShrink={1} flexDirection="row" overflow="hidden">
@@ -1313,6 +1598,7 @@ export function App({
                 mode={mode}
                 thinking={chatHook.thinking}
                 focused={focusArea === "input"}
+                maxPromptRows={composerMaxPromptRows}
                 theme={theme}
                 model={model}
                 attachments={attachments}
@@ -1333,16 +1619,25 @@ export function App({
           height={Math.max(10, termRows - 4)}
           alignItems="center"
           justifyContent="center"
-          backgroundColor={theme.colors.bg}
         >
           <ContextDrawer
             attachments={attachments}
             skills={skills}
             mcpServers={mcpServers}
-            mcpTools={mcpHook.tools.map((t) => ({ alias: t.alias, server: t.server, riskLevel: t.riskLevel }))}
+            mcpTools={mcpHook.tools.map((t) => ({
+              alias: t.alias,
+              server: t.server,
+              nativeTool: t.nativeTool,
+              description: t.description,
+              riskLevel: t.riskLevel,
+              readOnly: t.readOnly,
+              inputSchema: t.inputSchema,
+            }))}
             mcpReady={mcpHook.ready}
             activeTab={drawerTab}
             query={drawerQuery}
+            selectedIndex={drawerIndex}
+            detailIndex={drawerDetailIndex}
             runtime={runtimeStore.state}
             sessions={sessions}
             workspaceRoot={workspaceRoot}
@@ -1352,6 +1647,7 @@ export function App({
             mouseEnabled={tuiConfig.mouse}
             diffStyle={tuiConfig.diffStyle}
             theme={theme}
+            detailOpen={drawerDetailOpen}
           />
         </Box>
       )}
@@ -1383,6 +1679,8 @@ export function App({
           mode={mode}
           thinking={chatHook.thinking}
           focused={focusArea === "input"}
+          topGapRows={composerGapRows}
+          maxPromptRows={composerMaxPromptRows}
           theme={theme}
           model={model}
           attachments={attachments}

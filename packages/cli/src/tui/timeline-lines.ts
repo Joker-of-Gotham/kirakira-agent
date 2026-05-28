@@ -95,6 +95,45 @@ function collapseExtraBlankLines(lines: TimelineRenderLine[]): TimelineRenderLin
   return out;
 }
 
+function toolNameFromText(text: string): string | null {
+  const match = /^(?:running|call|done|fail)\s+([\s\S]+)$/iu.exec(text.trim());
+  if (!match) return null;
+
+  let tail = (match[1] ?? "").trim();
+  const jsonStart = tail.search(/\s[\[{]/u);
+  if (jsonStart >= 0) tail = tail.slice(0, jsonStart).trim();
+
+  const latencyMatch = /^([\s\S]+?)\s+\d+ms\b/iu.exec(tail);
+  if (latencyMatch) tail = (latencyMatch[1] ?? tail).trim();
+
+  const colon = tail.indexOf(":");
+  if (colon > 0 && !tail.slice(0, colon).includes(" ")) {
+    tail = tail.slice(0, colon).trim();
+  }
+
+  return tail.replace(/\s*\/\s*/gu, "/").replace(/\s+/gu, " ");
+}
+
+function mergeAdjacentToolLifecycle(entries: TimelineEntry[]): TimelineEntry[] {
+  const out: TimelineEntry[] = [];
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index]!;
+    const next = entries[index + 1];
+    if (
+      next &&
+      (entry.kind === "tool_call" || entry.kind === "tool") &&
+      next.kind === "tool_result" &&
+      toolNameFromText(entry.text) === toolNameFromText(next.text)
+    ) {
+      out.push({ ...next, id: entry.id });
+      index += 1;
+      continue;
+    }
+    out.push(entry);
+  }
+  return out;
+}
+
 export function buildTimelineLines(params: {
   entries: TimelineEntry[];
   thinking: boolean;
@@ -120,7 +159,7 @@ export function buildTimelineLines(params: {
   const lines: TimelineRenderLine[] = [];
   let previousMajor: TimelineEntry["kind"] | null = null;
 
-  for (const entry of entries) {
+  for (const entry of mergeAdjacentToolLifecycle(entries)) {
     const major = entry.kind === "user" || entry.kind === "agent" || entry.kind === "error";
     if (major && previousMajor && previousMajor !== entry.kind && lines.length > 0) {
       pushGap(lines, entry.id, density);

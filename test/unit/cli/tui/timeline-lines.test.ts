@@ -86,4 +86,30 @@ describe("timeline-lines", () => {
     expect(lines.some((l) => l.text.includes("system detail line"))).toBe(false);
     expect(lines.some((l) => l.text.includes("hello"))).toBe(true);
   });
+
+  it("merges adjacent tool call and result entries for spaced MCP tool names", () => {
+    const lines = buildTimelineLines({
+      entries: [
+        {
+          id: "call1",
+          ts: new Date().toISOString(),
+          kind: "tool_call",
+          text: "call fs / grep {\"path\":\"/workspace/configs\",\"pattern\":\"receivers\"}",
+        },
+        {
+          id: "result1",
+          ts: new Date().toISOString(),
+          kind: "tool_result",
+          text: "done fs / grep 56ms {\"content\":[{\"type\":\"text\",\"text\":\"1:receivers:\"}]}",
+        },
+      ],
+      thinking: false,
+      width: 80,
+    });
+
+    expect(lines).toHaveLength(1);
+    expect(lines[0]?.id).toBe("call1");
+    expect(lines[0]?.kind).toBe("tool_result");
+    expect(lines[0]?.text).toContain("done fs / grep");
+  });
 });

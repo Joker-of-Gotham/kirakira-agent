@@ -46,6 +46,7 @@ interface UseChatReturn {
   activeTool: ActiveToolRun | null;
   sendChat: (text: string, model: string) => Promise<{
     ok: boolean;
+    text?: string;
     usage?: { promptTokens: number; completionTokens: number; totalTokens: number };
   }>;
   compact: (model: string) => Promise<void>;
@@ -67,6 +68,14 @@ function previewValue(value: unknown, max = TOOL_PREVIEW_LENGTH): string {
     .slice(0, max);
 }
 
+function packToolDisplayPayload(args: Record<string, unknown>, content: unknown, error?: string): string {
+  return previewValue({
+    args,
+    content,
+    ...(error ? { error } : {}),
+  });
+}
+
 export function useChat(options?: UseChatOptions): UseChatReturn {
   const providerRef = useRef(options?.providerConfig);
   providerRef.current = options?.providerConfig;
@@ -86,6 +95,10 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
 
   const addTimelineEntry = useCallback((entry: TimelineEntry) => {
     setTimeline((prev) => [...prev, entry]);
+  }, []);
+
+  const updateTimelineEntry = useCallback((id: string, patch: Partial<TimelineEntry>) => {
+    setTimeline((prev) => prev.map((entry) => entry.id === id ? { ...entry, ...patch } : entry));
   }, []);
 
   const addSystemTimeline = useCallback((text: string) => {
@@ -123,6 +136,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
 
     let currentMessages = newMessages;
     let finalUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined;
+    let finalAssistantText = "";
     let round = 0;
 
     try {
@@ -165,6 +179,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
 
         if (!callTool || !hasToolCalls(result.text)) {
           const proseText = stripToolCalls(result.text) || result.text;
+          finalAssistantText = proseText;
           currentMessages = [...currentMessages, { role: "assistant", content: result.text }];
           setMessages(currentMessages);
           setTimeline((prev) => [
@@ -201,7 +216,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
               id: toolRun.id,
               ts: nowIso(),
               kind: "tool_call",
-              text: `call ${tc.name} ${toolRun.argsPreview}`,
+              text: `running ${tc.name} ${toolRun.argsPreview}`,
             },
           ]);
 
@@ -213,17 +228,13 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
             error: tcResult.error,
           });
 
-          setTimeline((prev) => [
-            ...prev,
-            {
-              id: nextId(),
-              ts: nowIso(),
-              kind: "tool_result",
-              text: tcResult.ok
-                ? `done ${tc.name} ${tcResult.latencyMs}ms ${previewValue(tcResult.content)}`
-                : `fail ${tc.name}: ${tcResult.error ?? "error"}`,
-            },
-          ]);
+          updateTimelineEntry(toolRun.id, {
+            ts: nowIso(),
+            kind: "tool_result",
+            text: tcResult.ok
+              ? `done ${tc.name} ${tcResult.latencyMs}ms ${packToolDisplayPayload(tc.arguments, tcResult.content)}`
+              : `fail ${tc.name} ${tcResult.latencyMs}ms ${packToolDisplayPayload(tc.arguments, tcResult.content, tcResult.error ?? "error")}`,
+          });
 
           resultParts.push(formatToolResult(tc.name, tcResult));
         }
@@ -240,7 +251,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
       setThinkingText("");
       setStreamingContent("");
       setActiveTool(null);
-      return { ok: true, usage: finalUsage };
+      return { ok: true, text: finalAssistantText, usage: finalUsage };
     } catch (e) {
       setMessages((prev) => prev.slice(0, messages.length));
       const msg = e instanceof Error ? e.message : String(e);
@@ -254,7 +265,7 @@ export function useChat(options?: UseChatOptions): UseChatReturn {
       setActiveTool(null);
       return { ok: false };
     }
-  }, [messages]);
+  }, [messages, updateTimelineEntry]);
 
   const compact = useCallback(async (model: string) => {
     if (messages.length === 0) return;
