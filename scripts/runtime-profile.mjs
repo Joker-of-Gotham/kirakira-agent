@@ -8,6 +8,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const defaultProfilesPath = join(repoRoot, "configs", "runtime", "profiles.json");
+const ROOT_OVERRIDE_ENV_KEYS = [
+  "KIRAKIRA_RUNTIME_PROFILE",
+  "KIRAKIRA_WORKSPACE_ROOT",
+  "KIRAKIRA_APP_ROOT",
+  "KIRAKIRA_MCP_WORKSPACE_ROOT",
+  "KIRAKIRA_MCP_APP_ROOT",
+];
 
 function browserGatewayEndpoint(gateway) {
   if (!gateway || gateway.enabled === false) return undefined;
@@ -368,6 +375,16 @@ export function resolveRuntimeProfile(
         ?? profile.appRoot,
     },
   };
+}
+
+export function runtimeProfileEnv(env = process.env, options = {}) {
+  const output = { ...env };
+  if (options.dropRootOverrides === true) {
+    for (const key of ROOT_OVERRIDE_ENV_KEYS) {
+      delete output[key];
+    }
+  }
+  return output;
 }
 
 export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {

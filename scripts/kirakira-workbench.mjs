@@ -8,6 +8,7 @@ import {
   loadRuntimeProfiles,
   renderComposeArgs,
   renderRuntimeEnv,
+  runtimeProfileEnv,
   resolveRuntimeProfile,
 } from "./runtime-profile.mjs";
 
@@ -65,7 +66,9 @@ export function profileFromOptions(options, env = process.env) {
   const config = loadRuntimeProfiles();
   const profileName =
     options.profileName ?? env.KIRAKIRA_WORKBENCH_PROFILE ?? DEFAULT_WORKBENCH_PROFILE;
-  return resolveRuntimeProfile(profileName, config, {});
+  return resolveRuntimeProfile(profileName, config, runtimeProfileEnv(env, {
+    dropRootOverrides: true,
+  }));
 }
 
 function pnpmStep(name, packageName, script, env, mode = "foreground") {
@@ -133,7 +136,7 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
       mode: "run",
       command: "docker",
       args: ["compose", ...composeArgs, "up", "-d", "--wait", ...infraServices],
-      env: {},
+      env,
     });
   }
 

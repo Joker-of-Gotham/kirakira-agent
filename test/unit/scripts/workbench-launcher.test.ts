@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureMcpConfig } from "../../../scripts/kirakira-common.mjs";
 import { buildWorkbenchPlan, profileFromOptions } from "../../../scripts/kirakira-workbench.mjs";
-import { loadRuntimeProfiles, resolveRuntimeProfile } from "../../../scripts/runtime-profile.mjs";
+import {
+  loadRuntimeProfiles,
+  renderRuntimeEnv,
+  resolveRuntimeProfile,
+} from "../../../scripts/runtime-profile.mjs";
 
 describe("workbench launcher plan", () => {
   it("plans infra, daemon, and web from the workbench profile", () => {
@@ -123,6 +127,32 @@ describe("workbench launcher plan", () => {
     expect(profile.appRoot).toBe(".");
     expect(profile.mcp.workspaceRoot).toBe(".");
     expect(profile.mcp.appRoot).toBe(".");
+  });
+
+  it("keeps profile-scoped endpoint overrides for workbench startup", () => {
+    const profile = profileFromOptions(
+      {},
+      {
+        KIRAKIRA_WORKBENCH_PROFILE: "workbench-host",
+        KIRAKIRA_RUNTIME_PROFILE: "container",
+        KIRAKIRA_WORKSPACE_ROOT: "/workspace",
+        KIRAKIRA_WEB_PORT: "5184",
+        KIRAKIRA_DESKTOP_RENDERER_PORT: "5175",
+        KIRAKIRA_BROWSER_GATEWAY_PORT: "17383",
+        KIRAKIRA_POSTGRES_PORT: "15432",
+      },
+    );
+    const env = renderRuntimeEnv(profile);
+    const plan = buildWorkbenchPlan(profile, "web");
+
+    expect(profile.workspaceRoot).toBe(".");
+    expect(env.KIRAKIRA_WEB_URL).toBe("http://127.0.0.1:5184");
+    expect(env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5175");
+    expect(env.VITE_KIRAKIRA_GATEWAY_URL).toBe("ws://127.0.0.1:17383/runtime");
+    expect(env.KIRAKIRA_POSTGRES_PORT).toBe("15432");
+    expect(plan.env.KIRAKIRA_WEB_URL).toBe("http://127.0.0.1:5184");
+    expect(plan.steps[0]?.env.KIRAKIRA_POSTGRES_PORT).toBe("15432");
+    expect(JSON.stringify({ env, plan })).not.toContain("5173");
   });
 
   it("renders MCP roots from the resolved workbench profile despite container .env defaults", () => {
