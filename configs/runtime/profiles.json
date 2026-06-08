@@ -225,11 +225,11 @@
       "composeProfiles": [],
       "envFiles": [".env"],
       "services": {
-        "postgres": "postgres://kirakira:kirakira@127.0.0.1:55432/kirakira",
-        "redis": "redis://127.0.0.1:56379",
-        "qdrant": "http://127.0.0.1:56333",
-        "neo4j": "bolt://127.0.0.1:57687",
-        "minio": "http://127.0.0.1:59000"
+        "postgres": "postgres://kirakira_test:kirakira_test@127.0.0.1:5432/kirakira_test",
+        "redis": "redis://127.0.0.1:6379",
+        "qdrant": "http://127.0.0.1:6333",
+        "neo4j": "bolt://127.0.0.1:7687",
+        "minio": "http://127.0.0.1:9000"
       },
       "mcp": {
         "workspaceRoot": ".",
