@@ -1,14 +1,25 @@
 import type {
+  DelegateRequest,
   DelegateRunner,
   RuntimeDeps,
 } from "../loop/react-loop.js";
-import type { SubagentRuntimePolicy } from "../types.js";
+import {
+  applyRuntimeCapabilityScope,
+  runtimeCapabilityScopeFromCapabilities,
+} from "../runtime-scope.js";
+import type { RuntimeCapabilityScope, SubagentRuntimePolicy } from "../types.js";
 
 import { EphemeralWorker } from "./ephemeral-worker.js";
 
 export interface EphemeralDelegateRunnerOptions {
   policy?: SubagentRuntimePolicy;
   allowNestedDelegation?: boolean;
+  capabilityScope?: RuntimeCapabilityScope;
+  forkDeps?: (
+    deps: RuntimeDeps,
+    scope: RuntimeCapabilityScope | undefined,
+    request: DelegateRequest,
+  ) => RuntimeDeps;
 }
 
 export function createEphemeralDelegateRunner(
@@ -16,12 +27,32 @@ export function createEphemeralDelegateRunner(
   options: EphemeralDelegateRunnerOptions = {},
 ): DelegateRunner {
   return async (request) => {
-    const worker = new EphemeralWorker(request.parentConfig, options.policy);
-    const childDeps = options.allowNestedDelegation
+    const capabilityScope =
+      request.capabilities !== undefined
+        ? runtimeCapabilityScopeFromCapabilities(request.capabilities)
+        : options.capabilityScope ?? {
+            toolNames: [],
+            skillNames: [],
+            mcpServers: [],
+          };
+    const parentConfig = applyRuntimeCapabilityScope(
+      {
+        ...request.parentConfig,
+        ...(request.modelPreference !== undefined ? { model: request.modelPreference } : {}),
+      },
+      capabilityScope,
+    );
+    const worker = new EphemeralWorker(parentConfig, options.policy);
+    const baseChildDeps = options.allowNestedDelegation
       ? deps
       : { ...deps, delegateRunner: undefined };
+    const childDeps = options.forkDeps
+      ? options.forkDeps(baseChildDeps, capabilityScope, request)
+      : baseChildDeps;
+    const policy = request.runtimePolicy ?? options.policy;
     const result = await worker.run(request.task, childDeps, {
-      policy: options.policy,
+      policy,
+      capabilityScope,
     });
     if (result.error) {
       return {

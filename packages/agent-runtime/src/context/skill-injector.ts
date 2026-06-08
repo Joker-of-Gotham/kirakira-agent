@@ -14,9 +14,11 @@ export class SkillInjector {
     }
   }
 
-  getAdvertised(): SkillHint[] {
+  getAdvertised(allowedNames?: readonly string[]): SkillHint[] {
+    const allowed = allowedNames !== undefined ? new Set(allowedNames) : undefined;
     const out: SkillHint[] = [];
     for (const r of this.registry.values()) {
+      if (allowed !== undefined && !allowed.has(r.name)) continue;
       out.push({
         name: r.name,
         description: r.description,
@@ -34,10 +36,15 @@ export class SkillInjector {
     this.tiers.set(skillName, to);
   }
 
-  getInjectionContent(tierFilter: "advertised" | "loaded" | "materialized"): string {
+  getInjectionContent(
+    tierFilter: "advertised" | "loaded" | "materialized",
+    allowedNames?: readonly string[],
+  ): string {
+    const allowed = allowedNames !== undefined ? new Set(allowedNames) : undefined;
     if (tierFilter === "advertised") {
       const lines: string[] = [];
       for (const r of this.registry.values()) {
+        if (allowed !== undefined && !allowed.has(r.name)) continue;
         const tier = this.tiers.get(r.name) ?? "advertised";
         if (tier === "advertised") {
           lines.push(`- **${r.name}** (v${r.version}): ${r.description}`);
@@ -49,6 +56,7 @@ export class SkillInjector {
     if (tierFilter === "loaded") {
       const blocks: string[] = [];
       for (const r of this.registry.values()) {
+        if (allowed !== undefined && !allowed.has(r.name)) continue;
         const tier = this.tiers.get(r.name) ?? "advertised";
         if (tier === "loaded") {
           const body = loadSkill(r.path).materialize().body;
@@ -60,6 +68,7 @@ export class SkillInjector {
 
     const blocks: string[] = [];
     for (const r of this.registry.values()) {
+      if (allowed !== undefined && !allowed.has(r.name)) continue;
       const tier = this.tiers.get(r.name) ?? "advertised";
       if (tier === "materialized") {
         const mat = loadSkill(r.path).materialize();

@@ -330,6 +330,12 @@ export interface SubagentCapability {
   name: string;
 }
 
+export interface RuntimeCapabilityScope {
+  toolNames?: string[];
+  skillNames?: string[];
+  mcpServers?: string[];
+}
+
 export type SubagentContextMode = "isolated" | "filtered" | "inherit";
 
 export interface SubagentRuntimePolicy {

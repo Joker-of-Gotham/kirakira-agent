@@ -44,6 +44,7 @@ export type {
   SubagentCapability,
   SubagentContextMode,
   SubagentRuntimePolicy,
+  RuntimeCapabilityScope,
   TokenUsage,
   ToolResult,
   ToolSchema,
@@ -66,6 +67,14 @@ export { BudgetTracker } from "./context/budget-tracker.js";
 export { ContextAssembler, type ContextAssemblerInitOptions } from "./context/assembler.js";
 export { CostGuard } from "./loop/cost-guard.js";
 export { EphemeralWorker, type EphemeralWorkerRunOptions } from "./worker/ephemeral-worker.js";
+export {
+  applyRuntimeCapabilityScope,
+  runtimeCapabilityScopeFromCapabilities,
+  runtimeCapabilityScopeFromConfig,
+  scopeAllowsMcpServerName,
+  scopeAllowsSkillName,
+  scopeAllowsToolName,
+} from "./runtime-scope.js";
 export {
   createEphemeralDelegateRunner,
   type EphemeralDelegateRunnerOptions,

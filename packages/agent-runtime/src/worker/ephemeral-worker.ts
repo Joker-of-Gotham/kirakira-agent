@@ -4,8 +4,10 @@ import { reactLoop, type RuntimeDeps } from "../loop/react-loop.js";
 import type {
   EphemeralResult,
   ReactWorkerConfig,
+  RuntimeCapabilityScope,
   SubagentRuntimePolicy,
 } from "../types.js";
+import { applyRuntimeCapabilityScope } from "../runtime-scope.js";
 
 import { WorkerLifecycle } from "./lifecycle.js";
 
@@ -19,6 +21,7 @@ const DEFAULT_SUBAGENT_POLICY: Required<SubagentRuntimePolicy> = {
 
 export interface EphemeralWorkerRunOptions {
   policy?: SubagentRuntimePolicy;
+  capabilityScope?: RuntimeCapabilityScope;
 }
 
 export class EphemeralWorker {
@@ -34,8 +37,9 @@ export class EphemeralWorker {
   ): Promise<EphemeralResult> {
     const policy = this.resolvePolicy(options.policy);
     deps.contextAssembler.setTaskPreamble(task);
+    const scopedParent = applyRuntimeCapabilityScope(this.parentConfig, options.capabilityScope);
     const cfg: ReactWorkerConfig = {
-      ...this.parentConfig,
+      ...scopedParent,
       id: ulid(),
       parentWorkerId: this.parentConfig.id,
       maxTurns: Math.min(this.parentConfig.maxTurns, policy.maxTurns),

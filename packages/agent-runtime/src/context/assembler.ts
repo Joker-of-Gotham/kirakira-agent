@@ -16,6 +16,10 @@ import type { HistoryCompressor } from "./history-compressor.js";
 import type { BudgetTracker } from "./budget-tracker.js";
 import type { ToolRegistry } from "../tools/tool-registry.js";
 import type { ArtifactStore } from "../sandbox/artifact-store.js";
+import {
+  runtimeCapabilityScopeFromConfig,
+  scopeAllowsToolName,
+} from "../runtime-scope.js";
 
 export type ContextAssemblerInitOptions = ContextAssemblerOptions & {
   artifactStore?: ArtifactStore;
@@ -65,9 +69,15 @@ export class ContextAssembler {
     }
 
     const budget = state.config.contextBudget;
-    this.toolSearch.indexTools(this.registry.all());
+    const capabilityScope = runtimeCapabilityScopeFromConfig(state.config);
+    const scopedTools = this.registry
+      .all()
+      .filter((tool) => scopeAllowsToolName(capabilityScope, tool.name));
+    this.toolSearch.indexTools(scopedTools);
     const toolQuery = this.options.toolCapabilityQuery ?? "available tools";
-    const capability = this.toolSearch.capabilitySearch(toolQuery, budget.toolSchemaAllocation);
+    const capability = this.toolSearch
+      .capabilitySearch(toolQuery, budget.toolSchemaAllocation)
+      .filter((tool) => scopeAllowsToolName(capabilityScope, tool.name));
     const toolSchemas: ToolSchema[] = [];
     for (const preview of capability) {
       if (this.hydratedTools.has(preview.name)) {
@@ -78,10 +88,14 @@ export class ContextAssembler {
       }
     }
 
-    const advertised = this.skillInjector.getAdvertised();
-    const skillBlockAdvertised = this.skillInjector.getInjectionContent("advertised");
-    const skillBlockLoaded = this.skillInjector.getInjectionContent("loaded");
-    const skillBlockMaterialized = this.skillInjector.getInjectionContent("materialized");
+    const skillScope = capabilityScope?.skillNames;
+    const advertised = this.skillInjector.getAdvertised(skillScope);
+    const skillBlockAdvertised = this.skillInjector.getInjectionContent("advertised", skillScope);
+    const skillBlockLoaded = this.skillInjector.getInjectionContent("loaded", skillScope);
+    const skillBlockMaterialized = this.skillInjector.getInjectionContent(
+      "materialized",
+      skillScope,
+    );
 
     const baseMessages: Message[] = [];
     if (this.options.taskPreamble) {

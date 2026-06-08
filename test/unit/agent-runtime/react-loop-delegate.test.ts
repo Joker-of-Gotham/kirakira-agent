@@ -251,4 +251,140 @@ describe("reactLoop delegate handling", () => {
     expect(result.workerId).toBeTruthy();
     expect(emitted.map((event) => event.kind)).toContain("run.completed");
   });
+
+  it("scopes EphemeralWorker-backed delegates from requested capabilities", async () => {
+    const emitted: RunEvent[] = [];
+    const deps = runtimeDeps([{ kind: "final_output", output: "child result" }], emitted);
+    delete deps.delegateRunner;
+
+    const runner = createEphemeralDelegateRunner(deps);
+    const result = await runner({
+      subagentId: "sg-1",
+      parentWorkerId: "worker-parent",
+      parentConfig: initialState().config,
+      runId: "run-1",
+      task: "child task",
+      capabilities: [
+        { kind: "tool", name: "repo.read" },
+        { kind: "mcp", name: "filesystem" },
+      ],
+      modelPreference: "scoped-model",
+      action: { kind: "delegate", args: { task: "child task" } },
+    });
+
+    expect(result.success).toBe(true);
+    const assembler = deps.contextAssembler as RuntimeDeps["contextAssembler"] & {
+      assembledStates: ReactWorkerState[];
+    };
+    expect(assembler.assembledStates[0]?.config).toMatchObject({
+      model: "scoped-model",
+      toolScope: ["repo.read"],
+      skillScope: [],
+      mcpServers: ["filesystem"],
+    });
+  });
+
+  it("uses forked runtime deps for scoped delegates when provided", async () => {
+    const parentDeps = runtimeDeps([], []);
+    delete parentDeps.delegateRunner;
+    const childEmitted: RunEvent[] = [];
+    const childDeps = runtimeDeps([{ kind: "final_output", output: "forked child" }], childEmitted);
+    delete childDeps.delegateRunner;
+    let forkedScope: unknown;
+
+    const runner = createEphemeralDelegateRunner(parentDeps, {
+      forkDeps(_deps, scope) {
+        forkedScope = scope;
+        return childDeps;
+      },
+    });
+    const result = await runner({
+      subagentId: "sg-1",
+      parentWorkerId: "worker-parent",
+      parentConfig: initialState().config,
+      runId: "run-1",
+      task: "child task",
+      capabilities: [{ kind: "skill", name: "research" }],
+      action: { kind: "delegate", args: { task: "child task" } },
+    });
+
+    expect(result).toMatchObject({ success: true, finalText: "forked child" });
+    expect(forkedScope).toEqual({
+      toolNames: [],
+      skillNames: ["research"],
+      mcpServers: [],
+    });
+    expect(childEmitted.map((event) => event.kind)).toContain("run.completed");
+  });
+
+  it("denies tool calls outside the worker capability scope", async () => {
+    const emitted: RunEvent[] = [];
+    const deps = runtimeDeps(
+      [
+        { kind: "tool_call", toolName: "web.search", args: { q: "x" } },
+        { kind: "final_output", output: "parent done" },
+      ],
+      emitted,
+    );
+    let executed = false;
+    deps.toolExecutor = {
+      async execute() {
+        executed = true;
+        return { success: true, output: "should not run" };
+      },
+    } as RuntimeDeps["toolExecutor"];
+    const state = initialState();
+    state.config.toolScope = [];
+
+    for await (const _event of reactLoop(state, deps)) {
+      // exhaust generator
+    }
+
+    expect(executed).toBe(false);
+    const assembler = deps.contextAssembler as RuntimeDeps["contextAssembler"] & {
+      assembledStates: ReactWorkerState[];
+    };
+    expect(assembler.assembledStates[1]?.turns[0]?.observation?.content).toBe(
+      "ERROR: tool_call denied by capability scope: web.search",
+    );
+    expect(emitted.find((event) => event.kind === "tool.call.failed")?.payload)
+      .toMatchObject({
+        toolName: "web.search",
+        reason: "capability_scope_denied",
+      });
+  });
+
+  it("denies skill execution outside the worker capability scope", async () => {
+    const emitted: RunEvent[] = [];
+    const deps = runtimeDeps(
+      [
+        { kind: "skill_exec", skillName: "review" },
+        { kind: "final_output", output: "parent done" },
+      ],
+      emitted,
+    );
+    let promoted = false;
+    deps.skillInjector = {
+      promote() {
+        promoted = true;
+      },
+      getInjectionContent() {
+        return "should not load";
+      },
+    } as RuntimeDeps["skillInjector"];
+    const state = initialState();
+    state.config.skillScope = [];
+
+    for await (const _event of reactLoop(state, deps)) {
+      // exhaust generator
+    }
+
+    expect(promoted).toBe(false);
+    const assembler = deps.contextAssembler as RuntimeDeps["contextAssembler"] & {
+      assembledStates: ReactWorkerState[];
+    };
+    expect(assembler.assembledStates[1]?.turns[0]?.observation?.content).toBe(
+      "ERROR: skill_exec denied by capability scope: review",
+    );
+  });
 });

@@ -5,6 +5,11 @@ import type { McpClientManager } from "@kirakira/mcp-adapter";
 import type { McpPep, PepContext } from "@kirakira/policy-engine";
 
 import type { ToolResult } from "../types.js";
+import type { RuntimeCapabilityScope } from "../types.js";
+import {
+  scopeAllowsMcpServerName,
+  scopeAllowsToolName,
+} from "../runtime-scope.js";
 
 function resolveCtx(ctx: PepContext | (() => PepContext)): PepContext {
   return typeof ctx === "function" ? ctx() : ctx;
@@ -19,6 +24,7 @@ function splitToolName(toolName: string): { server: string; tool: string } {
 export interface ToolExecutorOptions {
   pepContext: PepContext | (() => PepContext);
   resolveServer?: (toolName: string) => string;
+  capabilityScope?: RuntimeCapabilityScope | (() => RuntimeCapabilityScope | undefined);
   onEvent?: (event: RunEvent) => Promise<void>;
 }
 
@@ -32,6 +38,31 @@ export class ToolExecutor {
   async execute(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
     const { server, tool } = splitToolName(toolName);
     const mcpServer = this.options.resolveServer?.(toolName) ?? server;
+    const capabilityScope =
+      typeof this.options.capabilityScope === "function"
+        ? this.options.capabilityScope()
+        : this.options.capabilityScope;
+    const serverScopeApplies =
+      capabilityScope?.mcpServers !== undefined && capabilityScope.mcpServers.length > 0;
+    if (
+      !scopeAllowsToolName(capabilityScope, toolName) ||
+      (serverScopeApplies && !scopeAllowsMcpServerName(capabilityScope, mcpServer))
+    ) {
+      const ctx = resolveCtx(this.options.pepContext);
+      const failed: RunEvent = {
+        id: ulid(),
+        runId: ctx.sessionId,
+        timestamp: new Date().toISOString(),
+        kind: "tool.call.failed",
+        payload: { toolName, mcpServer, reason: "capability_scope_denied" },
+      };
+      await this.options.onEvent?.(failed);
+      return {
+        success: false,
+        output: "",
+        error: "capability_scope_denied",
+      };
+    }
     const rawAction = {
       mcpServer,
       server: mcpServer,

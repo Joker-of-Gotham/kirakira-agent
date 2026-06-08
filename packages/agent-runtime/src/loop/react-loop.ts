@@ -13,6 +13,11 @@ import type {
   SubagentRuntimePolicy,
   ReactWorkerState,
 } from "../types.js";
+import {
+  runtimeCapabilityScopeFromConfig,
+  scopeAllowsSkillName,
+  scopeAllowsToolName,
+} from "../runtime-scope.js";
 import type { ModelClient } from "../model/model-client.js";
 import type { ToolExecutor } from "../tools/tool-executor.js";
 import type { SkillInjector } from "../context/skill-injector.js";
@@ -97,6 +102,48 @@ function delegateTask(action: Action): string {
     return fromArgs.trim();
   }
   return (action.output ?? "").trim();
+}
+
+function stringArg(action: Action, ...keys: string[]): string | undefined {
+  const args = action.args ?? {};
+  for (const key of keys) {
+    const value = args[key];
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
+function stringArrayArg(action: Action, key: string): string[] | undefined {
+  const value = action.args?.[key];
+  if (!Array.isArray(value)) return undefined;
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+}
+
+function objectArg<T extends object>(action: Action, key: string): T | undefined {
+  const value = action.args?.[key];
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as T) : undefined;
+}
+
+function delegateCapabilities(action: Action): SubagentCapability[] | undefined {
+  const value = action.args?.capabilities;
+  if (!Array.isArray(value)) return undefined;
+  const out: SubagentCapability[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Record<string, unknown>;
+    const kind = candidate.kind;
+    const name = candidate.name;
+    if (
+      (kind === "tool" || kind === "skill" || kind === "mcp") &&
+      typeof name === "string" &&
+      name.trim().length > 0
+    ) {
+      out.push({ kind, name: name.trim() });
+    }
+  }
+  return out;
 }
 
 function asAction(step: StructuredStep): Action {
@@ -225,12 +272,31 @@ export async function* reactLoop(
     }
 
     if (action.kind === "tool_call") {
+      const toolName = action.toolName ?? "";
+      const capabilityScope = runtimeCapabilityScopeFromConfig(state.config);
+      if (!scopeAllowsToolName(capabilityScope, toolName)) {
+        consecutiveErrors += 1;
+        const content = `ERROR: tool_call denied by capability scope: ${toolName}`;
+        turnManager.completeTurn(
+          turn,
+          action,
+          { content, truncated: false },
+          { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        );
+        state = turnManager.applyState({ ...state });
+        yield await emitEvent(deps.eventWriter, {
+          runId: state.config.runId,
+          kind: "tool.call.failed",
+          payload: { toolName, reason: "capability_scope_denied" },
+        });
+        continue;
+      }
       yield await emitEvent(deps.eventWriter, {
         runId: state.config.runId,
         kind: "tool.call.started",
-        payload: { toolName: action.toolName, args: action.args },
+        payload: { toolName, args: action.args },
       });
-      const result = await deps.toolExecutor.execute(action.toolName ?? "", action.args ?? {});
+      const result = await deps.toolExecutor.execute(toolName, action.args ?? {});
       const processed = handleToolResult(result, deps.workspace, deps.artifactStore);
       turnManager.completeTurn(turn, action, {
         content: processed.content,
@@ -249,7 +315,7 @@ export async function* reactLoop(
       yield await emitEvent(deps.eventWriter, {
         runId: state.config.runId,
         kind: result.success ? "tool.call.completed" : "tool.call.failed",
-        payload: { toolName: action.toolName, preview: processed.content.slice(0, 2000) },
+        payload: { toolName, preview: processed.content.slice(0, 2000) },
       });
       continue;
     }
@@ -262,6 +328,18 @@ export async function* reactLoop(
           turn,
           action,
           { content: "ERROR: skill_exec missing skillName", truncated: false },
+          { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        );
+        state = turnManager.applyState({ ...state });
+        continue;
+      }
+      const capabilityScope = runtimeCapabilityScopeFromConfig(state.config);
+      if (!scopeAllowsSkillName(capabilityScope, name)) {
+        consecutiveErrors += 1;
+        turnManager.completeTurn(
+          turn,
+          action,
+          { content: `ERROR: skill_exec denied by capability scope: ${name}`, truncated: false },
           { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         );
         state = turnManager.applyState({ ...state });
@@ -323,6 +401,12 @@ ${execRes.stderr}`;
       const delegateAction = action as Action & { kind: "delegate" };
       const task = delegateTask(delegateAction);
       const subagentId = ulid();
+      const capabilities = delegateCapabilities(delegateAction);
+      const modelPreference = stringArg(delegateAction, "modelPreference", "model");
+      const runtimePolicy = objectArg<SubagentRuntimePolicy>(delegateAction, "runtimePolicy");
+      const policyCeiling = objectArg<SandboxPolicyCeiling>(delegateAction, "policyCeiling");
+      const inputArtifactRefs = stringArrayArg(delegateAction, "inputArtifactRefs");
+      const outputSchema = objectArg<Record<string, unknown>>(delegateAction, "outputSchema");
       if (!task) {
         consecutiveErrors += 1;
         turnManager.completeTurn(
@@ -351,6 +435,12 @@ ${execRes.stderr}`;
           subagentId,
           parentWorkerId: state.config.id,
           taskPreview: task.slice(0, 2000),
+          ...(capabilities !== undefined ? { capabilities } : {}),
+          ...(modelPreference !== undefined ? { modelPreference } : {}),
+          ...(runtimePolicy !== undefined ? { runtimePolicy } : {}),
+          ...(policyCeiling !== undefined ? { policyCeiling } : {}),
+          ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
+          ...(outputSchema !== undefined ? { outputSchema } : {}),
         },
       });
       if (!deps.delegateRunner) {
@@ -382,6 +472,12 @@ ${execRes.stderr}`;
           parentConfig: state.config,
           runId: state.config.runId,
           task,
+          ...(capabilities !== undefined ? { capabilities } : {}),
+          ...(modelPreference !== undefined ? { modelPreference } : {}),
+          ...(runtimePolicy !== undefined ? { runtimePolicy } : {}),
+          ...(policyCeiling !== undefined ? { policyCeiling } : {}),
+          ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
+          ...(outputSchema !== undefined ? { outputSchema } : {}),
           action: delegateAction,
         });
       } catch (error) {
