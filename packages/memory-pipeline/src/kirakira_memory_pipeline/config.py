@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class MemoryPipelineConfig(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="KIRAKIRA_MEMORY_", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="KIRAKIRA_MEMORY_", extra="ignore", populate_by_name=True)
 
     postgres_dsn: str = "postgresql://localhost:5432/kirakira"
     redis_url: str = "redis://localhost:6379/0"
@@ -38,9 +39,27 @@ class MemoryPipelineConfig(BaseSettings):
     poll_timeout_ms: int = 5000
     batch_size: int = 10
 
-    redis_strkirakira_materialize: str = "kirakira:memory:materialize"
-    redis_strkirakira_forget: str = "kirakira:memory:forget"
-    redis_strkirakira_reflect: str = "kirakira:memory:reflect"
+    redis_stream_materialize: str = Field(
+        "kirakira:memory:materialize",
+        validation_alias=AliasChoices(
+            "KIRAKIRA_MEMORY_REDIS_STREAM_MATERIALIZE",
+            "KIRAKIRA_MEMORY_REDIS_STRKIRAKIRA_MATERIALIZE",
+        ),
+    )
+    redis_stream_forget: str = Field(
+        "kirakira:memory:forget",
+        validation_alias=AliasChoices(
+            "KIRAKIRA_MEMORY_REDIS_STREAM_FORGET",
+            "KIRAKIRA_MEMORY_REDIS_STRKIRAKIRA_FORGET",
+        ),
+    )
+    redis_stream_reflect: str = Field(
+        "kirakira:memory:reflect",
+        validation_alias=AliasChoices(
+            "KIRAKIRA_MEMORY_REDIS_STREAM_REFLECT",
+            "KIRAKIRA_MEMORY_REDIS_STRKIRAKIRA_REFLECT",
+        ),
+    )
 
     qdrant_collection: str = "kirakira_memory"
     s3_endpoint_url: str | None = None

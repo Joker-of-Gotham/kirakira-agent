@@ -70,7 +70,7 @@ class MemoryPipelineWorker:
 
     async def _ensure_groups(self) -> None:
         assert self._redis is not None
-        for stream in self._strkirakira_names():
+        for stream in self._stream_names():
             try:
                 await self._redis.xgroup_create(
                     name=stream,
@@ -82,12 +82,15 @@ class MemoryPipelineWorker:
                 if "BUSYGROUP" not in str(exc):
                     raise
 
-    def _strkirakira_names(self) -> list[str]:
-        return [
-            self.config.redis_strkirakira_materialize,
-            self.config.redis_strkirakira_forget,
-            self.config.redis_strkirakira_reflect,
-        ]
+    def _stream_handlers(self) -> dict[str, StreamHandler]:
+        return {
+            self.config.redis_stream_materialize: self._handle_materialize,
+            self.config.redis_stream_forget: self._handle_forget,
+            self.config.redis_stream_reflect: self._handle_reflect,
+        }
+
+    def _stream_names(self) -> list[str]:
+        return list(self._stream_handlers().keys())
 
     async def _publish_optional_stream(self, payload: dict[str, Any], result: dict[str, Any]) -> None:
         out_stream = payload.get("result_stream")
@@ -178,13 +181,10 @@ class MemoryPipelineWorker:
             raise ValueError(f"unknown reflect op: {op}")
 
     def _handler_for_stream(self, stream: str) -> StreamHandler:
-        if stream == self.config.redis_strkirakira_materialize:
-            return self._handle_materialize
-        if stream == self.config.redis_strkirakira_forget:
-            return self._handle_forget
-        if stream == self.config.redis_strkirakira_reflect:
-            return self._handle_reflect
-        raise ValueError(f"unrecognized stream: {stream}")
+        try:
+            return self._stream_handlers()[stream]
+        except KeyError as exc:
+            raise ValueError(f"unrecognized stream: {stream}") from exc
 
     async def process_one(self, stream: str, message_id: str, fields: dict[Any, Any]) -> None:
         handler = self._handler_for_stream(stream)
@@ -196,7 +196,7 @@ class MemoryPipelineWorker:
     async def run_forever(self) -> None:
         await self.connect()
         assert self._redis is not None
-        streams = self._strkirakira_names()
+        streams = self._stream_names()
         while True:
             try:
                 resp = await self._redis.xreadgroup(
@@ -216,8 +216,8 @@ class MemoryPipelineWorker:
             if not resp:
                 continue
 
-            for strkirakira_name, messages in resp:
-                s = strkirakira_name.decode() if isinstance(strkirakira_name, bytes) else str(strkirakira_name)
+            for stream_name, messages in resp:
+                s = stream_name.decode() if isinstance(stream_name, bytes) else str(stream_name)
                 for msg_id, raw_fields in messages:
                     mid = msg_id.decode() if isinstance(msg_id, bytes) else str(msg_id)
                     try:

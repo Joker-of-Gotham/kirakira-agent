@@ -15,11 +15,23 @@ def test_defaults():
     assert cfg.poll_timeout_ms == 5000
 
 
-def test_strkirakira_names():
+def test_stream_names():
     cfg = MemoryPipelineConfig()
-    assert cfg.redis_strkirakira_materialize == "kirakira:memory:materialize"
-    assert cfg.redis_strkirakira_forget == "kirakira:memory:forget"
-    assert cfg.redis_strkirakira_reflect == "kirakira:memory:reflect"
+    assert cfg.redis_stream_materialize == "kirakira:memory:materialize"
+    assert cfg.redis_stream_forget == "kirakira:memory:forget"
+    assert cfg.redis_stream_reflect == "kirakira:memory:reflect"
+
+
+def test_stream_names_override_from_environment(monkeypatch):
+    monkeypatch.setenv("KIRAKIRA_MEMORY_REDIS_STREAM_MATERIALIZE", "custom:materialize")
+    cfg = MemoryPipelineConfig()
+    assert cfg.redis_stream_materialize == "custom:materialize"
+
+
+def test_legacy_strkirakira_environment_names_still_work(monkeypatch):
+    monkeypatch.setenv("KIRAKIRA_MEMORY_REDIS_STRKIRAKIRA_MATERIALIZE", "legacy:materialize")
+    cfg = MemoryPipelineConfig()
+    assert cfg.redis_stream_materialize == "legacy:materialize"
 
 
 def test_s3_defaults():
@@ -34,7 +46,9 @@ def test_override_via_constructor():
         redis_url="redis://custom:6380/1",
         qdrant_host="qdrant.local",
         embedding_model="text-embedding-3-large",
+        redis_stream_materialize="constructor:materialize",
     )
     assert cfg.redis_url == "redis://custom:6380/1"
     assert cfg.qdrant_host == "qdrant.local"
     assert cfg.embedding_model == "text-embedding-3-large"
+    assert cfg.redis_stream_materialize == "constructor:materialize"

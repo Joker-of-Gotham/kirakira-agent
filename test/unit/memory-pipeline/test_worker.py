@@ -35,7 +35,7 @@ def test_handler_for_materialize_stream():
     cfg = MemoryPipelineConfig()
     worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
     worker.config = cfg
-    handler = worker._handler_for_stream(cfg.redis_strkirakira_materialize)
+    handler = worker._handler_for_stream(cfg.redis_stream_materialize)
     assert handler.__name__ == "_handle_materialize"
 
 
@@ -43,7 +43,7 @@ def test_handler_for_forget_stream():
     cfg = MemoryPipelineConfig()
     worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
     worker.config = cfg
-    handler = worker._handler_for_stream(cfg.redis_strkirakira_forget)
+    handler = worker._handler_for_stream(cfg.redis_stream_forget)
     assert handler.__name__ == "_handle_forget"
 
 
@@ -51,11 +51,11 @@ def test_handler_for_reflect_stream():
     cfg = MemoryPipelineConfig()
     worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
     worker.config = cfg
-    handler = worker._handler_for_stream(cfg.redis_strkirakira_reflect)
+    handler = worker._handler_for_stream(cfg.redis_stream_reflect)
     assert handler.__name__ == "_handle_reflect"
 
 
-def test_handler_unknown_strkirakira_raises():
+def test_handler_unknown_stream_raises():
     cfg = MemoryPipelineConfig()
     worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
     worker.config = cfg
@@ -63,12 +63,24 @@ def test_handler_unknown_strkirakira_raises():
         worker._handler_for_stream("nonexistent:stream")
 
 
-def test_strkirakira_names():
+def test_stream_names():
     cfg = MemoryPipelineConfig()
     worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
     worker.config = cfg
-    names = worker._strkirakira_names()
+    names = worker._stream_names()
     assert len(names) == 3
-    assert cfg.redis_strkirakira_materialize in names
-    assert cfg.redis_strkirakira_forget in names
-    assert cfg.redis_strkirakira_reflect in names
+    assert cfg.redis_stream_materialize in names
+    assert cfg.redis_stream_forget in names
+    assert cfg.redis_stream_reflect in names
+
+
+def test_stream_handler_registry():
+    cfg = MemoryPipelineConfig()
+    worker = MemoryPipelineWorker.__new__(MemoryPipelineWorker)
+    worker.config = cfg
+
+    handlers = worker._stream_handlers()
+
+    assert handlers[cfg.redis_stream_materialize].__name__ == "_handle_materialize"
+    assert handlers[cfg.redis_stream_forget].__name__ == "_handle_forget"
+    assert handlers[cfg.redis_stream_reflect].__name__ == "_handle_reflect"
