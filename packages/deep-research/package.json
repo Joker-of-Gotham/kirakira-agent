@@ -1,0 +1,28 @@
+{
+  "name": "@kirakira/deep-research",
+  "version": "0.1.0",
+  "description": "Provider-neutral deep research planning, source, and citation contracts",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@kirakira/core": "workspace:*",
+    "@kirakira/memory-core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.8.0"
+  }
+}

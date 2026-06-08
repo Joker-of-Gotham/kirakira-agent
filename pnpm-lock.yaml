@@ -273,6 +273,22 @@ importers:
         specifier: ^5.8.0
         version: 5.9.3
 
+  packages/deep-research:
+    dependencies:
+      '@kirakira/core':
+        specifier: workspace:*
+        version: link:../core
+      '@kirakira/memory-core':
+        specifier: workspace:*
+        version: link:../memory-core
+    devDependencies:
+      tsup:
+        specifier: ^8.4.0
+        version: 8.5.1(postcss@8.5.13)(tsx@4.21.0)(typescript@5.9.3)(yaml@2.8.4)
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+
   packages/event-store:
     dependencies:
       '@kirakira/core':
