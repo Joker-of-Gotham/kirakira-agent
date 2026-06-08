@@ -28,6 +28,19 @@ export { EventSubscriber } from "./client/event-subscriber.js";
 
 export type { UdsServerOptions } from "./server/uds-server.js";
 export { UdsServer } from "./server/uds-server.js";
+export type {
+  BrowserGatewayConfig,
+  BrowserGatewayListenInfo,
+  BrowserGatewayServerOptions,
+} from "./server/browser-gateway-server.js";
+export {
+  BrowserGatewayServer,
+  DEFAULT_BROWSER_GATEWAY_HOST,
+  DEFAULT_BROWSER_GATEWAY_PATH,
+  DEFAULT_BROWSER_GATEWAY_PORT,
+} from "./server/browser-gateway-server.js";
+export type { RuntimeSocketServerOptions } from "./server/runtime-socket.js";
+export { RuntimeSocketHub } from "./server/runtime-socket.js";
 
 export type { Session, SessionSubscription } from "./server/session-manager.js";
 export { SessionManager } from "./server/session-manager.js";

@@ -25,6 +25,8 @@ describe("frontend-core browser boundary", () => {
     const roots = [
       join(process.cwd(), "packages", "frontend-core", "src"),
       join(process.cwd(), "packages", "frontend-app", "src"),
+      join(process.cwd(), "apps", "web", "src"),
+      join(process.cwd(), "apps", "desktop", "src", "renderer"),
     ];
     const violations = roots.flatMap((root) => sourceFiles(root)).flatMap((file) => {
       const text = readFileSync(file, "utf8");
@@ -54,6 +56,27 @@ describe("frontend-core browser boundary", () => {
         .filter((needle) => text.includes(needle))
         .map((needle) => ({ file, needle }));
     });
+
+    expect(violations).toEqual([]);
+  });
+
+  it("keeps the Electron preload bridge out of daemon and socket implementations", () => {
+    const root = join(process.cwd(), "apps", "desktop", "src", "main");
+    const violations = sourceFiles(root)
+      .filter((file) => file.endsWith("preload.ts"))
+      .flatMap((file) => {
+        const text = readFileSync(file, "utf8");
+        return [
+          "@kirakira/runtime-daemon",
+          "better-sqlite3",
+          "from \"node:",
+          "from 'node:",
+          "from \"ws\"",
+          "from 'ws'",
+        ]
+          .filter((needle) => text.includes(needle))
+          .map((needle) => ({ file, needle }));
+      });
 
     expect(violations).toEqual([]);
   });

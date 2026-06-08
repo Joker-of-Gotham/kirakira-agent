@@ -33,7 +33,7 @@ export type RuntimeClientMessage =
 export type RuntimeServerMessage =
   | { type: "event"; event: RunEvent }
   | { type: "state_snapshot"; state: RunStateSnapshot }
-  | { type: "error"; code: string; message: string; details?: unknown }
+  | { type: "error"; code: string; message: string; details?: unknown; messageId?: string }
   | { type: "ack"; messageId: string; result?: unknown }
   | { type: "pong"; messageId?: string }
   | {

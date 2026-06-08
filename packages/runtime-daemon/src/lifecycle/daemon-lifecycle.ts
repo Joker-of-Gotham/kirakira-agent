@@ -7,8 +7,13 @@ import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-brid
 import { KernelBridge } from "../bridge/kernel-bridge.js";
 import { RuntimeBridge } from "../bridge/runtime-bridge.js";
 import { eventMatchesSubscription } from "../server/event-utils.js";
-import type { ClientMessage } from "../server/protocol.js";
+import type { ClientMessage, ServerMessage } from "../server/protocol.js";
 import { SessionManager, type Session } from "../server/session-manager.js";
+import {
+  BrowserGatewayServer,
+  type BrowserGatewayConfig,
+  type BrowserGatewayListenInfo,
+} from "../server/browser-gateway-server.js";
 import { UdsServer } from "../server/uds-server.js";
 import { buildRunStateSnapshot } from "../snapshot.js";
 import { ProcessManager } from "./process-manager.js";
@@ -17,6 +22,7 @@ export interface DaemonConfig {
   socketPath?: string;
   eventStorePath?: string;
   gateway?: GatewayBridgeOptions;
+  browserGateway?: BrowserGatewayConfig;
   shutdownTimeoutMs?: number;
 }
 
@@ -25,6 +31,7 @@ export interface HealthStatus {
   gateway: boolean;
   kernel: boolean;
   socket: boolean;
+  browserGateway: boolean;
   details?: Record<string, unknown>;
 }
 
@@ -39,6 +46,8 @@ export class DaemonLifecycle {
   private kernelBridge: KernelBridge | null = null;
   private runtime: RuntimeBridge | null = null;
   private uds: UdsServer | null = null;
+  private browserGateway: BrowserGatewayServer | null = null;
+  private browserGatewayInfo: BrowserGatewayListenInfo | null = null;
   private unsubEvents: (() => void) | null = null;
   private _running = false;
   private socketPath = "";
@@ -67,20 +76,27 @@ export class DaemonLifecycle {
         self.sessions.createSession(clientId);
       },
       onDisconnect(clientId) {
-        const s = self.sessions.findSessionByClient(clientId);
-        if (s) {
-          for (const sub of [...self.subs.entries()]) {
-            const [subId, v] = sub;
-            if (v.clientId === clientId) self.subs.delete(subId);
-          }
-          self.sessions.closeSession(s.id);
-        }
+        self.closeClientSession(clientId);
       },
       async onMessage(clientId, message) {
         await self.handleClientMessage(clientId, message);
       },
     });
     await this.uds.start(this.socketPath);
+    if (config.browserGateway?.enabled) {
+      this.browserGateway = new BrowserGatewayServer({
+        onConnect(clientId) {
+          self.sessions.createSession(clientId);
+        },
+        onDisconnect(clientId) {
+          self.closeClientSession(clientId);
+        },
+        async onMessage(clientId, message) {
+          await self.handleClientMessage(clientId, message);
+        },
+      });
+      this.browserGatewayInfo = await this.browserGateway.start(config.browserGateway);
+    }
     this._running = true;
   }
 
@@ -98,10 +114,25 @@ export class DaemonLifecycle {
     return this.sessions.findSessionByClient(clientId);
   }
 
+  private closeClientSession(clientId: string): void {
+    const s = this.sessions.findSessionByClient(clientId);
+    if (!s) return;
+    for (const sub of [...this.subs.entries()]) {
+      const [subId, v] = sub;
+      if (v.clientId === clientId) this.subs.delete(subId);
+    }
+    this.sessions.closeSession(s.id);
+  }
+
+  private sendToClient(clientId: string, message: ServerMessage): void {
+    this.uds?.sendTo(clientId, message);
+    this.browserGateway?.sendTo(clientId, message);
+  }
+
   private dispatchEvent(ev: RunEvent): void {
     for (const [, sub] of this.subs) {
       if (eventMatchesSubscription(ev, sub.runId, sub.filter)) {
-        this.uds?.sendTo(sub.clientId, { type: "event", event: ev });
+        this.sendToClient(sub.clientId, { type: "event", event: ev });
       }
     }
   }
@@ -114,7 +145,7 @@ export class DaemonLifecycle {
     this.sessions.touch(session);
     switch (msg.type) {
       case "ping":
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "pong",
           messageId: msg.messageId,
         });
@@ -122,7 +153,7 @@ export class DaemonLifecycle {
       case "get_state": {
         const k = this.kernelBridge?.getKernel();
         if (!k) {
-          this.uds?.sendTo(clientId, {
+          this.sendToClient(clientId, {
             type: "error",
             code: "kernel_unavailable",
             message: "Kernel not ready",
@@ -131,18 +162,18 @@ export class DaemonLifecycle {
         }
         const snap = buildRunStateSnapshot(k, msg.runId);
         if (!snap) {
-          this.uds?.sendTo(clientId, {
+          this.sendToClient(clientId, {
             type: "error",
             code: "unknown_run",
             message: `Run not found: ${msg.runId}`,
           });
           return;
         }
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "state_snapshot",
           state: snap,
         });
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "ack",
           messageId: msg.messageId,
           result: snap,
@@ -162,7 +193,7 @@ export class DaemonLifecycle {
             replayedThroughSeq = msg.afterSeq + events.length;
             for (const ev of events) {
               if (eventMatchesSubscription(ev, msg.runId, msg.filter)) {
-                this.uds?.sendTo(clientId, { type: "event", event: ev });
+                this.sendToClient(clientId, { type: "event", event: ev });
               }
             }
           }
@@ -180,7 +211,7 @@ export class DaemonLifecycle {
           runId: msg.runId,
           filter: msg.filter,
         });
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "subscribed",
           subscriptionId: subId,
           messageId: msg.messageId,
@@ -191,7 +222,7 @@ export class DaemonLifecycle {
       case "unsubscribe": {
         this.subs.delete(msg.subscriptionId);
         session.subscriptions = session.subscriptions.filter((s) => s.id !== msg.subscriptionId);
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "ack",
           messageId: msg.messageId ?? ulid(),
         });
@@ -208,7 +239,7 @@ export class DaemonLifecycle {
   ): Promise<void> {
     const kb = this.kernelBridge;
     if (!kb) {
-      this.uds?.sendTo(clientId, {
+      this.sendToClient(clientId, {
         type: "error",
         code: "kernel_unavailable",
         message: "Kernel not ready",
@@ -219,7 +250,7 @@ export class DaemonLifecycle {
     if (message.type === "submit") {
       const runId = await kb.submitRun(message.prompt, message.mode, message.options);
       if (!session.runIds.includes(runId)) session.runIds.push(runId);
-      this.uds?.sendTo(clientId, {
+      this.sendToClient(clientId, {
         type: "ack",
         messageId: mid,
         result: { runId },
@@ -231,7 +262,7 @@ export class DaemonLifecycle {
     if (op === "inspect") {
       const runId = (message as { runId?: string }).runId;
       if (typeof runId !== "string") {
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "error",
           code: "invalid_control",
           message: "inspect requires runId",
@@ -241,19 +272,19 @@ export class DaemonLifecycle {
       kb.forwardControl(message);
       const snap = buildRunStateSnapshot(kb.getKernel(), runId);
       if (!snap) {
-        this.uds?.sendTo(clientId, {
+        this.sendToClient(clientId, {
           type: "error",
           code: "unknown_run",
           message: `Run not found: ${runId}`,
         });
         return;
       }
-      this.uds?.sendTo(clientId, { type: "ack", messageId: mid, result: snap });
+      this.sendToClient(clientId, { type: "ack", messageId: mid, result: snap });
       return;
     }
 
     kb.forwardControl(message);
-    this.uds?.sendTo(clientId, { type: "ack", messageId: mid });
+    this.sendToClient(clientId, { type: "ack", messageId: mid });
   }
 
   isRunning(): boolean {
@@ -264,13 +295,18 @@ export class DaemonLifecycle {
     const gw = this.gateway ? await this.gateway.isHealthy().catch(() => false) : false;
     const kernel = this.kernelBridge !== null;
     const socket = this._running && this.uds !== null;
+    const browserGateway = this._running && this.browserGateway !== null;
     const ok = gw && kernel && socket;
     return {
       ok,
       gateway: gw,
       kernel,
       socket,
-      details: { socketPath: this.socketPath },
+      browserGateway,
+      details: {
+        socketPath: this.socketPath,
+        browserGateway: this.browserGatewayInfo,
+      },
     };
   }
 
@@ -297,6 +333,10 @@ export class DaemonLifecycle {
     this.uds?.closeAllClients();
     await this.uds?.stop();
     this.uds = null;
+    this.browserGateway?.closeAllClients();
+    await this.browserGateway?.stop();
+    this.browserGateway = null;
+    this.browserGatewayInfo = null;
     await this.gateway?.stop();
     this.gateway = null;
     await this.kernelBridge?.destroy();

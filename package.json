@@ -12,6 +12,9 @@
     "typecheck": "turbo typecheck",
     "lint": "turbo lint",
     "start": "node scripts/kirakira.mjs",
+    "start:daemon": "pnpm --filter @kirakira/runtime-daemon start",
+    "start:web": "pnpm --filter @kirakira/web dev",
+    "start:desktop": "pnpm --filter @kirakira/desktop dev:renderer",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
     "test": "vitest run",
@@ -29,6 +32,7 @@
     "turbo": "^2.9.8",
     "typescript": "^5.8.3",
     "vitest": "^3.1.1",
+    "ws": "^8.18.0",
     "zod": "^3.25.0"
   },
   "packageManager": "pnpm@10.33.2",

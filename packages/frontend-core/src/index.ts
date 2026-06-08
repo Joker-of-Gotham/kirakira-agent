@@ -9,6 +9,8 @@ export type {
   SubscribeRunOptions,
   Unsubscribe,
 } from "./transport.js";
+export type { BrowserGatewayTransportOptions } from "./browser-gateway-transport.js";
+export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";
 
 export {
   createEmptyRunDashboard,

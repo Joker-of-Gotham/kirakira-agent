@@ -7,7 +7,7 @@
   "main": "./dist/main/main.js",
   "scripts": {
     "build": "vite build --config vite.renderer.config.ts && tsc -p tsconfig.main.json",
-    "dev:renderer": "vite --config vite.renderer.config.ts --host 127.0.0.1 --port 5174",
+    "dev:renderer": "vite --config vite.renderer.config.ts --host 127.0.0.1 --port 5174 --strictPort",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json"
   },
   "dependencies": {
@@ -15,14 +15,14 @@
     "@kirakira/frontend-core": "workspace:*",
     "@kirakira/runtime-contracts": "workspace:*",
     "@kirakira/runtime-daemon": "workspace:*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7"
+    "react": "19.2.5",
+    "react-dom": "19.2.5"
   },
   "devDependencies": {
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.2",
+    "@vitejs/plugin-react": "^5.2.0",
     "electron": "^42.3.3",
-    "vite": "^8.0.16"
+    "vite": "^7.3.2"
   }
 }

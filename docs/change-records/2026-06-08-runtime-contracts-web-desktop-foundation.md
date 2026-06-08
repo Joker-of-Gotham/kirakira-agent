@@ -47,7 +47,7 @@ Branch: `codex/runtime-orchestration-profile-baseline`
 - `pnpm.cmd --filter @kirakira/desktop build`
 - `pnpm.cmd exec vitest run test/unit/frontend-core/projection.test.ts test/unit/frontend-core/browser-boundary.test.ts test/unit/event-store/research-projector.test.ts test/unit/event-store/subagent-projector.test.ts`
 - `rg -n '@kirakira/event-store|@kirakira/runtime-daemon|@kirakira/orchestrator-kernel|better-sqlite3|node:|from "ws"|from ''ws''' packages\frontend-core\src packages\frontend-app\src packages\runtime-contracts\src`
-- `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173`
+- Retracted 2026-06-09: `Invoke-WebRequest -UseBasicParsing http://127.0.0.1:5173` was not a valid Kirakira validation target. That port was later confirmed to be serving another local project (`Self-Ontology OS`), so it must not be used as evidence for this repository.
 
 ## Known Limits
 
