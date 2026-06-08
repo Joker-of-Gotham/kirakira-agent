@@ -21,6 +21,7 @@ export function replayFromCheckpoint(
 ): RunState {
   const proj = projector ?? new RunStateProjector();
   const state = structuredClone(checkpoint.state) as RunState;
+  state.researchRuns ??= {};
   const tailEvents = reader.readSinceCheckpoint(runId, checkpoint.seq);
 
   for (const event of tailEvents) {

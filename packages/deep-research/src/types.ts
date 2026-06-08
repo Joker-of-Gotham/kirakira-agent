@@ -150,6 +150,71 @@ export interface ResearchPlannerAdapter {
   ): Promise<DeepResearchPlan>;
 }
 
+export type DeepResearchProgressPhase =
+  | "started"
+  | "plan_created"
+  | "task_started"
+  | "source_started"
+  | "source_completed"
+  | "source_failed"
+  | "evidence_collected"
+  | "citation_added"
+  | "task_completed"
+  | "task_failed"
+  | "limit_reached"
+  | "completed"
+  | "failed";
+
+export interface DeepResearchCitationProgress {
+  id: string;
+  sourceKind: ResearchSourceKind;
+  title?: string;
+  uri?: string;
+  summary?: string;
+  traceId?: string;
+  queryId?: string;
+  sourceRecordId?: string;
+  evidenceIds?: string[];
+  provenanceIds?: string[];
+  artifactPointer?: string;
+  routeNames?: string[];
+  score?: number;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DeepResearchProgressEvent {
+  phase: DeepResearchProgressPhase;
+  researchRunId?: string;
+  planId?: string;
+  taskId?: string;
+  taskKind?: DeepResearchTaskKind;
+  depth?: number;
+  dependsOn?: string[];
+  sourceKind?: ResearchSourceKind;
+  sourceCallId?: string;
+  sourceKinds?: ResearchSourceKind[];
+  limits?: DeepResearchLimits;
+  requireCitations?: boolean;
+  verificationRequired?: boolean;
+  workspaceDirRelative?: string;
+  requiredCitations?: boolean;
+  toolCalls?: number;
+  maxToolCalls?: number;
+  evidenceCount?: number;
+  citationCount?: number;
+  evidenceIds?: string[];
+  citationIds?: string[];
+  citations?: DeepResearchCitationProgress[];
+  unknowns?: string[];
+  durationMs?: number;
+  errorCode?: string;
+  message?: string;
+}
+
+export type DeepResearchProgressSink = (
+  event: DeepResearchProgressEvent,
+) => void | Promise<void>;
+
 export type DeepResearchRunStatus =
   | "disabled"
   | "planned"

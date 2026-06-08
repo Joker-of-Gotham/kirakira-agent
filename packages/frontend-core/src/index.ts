@@ -21,6 +21,8 @@ export type {
   ProjectionOptions,
   RunDashboardEntityMaps,
   RunDashboardProjection,
+  RunDashboardResearchCitation,
+  RunDashboardResearchRun,
   RunDashboardSubagent,
   RunDashboardStatus,
   RuntimeEventSummary,

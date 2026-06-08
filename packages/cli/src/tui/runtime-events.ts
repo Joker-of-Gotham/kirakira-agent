@@ -12,6 +12,11 @@ export type RuntimeEventType =
   | "task.updated"
   | "subagent.created"
   | "subagent.updated"
+  | "research.started"
+  | "research.updated"
+  | "research.completed"
+  | "research.failed"
+  | "research.citation.added"
   | "memory.recalled"
   | "diff.created"
   | "trace.span.started"
@@ -91,6 +96,29 @@ export interface MemoryHitVm {
   updatedAt: string;
 }
 
+export interface ResearchCitationVm {
+  id: string;
+  sourceKind?: string;
+  title?: string;
+  uri?: string;
+  artifactPointer?: string;
+  score?: number;
+}
+
+export interface ResearchRunVm {
+  id: string;
+  status: "running" | "planned" | "completed" | "failed";
+  question?: string;
+  sourcePolicy?: string;
+  sourceKinds?: string[];
+  evidenceCount: number;
+  citationCount: number;
+  unknownCount: number;
+  toolCalls?: number;
+  latestCitation?: ResearchCitationVm;
+  updatedAt: string;
+}
+
 export interface RuntimeStoreState {
   runId: string;
   events: RuntimeEvent[];
@@ -98,6 +126,7 @@ export interface RuntimeStoreState {
   subagents: SubagentVm[];
   tools: ToolCallVm[];
   memoryHits: MemoryHitVm[];
+  researchRuns: ResearchRunVm[];
   pendingApprovals: number;
   traceSpansOpen: number;
 }
@@ -109,6 +138,7 @@ export const initialRuntimeStoreState = (): RuntimeStoreState => ({
   subagents: [],
   tools: [],
   memoryHits: [],
+  researchRuns: [],
   pendingApprovals: 0,
   traceSpansOpen: 0,
 });

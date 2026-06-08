@@ -174,4 +174,60 @@ describe("DeepResearchRunner", () => {
     expect(result.evidence[0]?.summary).toBe("source summary");
     expect(result.citations[0]?.uri).toBe("https://example.test/source");
   });
+
+  it("emits neutral progress events without raw citation spans", async () => {
+    const phases: string[] = [];
+    const progressPayloads: Array<Record<string, unknown>> = [];
+    const adapter: ResearchSourceAdapter = {
+      kind: "memory",
+      async search(request) {
+        return [
+          {
+            id: "evidence-1",
+            sourceKind: "memory",
+            query: request.query,
+            summary: "source summary",
+            citations: [
+              {
+                id: "citation-1",
+                sourceKind: "memory",
+                title: "Memory citation",
+                rawSpan: "raw span must not enter progress events",
+              },
+            ],
+          },
+        ];
+      },
+    };
+    const runner = new DeepResearchRunner({
+      options: resolveDeepResearchOptions(
+        { enabled: true, source_policy: "workspace" },
+        workspaceRoot,
+        { availableSourceKinds: ["memory"] },
+      ),
+      sourceAdapters: [adapter],
+      researchRunId: "research-1",
+      progressSink(event) {
+        phases.push(event.phase);
+        progressPayloads.push(event as unknown as Record<string, unknown>);
+      },
+    });
+
+    await runner.run("Find workspace evidence");
+
+    expect(phases).toEqual([
+      "started",
+      "plan_created",
+      "task_started",
+      "source_started",
+      "source_completed",
+      "evidence_collected",
+      "citation_added",
+      "task_completed",
+      "completed",
+    ]);
+    const citationEvent = progressPayloads.find((event) => event.phase === "citation_added");
+    expect(citationEvent?.researchRunId).toBe("research-1");
+    expect(JSON.stringify(citationEvent)).not.toContain("raw span must not enter");
+  });
 });

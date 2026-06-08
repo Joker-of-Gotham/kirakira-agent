@@ -2,6 +2,9 @@ import type {
   RunEvent,
   RunEventKind,
   RunState,
+  ResearchCitationRecord,
+  ResearchRunRecord,
+  ResearchTaskRecord,
   SubagentRecord,
   TaskNode,
   SkillRecord,
@@ -16,6 +19,7 @@ export function createEmptyRunState(runId: string): RunState {
     taskEdges: [],
     artifacts: {},
     subagents: {},
+    researchRuns: {},
     skills: {},
     tools: {},
     modelTranscript: [],
@@ -39,6 +43,11 @@ function readStringArray(p: Record<string, unknown>, key: string): string[] | un
   if (!Array.isArray(value)) return undefined;
   const out = value.filter((item): item is string => typeof item === "string");
   return out.length > 0 ? out : undefined;
+}
+
+function readNumber(p: Record<string, unknown>, key: string): number | undefined {
+  const value = p[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function readObject(p: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
@@ -130,6 +139,108 @@ function subagentMetadata(p: Record<string, unknown>): Partial<SubagentRecord> {
   };
 }
 
+function researchRunId(p: Record<string, unknown>, fallback: string): string {
+  return readString(p, "researchRunId") ??
+    readString(p, "researchId") ??
+    readString(p, "planId") ??
+    fallback;
+}
+
+function researchTaskId(p: Record<string, unknown>): string | undefined {
+  return readString(p, "researchTaskId") ?? readString(p, "taskId") ?? readString(p, "id");
+}
+
+function researchRunMetadata(p: Record<string, unknown>): Partial<ResearchRunRecord> {
+  return {
+    ...(readString(p, "questionPreview") !== undefined
+      ? { question: readString(p, "questionPreview") }
+      : readString(p, "question") !== undefined
+        ? { question: readString(p, "question") }
+        : {}),
+    ...(readString(p, "planId") !== undefined ? { planId: readString(p, "planId") } : {}),
+    ...(readString(p, "sourcePolicy") !== undefined
+      ? { sourcePolicy: readString(p, "sourcePolicy") }
+      : {}),
+    ...(readStringArray(p, "requiredSourceKinds") !== undefined
+      ? { requiredSourceKinds: readStringArray(p, "requiredSourceKinds") }
+      : {}),
+    ...(readString(p, "traceId") !== undefined ? { traceId: readString(p, "traceId") } : {}),
+    ...(readString(p, "parentTaskId") !== undefined
+      ? { parentTaskId: readString(p, "parentTaskId") }
+      : {}),
+    ...(readString(p, "parentWorkerId") !== undefined
+      ? { parentWorkerId: readString(p, "parentWorkerId") }
+      : {}),
+    ...(readString(p, "subagentId") !== undefined
+      ? { subagentId: readString(p, "subagentId") }
+      : {}),
+    ...(readObject(p, "limits") !== undefined ? { limits: readObject(p, "limits") } : {}),
+    ...(readObject(p, "citationSchema") !== undefined
+      ? { citationSchema: readObject(p, "citationSchema") }
+      : {}),
+    ...(readStringArray(p, "unknowns") !== undefined
+      ? { unknowns: readStringArray(p, "unknowns") }
+      : {}),
+    ...(readNumber(p, "toolCalls") !== undefined ? { toolCalls: readNumber(p, "toolCalls") } : {}),
+  };
+}
+
+function researchTaskMetadata(p: Record<string, unknown>): Partial<ResearchTaskRecord> {
+  return {
+    ...(readString(p, "question") !== undefined ? { question: readString(p, "question") } : {}),
+    ...(readNumber(p, "depth") !== undefined ? { depth: readNumber(p, "depth") } : {}),
+    ...(readStringArray(p, "sourceKinds") !== undefined
+      ? { sourceKinds: readStringArray(p, "sourceKinds") }
+      : {}),
+    ...(readNumber(p, "evidenceCount") !== undefined
+      ? { evidenceCount: readNumber(p, "evidenceCount") }
+      : {}),
+    ...(readNumber(p, "citationCount") !== undefined
+      ? { citationCount: readNumber(p, "citationCount") }
+      : {}),
+    ...(readString(p, "error") !== undefined
+      ? { error: readString(p, "error") }
+      : readString(p, "message") !== undefined
+        ? { error: readString(p, "message") }
+        : {}),
+  };
+}
+
+function citationRecord(
+  p: Record<string, unknown>,
+  at: string,
+): ResearchCitationRecord | undefined {
+  const id = readString(p, "citationId") ?? readString(p, "id");
+  if (!id) return undefined;
+  return {
+    id,
+    ...(readString(p, "sourceKind") !== undefined ? { sourceKind: readString(p, "sourceKind") } : {}),
+    ...(readString(p, "title") !== undefined ? { title: readString(p, "title") } : {}),
+    ...(readString(p, "uri") !== undefined ? { uri: readString(p, "uri") } : {}),
+    ...(readString(p, "summary") !== undefined ? { summary: readString(p, "summary") } : {}),
+    ...(readString(p, "traceId") !== undefined ? { traceId: readString(p, "traceId") } : {}),
+    ...(readString(p, "queryId") !== undefined ? { queryId: readString(p, "queryId") } : {}),
+    ...(readString(p, "sourceRecordId") !== undefined
+      ? { sourceRecordId: readString(p, "sourceRecordId") }
+      : {}),
+    ...(readStringArray(p, "evidenceIds") !== undefined
+      ? { evidenceIds: readStringArray(p, "evidenceIds") }
+      : {}),
+    ...(readStringArray(p, "provenanceIds") !== undefined
+      ? { provenanceIds: readStringArray(p, "provenanceIds") }
+      : {}),
+    ...(readString(p, "artifactPointer") !== undefined
+      ? { artifactPointer: readString(p, "artifactPointer") }
+      : {}),
+    ...(readStringArray(p, "routeNames") !== undefined
+      ? { routeNames: readStringArray(p, "routeNames") }
+      : {}),
+    ...(readNumber(p, "score") !== undefined ? { score: readNumber(p, "score") } : {}),
+    ...(readObject(p, "metadata") !== undefined ? { metadata: readObject(p, "metadata") } : {}),
+    addedAt: at,
+  };
+}
+
 export class RunStateProjector {
   project(events: RunEvent[]): RunState {
     if (events.length === 0) {
@@ -143,8 +254,13 @@ export class RunStateProjector {
   }
 
   apply(state: RunState, event: RunEvent): void {
+    this.normalizeState(state);
     state.lastSeq = event.checkpointSeq ?? state.lastSeq + 1;
     this.dispatch(state, event.kind, event);
+  }
+
+  private normalizeState(state: RunState): void {
+    state.researchRuns ??= {};
   }
 
   private dispatch(next: RunState, kind: RunEventKind, event: RunEvent): void {
@@ -239,6 +355,50 @@ export class RunStateProjector {
         };
         break;
       }
+      case "research.started":
+        this.applyResearchStarted(next, p, event.timestamp);
+        break;
+      case "research.plan.created":
+        this.applyResearchPlan(next, p, event.timestamp);
+        break;
+      case "research.task.started":
+        this.applyResearchTask(next, p, "running", event.timestamp);
+        break;
+      case "research.task.completed":
+        this.applyResearchTask(
+          next,
+          p,
+          readString(p, "status") === "failed" ? "failed" : "completed",
+          event.timestamp,
+        );
+        break;
+      case "research.task.failed":
+        this.applyResearchTask(next, p, "failed", event.timestamp);
+        break;
+      case "research.source.started":
+        this.applyResearchSource(next, p, false, event.timestamp);
+        break;
+      case "research.source.completed":
+        this.applyResearchSource(next, p, false, event.timestamp);
+        break;
+      case "research.source.failed":
+        this.applyResearchSource(next, p, true, event.timestamp);
+        break;
+      case "research.evidence.collected":
+        this.applyResearchEvidence(next, p, event.timestamp);
+        break;
+      case "research.citation.added":
+        this.applyResearchCitation(next, p, event.timestamp);
+        break;
+      case "research.limit.reached":
+        this.applyResearchLimit(next, p, event.timestamp);
+        break;
+      case "research.completed":
+        this.applyResearchDone(next, p, "completed", event.timestamp);
+        break;
+      case "research.failed":
+        this.applyResearchDone(next, p, "failed", event.timestamp);
+        break;
       case "tool.search.requested":
       case "tool.selected":
       case "tool.call.started":
@@ -334,6 +494,191 @@ export class RunStateProjector {
       at,
       detail: { ...p },
     };
+  }
+
+  private ensureResearchRun(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): ResearchRunRecord {
+    const id = researchRunId(p, `${next.runId}:research`);
+    const existing = next.researchRuns[id];
+    const run: ResearchRunRecord = {
+      ...existing,
+      id,
+      status: existing?.status ?? "planned",
+      tasks: existing?.tasks ?? {},
+      evidence: existing?.evidence ?? {},
+      citations: existing?.citations ?? {},
+      createdAt: existing?.createdAt ?? at,
+      updatedAt: at,
+      ...researchRunMetadata(p),
+    };
+    next.researchRuns[id] = run;
+    return run;
+  }
+
+  private applyResearchStarted(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = "running";
+  }
+
+  private applyResearchPlan(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = run.status === "running" ? "running" : "planned";
+    const tasks = readObjectArray(p, "tasks") ?? [];
+    for (const raw of tasks) {
+      const id = researchTaskId(raw);
+      if (!id) continue;
+      run.tasks[id] = {
+        ...run.tasks[id],
+        id,
+        status: "pending",
+        ...researchTaskMetadata(raw),
+      };
+    }
+  }
+
+  private applyResearchTask(
+    next: RunState,
+    p: Record<string, unknown>,
+    status: ResearchTaskRecord["status"],
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = status === "failed" ? "failed" : "running";
+    const id = researchTaskId(p);
+    if (!id) return;
+    const existing = run.tasks[id];
+    run.tasks[id] = {
+      ...existing,
+      id,
+      status,
+      ...researchTaskMetadata(p),
+      startedAt: status === "running" ? at : existing?.startedAt,
+      completedAt: status === "completed" || status === "failed" ? at : existing?.completedAt,
+    };
+  }
+
+  private applyResearchSource(
+    next: RunState,
+    p: Record<string, unknown>,
+    failed: boolean,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = "running";
+    const taskId = researchTaskId(p);
+    if (!taskId) {
+      if (failed) {
+        const message = readString(p, "message") ?? readString(p, "error") ?? "Research source failed.";
+        run.unknowns = [...(run.unknowns ?? []), message];
+      }
+      return;
+    }
+    const existing = run.tasks[taskId];
+    const message = readString(p, "message") ?? readString(p, "error");
+    run.tasks[taskId] = {
+      ...existing,
+      id: taskId,
+      status: "running",
+      ...(readStringArray(p, "sourceKinds") !== undefined
+        ? { sourceKinds: readStringArray(p, "sourceKinds") }
+        : {}),
+      startedAt: existing?.startedAt ?? at,
+      completedAt: existing?.completedAt,
+      error: failed ? message : existing?.error,
+    };
+    if (failed && message) {
+      run.unknowns = [...(run.unknowns ?? []), message];
+    }
+  }
+
+  private applyResearchEvidence(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = run.status === "planned" ? "running" : run.status;
+    const evidenceIds = readStringArray(p, "evidenceIds");
+    const ids =
+      evidenceIds && evidenceIds.length > 0
+        ? evidenceIds
+        : [readString(p, "evidenceId") ?? readString(p, "id") ?? `research-evidence-${at}`];
+    const taskId = researchTaskId(p);
+    for (const id of ids) {
+      run.evidence[id] = {
+        id,
+        ...(taskId !== undefined ? { taskId } : {}),
+        ...(readString(p, "sourceKind") !== undefined ? { sourceKind: readString(p, "sourceKind") } : {}),
+        ...(readString(p, "query") !== undefined ? { query: readString(p, "query") } : {}),
+        ...(readString(p, "title") !== undefined ? { title: readString(p, "title") } : {}),
+        ...(readString(p, "summary") !== undefined ? { summary: readString(p, "summary") } : {}),
+        ...(readStringArray(p, "citationIds") !== undefined
+          ? { citationIds: readStringArray(p, "citationIds") }
+          : {}),
+        collectedAt: at,
+        ...(readObject(p, "metadata") !== undefined ? { metadata: readObject(p, "metadata") } : {}),
+      };
+    }
+    if (taskId && run.tasks[taskId]) {
+      const task = run.tasks[taskId];
+      const evidenceIncrement = evidenceIds?.length ?? readNumber(p, "evidenceCount") ?? 1;
+      const citationIncrement =
+        readStringArray(p, "citationIds")?.length ?? readNumber(p, "citationCount") ?? 0;
+      run.tasks[taskId] = {
+        ...task,
+        evidenceCount: (task.evidenceCount ?? 0) + evidenceIncrement,
+        citationCount: (task.citationCount ?? 0) + citationIncrement,
+      };
+    }
+  }
+
+  private applyResearchCitation(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = run.status === "planned" ? "running" : run.status;
+    const citation = citationRecord(p, at);
+    if (!citation) return;
+    run.citations[citation.id] = citation;
+  }
+
+  private applyResearchLimit(
+    next: RunState,
+    p: Record<string, unknown>,
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = "running";
+    const message = readString(p, "message") ?? "Research limit reached.";
+    run.unknowns = [...(run.unknowns ?? []), message];
+  }
+
+  private applyResearchDone(
+    next: RunState,
+    p: Record<string, unknown>,
+    status: ResearchRunRecord["status"],
+    at: string,
+  ): void {
+    const run = this.ensureResearchRun(next, p, at);
+    run.status = status;
+    run.completedAt = at;
+    run.updatedAt = at;
+    if (status === "failed") {
+      run.error = readString(p, "error") ?? readString(p, "message") ?? "research failed";
+    }
   }
 
   private applySkill(

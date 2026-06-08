@@ -12,6 +12,19 @@ export type RunEventKind =
   | "task.failed"
   | "subagent.spawned"
   | "subagent.completed"
+  | "research.started"
+  | "research.plan.created"
+  | "research.task.started"
+  | "research.task.completed"
+  | "research.task.failed"
+  | "research.source.started"
+  | "research.source.completed"
+  | "research.source.failed"
+  | "research.evidence.collected"
+  | "research.citation.added"
+  | "research.limit.reached"
+  | "research.completed"
+  | "research.failed"
   | "tool.search.requested"
   | "tool.selected"
   | "tool.call.started"
@@ -122,6 +135,76 @@ export interface SubagentRecord {
   error?: string;
 }
 
+export type ResearchRunStatus = "planned" | "running" | "completed" | "failed";
+export type ResearchTaskStatus = "pending" | "running" | "completed" | "failed";
+
+export interface ResearchTaskRecord {
+  id: string;
+  status: ResearchTaskStatus;
+  question?: string;
+  depth?: number;
+  sourceKinds?: string[];
+  startedAt?: string;
+  completedAt?: string;
+  evidenceCount?: number;
+  citationCount?: number;
+  error?: string;
+}
+
+export interface ResearchEvidenceRecord {
+  id: string;
+  taskId?: string;
+  sourceKind?: string;
+  query?: string;
+  title?: string;
+  summary?: string;
+  citationIds?: string[];
+  collectedAt: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ResearchCitationRecord {
+  id: string;
+  sourceKind?: string;
+  title?: string;
+  uri?: string;
+  summary?: string;
+  traceId?: string;
+  queryId?: string;
+  sourceRecordId?: string;
+  evidenceIds?: string[];
+  provenanceIds?: string[];
+  artifactPointer?: string;
+  routeNames?: string[];
+  score?: number;
+  metadata?: Record<string, unknown>;
+  addedAt: string;
+}
+
+export interface ResearchRunRecord {
+  id: string;
+  status: ResearchRunStatus;
+  question?: string;
+  planId?: string;
+  sourcePolicy?: string;
+  requiredSourceKinds?: string[];
+  traceId?: string;
+  parentTaskId?: string;
+  parentWorkerId?: string;
+  subagentId?: string;
+  limits?: Record<string, unknown>;
+  citationSchema?: Record<string, unknown>;
+  tasks: Record<string, ResearchTaskRecord>;
+  evidence: Record<string, ResearchEvidenceRecord>;
+  citations: Record<string, ResearchCitationRecord>;
+  unknowns?: string[];
+  toolCalls?: number;
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
 export interface SkillRecord {
   id: string;
   name: string;
@@ -185,6 +268,7 @@ export interface RunState {
   taskEdges: TaskEdge[];
   artifacts: Record<string, ArtifactRecord>;
   subagents: Record<string, SubagentRecord>;
+  researchRuns: Record<string, ResearchRunRecord>;
   skills: Record<string, SkillRecord>;
   tools: Record<string, ToolInvocationRecord>;
   modelTranscript: Array<{ kind: "request" | "response"; at: string; body: Record<string, unknown> }>;

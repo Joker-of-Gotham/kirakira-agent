@@ -16,6 +16,7 @@
   "dependencies": {
     "@kirakira/core": "workspace:*",
     "@kirakira/agent-runtime": "workspace:*",
+    "@kirakira/deep-research": "workspace:*",
     "@kirakira/event-store": "workspace:*",
     "@kirakira/policy-engine": "workspace:*",
     "p-queue": "^8.0.1",

@@ -162,4 +162,83 @@ describe("frontend-core run dashboard projection", () => {
       result: { artifactRefs: ["artifact-child"] },
     });
   });
+
+  it("projects research runs and compact citation summaries", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "research.started",
+        {
+          researchRunId: "research-1",
+          questionPreview: "Compare claims",
+          sourcePolicy: "verified",
+          requiredSourceKinds: ["memory", "web"],
+        },
+        1,
+      ),
+      event(
+        "research.plan.created",
+        {
+          researchRunId: "research-1",
+          planId: "plan-1",
+          tasks: [{ id: "task-1" }],
+        },
+        2,
+      ),
+      event(
+        "research.evidence.collected",
+        {
+          researchRunId: "research-1",
+          evidenceId: "evidence-1",
+          citationIds: ["citation-1"],
+          evidenceCount: 1,
+          citationCount: 1,
+        },
+        3,
+      ),
+      event(
+        "research.citation.added",
+        {
+          researchRunId: "research-1",
+          citationId: "citation-1",
+          sourceKind: "memory",
+          title: "Memory note",
+          artifactPointer: "artifact://note#L4",
+          traceId: "trace-1",
+        },
+        4,
+      ),
+      event(
+        "research.completed",
+        {
+          researchRunId: "research-1",
+          evidenceCount: 1,
+          citationCount: 1,
+          unknowns: ["one open question"],
+        },
+        5,
+      ),
+    ]);
+
+    expect(projection.entities.research["research-1"]).toBe("completed");
+    expect(projection.latestEvents[0]?.title).toBe("Research completed");
+    expect(projection.researchRuns["research-1"]).toMatchObject({
+      id: "research-1",
+      phase: "completed",
+      question: "Compare claims",
+      sourcePolicy: "verified",
+      requiredSourceKinds: ["memory", "web"],
+      taskCount: 1,
+      evidenceCount: 1,
+      citationCount: 1,
+      citationIds: ["citation-1"],
+      latestCitation: {
+        id: "citation-1",
+        sourceKind: "memory",
+        title: "Memory note",
+        artifactPointer: "artifact://note#L4",
+        traceId: "trace-1",
+      },
+      unknowns: ["one open question"],
+    });
+  });
 });

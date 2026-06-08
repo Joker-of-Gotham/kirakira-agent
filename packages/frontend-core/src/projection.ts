@@ -1,6 +1,7 @@
 import type {
   RunEvent,
   RunEventKind,
+  ResearchCitationRecord,
   SubagentContractRecord,
   SubagentResultRecord,
   SubagentScopeRecord,
@@ -49,9 +50,40 @@ export interface RunDashboardSubagent {
   updatedAt: string;
 }
 
+export interface RunDashboardResearchCitation {
+  id: string;
+  sourceKind?: string;
+  title?: string;
+  uri?: string;
+  traceId?: string;
+  sourceRecordId?: string;
+  artifactPointer?: string;
+}
+
+export interface RunDashboardResearchRun {
+  id: string;
+  phase: EntityPhase;
+  question?: string;
+  sourcePolicy?: string;
+  requiredSourceKinds?: string[];
+  traceId?: string;
+  parentTaskId?: string;
+  parentWorkerId?: string;
+  subagentId?: string;
+  taskCount?: number;
+  evidenceCount: number;
+  citationCount: number;
+  citationIds: string[];
+  latestCitation?: RunDashboardResearchCitation;
+  unknowns?: string[];
+  error?: string;
+  updatedAt: string;
+}
+
 export interface RunDashboardEntityMaps {
   tasks: Record<string, EntityPhase>;
   subagents: Record<string, EntityPhase>;
+  research: Record<string, EntityPhase>;
   tools: Record<string, EntityPhase>;
   approvals: Record<string, EntityPhase>;
   artifacts: Record<string, EntityPhase>;
@@ -68,6 +100,7 @@ export interface RunDashboardProjection {
   latestEvents: RuntimeEventSummary[];
   entities: RunDashboardEntityMaps;
   subagentDetails: Record<string, RunDashboardSubagent>;
+  researchRuns: Record<string, RunDashboardResearchRun>;
   pendingApprovalIds: string[];
   updatedAt?: string;
 }
@@ -111,6 +144,22 @@ const TOOL_PHASE_BY_EVENT: Partial<Record<RunEventKind, EntityPhase>> = {
   "tool.call.failed": "failed",
 };
 
+const RESEARCH_PHASE_BY_EVENT: Partial<Record<RunEventKind, EntityPhase>> = {
+  "research.started": "running",
+  "research.plan.created": "created",
+  "research.task.started": "running",
+  "research.task.completed": "running",
+  "research.task.failed": "failed",
+  "research.source.started": "running",
+  "research.source.completed": "running",
+  "research.source.failed": "running",
+  "research.evidence.collected": "running",
+  "research.citation.added": "running",
+  "research.limit.reached": "running",
+  "research.completed": "completed",
+  "research.failed": "failed",
+};
+
 const APPROVAL_PHASE_BY_EVENT: Partial<Record<RunEventKind, EntityPhase>> = {
   "approval.requested": "requested",
   "approval.resolved": "resolved",
@@ -129,6 +178,19 @@ const EVENT_TITLES: Partial<Record<RunEventKind, string>> = {
   "run.drained": "Run drained",
   "subagent.spawned": "Subagent spawned",
   "subagent.completed": "Subagent completed",
+  "research.started": "Research started",
+  "research.plan.created": "Research plan created",
+  "research.task.started": "Research task started",
+  "research.task.completed": "Research task completed",
+  "research.task.failed": "Research task failed",
+  "research.source.started": "Research source started",
+  "research.source.completed": "Research source completed",
+  "research.source.failed": "Research source failed",
+  "research.evidence.collected": "Research evidence collected",
+  "research.citation.added": "Research citation added",
+  "research.limit.reached": "Research limit reached",
+  "research.completed": "Research completed",
+  "research.failed": "Research failed",
   "approval.requested": "Approval requested",
   "approval.resolved": "Approval resolved",
   "tool.call.started": "Tool call started",
@@ -146,6 +208,10 @@ const ENTITY_ID_KEYS = [
   "approvalId",
   "ticketId",
   "artifactId",
+  "researchRunId",
+  "planId",
+  "evidenceId",
+  "citationId",
 ] as const;
 
 export function createEmptyRunDashboard(runId?: string): RunDashboardProjection {
@@ -156,11 +222,13 @@ export function createEmptyRunDashboard(runId?: string): RunDashboardProjection 
     entities: {
       tasks: {},
       subagents: {},
+      research: {},
       tools: {},
       approvals: {},
       artifacts: {},
     },
     subagentDetails: {},
+    researchRuns: {},
     pendingApprovalIds: [],
   };
 }
@@ -208,6 +276,19 @@ const HANDLERS: Partial<Record<RunEventKind, ProjectionHandler>> = {
   "task.failed": applyTask,
   "subagent.spawned": applySubagent,
   "subagent.completed": applySubagent,
+  "research.started": applyResearch,
+  "research.plan.created": applyResearch,
+  "research.task.started": applyResearch,
+  "research.task.completed": applyResearch,
+  "research.task.failed": applyResearch,
+  "research.source.started": applyResearch,
+  "research.source.completed": applyResearch,
+  "research.source.failed": applyResearch,
+  "research.evidence.collected": applyResearch,
+  "research.citation.added": applyResearch,
+  "research.limit.reached": applyResearch,
+  "research.completed": applyResearch,
+  "research.failed": applyResearch,
   "tool.search.requested": applyTool,
   "tool.selected": applyTool,
   "tool.call.started": applyTool,
@@ -290,6 +371,47 @@ function applySubagent(
   };
 }
 
+function applyResearch(
+  state: RunDashboardProjection,
+  event: RunEvent,
+): RunDashboardProjection {
+  const phase = RESEARCH_PHASE_BY_EVENT[event.kind];
+  const id = researchEntityId(event);
+  const next = setEntityPhase(state, "research", event, phase, id);
+  if (!phase || !id) return next;
+
+  const previous = next.researchRuns[id];
+  const citation = researchCitation(event.payload);
+  const citationIds = appendUnique(
+    previous?.citationIds ?? [],
+    firstString(event.payload, ["citationId"]),
+  );
+  const evidenceIncrement = event.kind === "research.evidence.collected" ? 1 : 0;
+  const citationIncrement = event.kind === "research.citation.added" ? 1 : 0;
+
+  return {
+    ...next,
+    researchRuns: {
+      ...next.researchRuns,
+      [id]: {
+        ...previous,
+        id,
+        phase,
+        ...researchDetail(event),
+        evidenceCount:
+          numberValue(event.payload.evidenceCount) ??
+          ((previous?.evidenceCount ?? 0) + evidenceIncrement),
+        citationCount:
+          numberValue(event.payload.citationCount) ??
+          ((previous?.citationCount ?? 0) + citationIncrement),
+        citationIds,
+        ...(citation !== undefined ? { latestCitation: citation } : {}),
+        updatedAt: event.timestamp,
+      },
+    },
+  };
+}
+
 function applyTool(
   state: RunDashboardProjection,
   event: RunEvent,
@@ -366,8 +488,9 @@ function setEntityPhase(
   bucket: keyof RunDashboardEntityMaps,
   event: RunEvent,
   phase: EntityPhase | undefined,
+  explicitId?: string,
 ): RunDashboardProjection {
-  const id = entityId(event);
+  const id = explicitId ?? entityId(event);
   if (!id || !phase) return applyGeneric(state, event);
   return {
     ...state,
@@ -386,6 +509,10 @@ function setEntityPhase(
 
 function entityId(event: RunEvent): string | undefined {
   return firstString(event.payload, ENTITY_ID_KEYS) ?? event.id;
+}
+
+function researchEntityId(event: RunEvent): string | undefined {
+  return firstString(event.payload, ["researchRunId", "researchId", "planId"]) ?? event.id;
 }
 
 function firstString(
@@ -468,6 +595,99 @@ function subagentDetail(event: RunEvent): Partial<RunDashboardSubagent> {
       ? { error: firstString(event.payload, ["error"]) }
       : {}),
   };
+}
+
+function researchDetail(event: RunEvent): Partial<RunDashboardResearchRun> {
+  return {
+    ...(firstString(event.payload, ["question", "questionPreview"]) !== undefined
+      ? { question: firstString(event.payload, ["question", "questionPreview"]) }
+      : {}),
+    ...(firstString(event.payload, ["sourcePolicy"]) !== undefined
+      ? { sourcePolicy: firstString(event.payload, ["sourcePolicy"]) }
+      : {}),
+    ...(stringArray(event.payload.requiredSourceKinds) !== undefined
+      ? { requiredSourceKinds: stringArray(event.payload.requiredSourceKinds) }
+      : stringArray(event.payload.sourceKinds) !== undefined
+        ? { requiredSourceKinds: stringArray(event.payload.sourceKinds) }
+        : {}),
+    ...(firstString(event.payload, ["traceId"]) !== undefined
+      ? { traceId: firstString(event.payload, ["traceId"]) }
+      : {}),
+    ...(firstString(event.payload, ["parentTaskId", "nodeId"]) !== undefined
+      ? { parentTaskId: firstString(event.payload, ["parentTaskId", "nodeId"]) }
+      : {}),
+    ...(firstString(event.payload, ["parentWorkerId"]) !== undefined
+      ? { parentWorkerId: firstString(event.payload, ["parentWorkerId"]) }
+      : {}),
+    ...(firstString(event.payload, ["subagentId"]) !== undefined
+      ? { subagentId: firstString(event.payload, ["subagentId"]) }
+      : {}),
+    ...(numberValue(event.payload.taskCount) !== undefined
+      ? { taskCount: numberValue(event.payload.taskCount) }
+      : {}),
+    ...(Array.isArray(event.payload.tasks)
+      ? { taskCount: event.payload.tasks.length }
+      : {}),
+    ...(stringArray(event.payload.unknowns) !== undefined
+      ? { unknowns: stringArray(event.payload.unknowns) }
+      : firstString(event.payload, ["message"]) !== undefined &&
+          event.kind === "research.limit.reached"
+        ? { unknowns: [firstString(event.payload, ["message"]) as string] }
+        : {}),
+    ...(firstString(event.payload, ["error", "message"]) !== undefined &&
+      (event.kind === "research.failed" ||
+        event.kind === "research.task.failed" ||
+        event.kind === "research.source.failed")
+      ? { error: firstString(event.payload, ["error", "message"]) }
+      : {}),
+  };
+}
+
+function researchCitation(
+  payload: Record<string, unknown>,
+): RunDashboardResearchCitation | undefined {
+  const id = firstString(payload, ["citationId", "id"]);
+  if (!id) return undefined;
+  const citation: ResearchCitationRecord = {
+    id,
+    addedAt: "",
+    ...(firstString(payload, ["sourceKind"]) !== undefined
+      ? { sourceKind: firstString(payload, ["sourceKind"]) }
+      : {}),
+    ...(firstString(payload, ["title"]) !== undefined
+      ? { title: firstString(payload, ["title"]) }
+      : {}),
+    ...(firstString(payload, ["uri"]) !== undefined
+      ? { uri: firstString(payload, ["uri"]) }
+      : {}),
+    ...(firstString(payload, ["traceId"]) !== undefined
+      ? { traceId: firstString(payload, ["traceId"]) }
+      : {}),
+    ...(firstString(payload, ["sourceRecordId"]) !== undefined
+      ? { sourceRecordId: firstString(payload, ["sourceRecordId"]) }
+      : {}),
+    ...(firstString(payload, ["artifactPointer"]) !== undefined
+      ? { artifactPointer: firstString(payload, ["artifactPointer"]) }
+      : {}),
+  };
+  return {
+    id: citation.id,
+    sourceKind: citation.sourceKind,
+    title: citation.title,
+    uri: citation.uri,
+    traceId: citation.traceId,
+    sourceRecordId: citation.sourceRecordId,
+    artifactPointer: citation.artifactPointer,
+  };
+}
+
+function appendUnique(values: string[], next: string | undefined): string[] {
+  if (!next || values.includes(next)) return values;
+  return [...values, next];
+}
+
+function numberValue(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
 function stringArray(value: unknown): string[] | undefined {

@@ -2,6 +2,7 @@ import { useCallback, useReducer } from "react";
 
 import type {
   MemoryHitVm,
+  ResearchRunVm,
   RuntimeEvent,
   RuntimeStoreState,
   SubagentVm,
@@ -47,6 +48,14 @@ function upsertMemory(hits: MemoryHitVm[], next: MemoryHitVm): MemoryHitVm[] {
   const idx = hits.findIndex((h) => h.id === next.id);
   if (idx === -1) return [next, ...hits].slice(0, 60);
   const copy = [...hits];
+  copy[idx] = next;
+  return copy;
+}
+
+function upsertResearch(runs: ResearchRunVm[], next: ResearchRunVm): ResearchRunVm[] {
+  const idx = runs.findIndex((run) => run.id === next.id);
+  if (idx === -1) return [next, ...runs].slice(0, 80);
+  const copy = [...runs];
   copy[idx] = next;
   return copy;
 }
@@ -170,6 +179,44 @@ function reducer(state: RuntimeStoreState, action: RuntimeAction): RuntimeStoreS
       };
     }
 
+    case "research.started":
+    case "research.updated":
+    case "research.completed":
+    case "research.failed":
+    case "research.citation.added": {
+      const payload = event.payload as Partial<ResearchRunVm> & {
+        id?: string;
+        researchRunId?: string;
+      };
+      const id = payload.researchRunId ?? payload.id;
+      if (!id) return { ...state, events };
+      const prev = state.researchRuns.find((run) => run.id === id);
+      const status =
+        event.type === "research.completed" ? "completed" :
+          event.type === "research.failed" ? "failed" :
+            payload.status ?? prev?.status ?? "running";
+      const run: ResearchRunVm = {
+        id,
+        status,
+        question: payload.question ?? prev?.question,
+        sourcePolicy: payload.sourcePolicy ?? prev?.sourcePolicy,
+        sourceKinds: payload.sourceKinds ?? prev?.sourceKinds,
+        evidenceCount: payload.evidenceCount ?? prev?.evidenceCount ?? 0,
+        citationCount:
+          payload.citationCount ??
+          ((prev?.citationCount ?? 0) + (event.type === "research.citation.added" ? 1 : 0)),
+        unknownCount: payload.unknownCount ?? prev?.unknownCount ?? 0,
+        toolCalls: payload.toolCalls ?? prev?.toolCalls,
+        latestCitation: cloneStructured(payload.latestCitation ?? prev?.latestCitation),
+        updatedAt: ts,
+      };
+      return {
+        ...state,
+        events,
+        researchRuns: upsertResearch(state.researchRuns, run),
+      };
+    }
+
     case "approval.created":
       return {
         ...state,
@@ -255,6 +302,11 @@ export function useRuntimeStore(): {
         })),
         tools: nextState.tools.map((t) => ({ ...t })),
         memoryHits: nextState.memoryHits.map((m) => ({ ...m })),
+        researchRuns: nextState.researchRuns.map((run) => ({
+          ...run,
+          sourceKinds: run.sourceKinds ? [...run.sourceKinds] : undefined,
+          latestCitation: cloneStructured(run.latestCitation),
+        })),
       },
     });
   }, []);

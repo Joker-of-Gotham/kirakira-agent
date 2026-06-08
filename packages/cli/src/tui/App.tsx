@@ -654,6 +654,11 @@ export function App({
         ...x,
         topItems: [...x.topItems],
       })),
+      researchRuns: s.researchRuns.map((x) => ({
+        ...x,
+        sourceKinds: x.sourceKinds ? [...x.sourceKinds] : undefined,
+        latestCitation: x.latestCitation ? structuredClone(x.latestCitation) : undefined,
+      })),
     }),
     [],
   );
