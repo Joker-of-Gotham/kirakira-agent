@@ -25,6 +25,9 @@ import { LaneRouter } from "./scheduler/lane-router.js";
 import { ResourceBudgetManager } from "./scheduler/resource-budget.js";
 import type {
   BudgetConfig,
+  DurabilityLevel,
+  KernelGraphSnapshot,
+  KernelState,
   LaneType,
   PlanContext,
   RoutingContext,
@@ -79,6 +82,7 @@ export interface OrchestratorKernelOptions {
   fallbackExecutor?: TaskExecutor;
   subagentBridge?: RuntimeSubagentBridge;
   checkpointRepository?: CheckpointRepository;
+  checkpointDurability?: DurabilityLevel;
   budgets?: Partial<BudgetConfig>;
   routingContext?: Partial<RoutingContext>;
   parentWorkerConfig?: (input: {
@@ -180,6 +184,18 @@ function stringArray(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const out = value.filter((item): item is string => typeof item === "string");
   return out.length > 0 ? out : undefined;
+}
+
+function graphFromSnapshot(snapshot: KernelGraphSnapshot): TaskGraph {
+  return {
+    id: snapshot.id,
+    runId: snapshot.runId,
+    rootNodeId: snapshot.rootNodeId,
+    createdAt: snapshot.createdAt,
+    updatedAt: snapshot.updatedAt,
+    edges: snapshot.edges,
+    nodes: new Map(Object.entries(snapshot.nodes)),
+  };
 }
 
 export class OrchestratorKernel {
@@ -330,10 +346,7 @@ export class OrchestratorKernel {
         ...(this.options.budgets ?? {}),
       }),
       backpressure: new BackpressureController(),
-      checkpointManager: new CheckpointManager(
-        this.options.checkpointRepository ?? NOOP_CHECKPOINT_REPOSITORY,
-        "exit",
-      ),
+      checkpointManager: this.createCheckpointManager(),
       inbox: new ControlInbox(),
       superstep: new SuperstepManager(),
       drain: new DrainController(),
@@ -342,6 +355,13 @@ export class OrchestratorKernel {
         ...(this.options.routingContext ?? {}),
       },
     });
+  }
+
+  private createCheckpointManager(): CheckpointManager {
+    return new CheckpointManager(
+      this.options.checkpointRepository ?? NOOP_CHECKPOINT_REPOSITORY,
+      this.options.checkpointDurability ?? "async",
+    );
   }
 
   private graphPayload(graph: TaskGraph): Record<string, unknown> {
@@ -548,6 +568,55 @@ export class OrchestratorKernel {
     }
   }
 
+  private async restoreCheckpointRun(
+    runId: string,
+    fromCheckpoint?: string,
+  ): Promise<void> {
+    const existing = this.runs.get(runId);
+    const checkpointId = fromCheckpoint ?? existing?.checkpointId;
+    if (!checkpointId) {
+      if (existing) {
+        existing.status = "running";
+        this.emit(runId, "interrupt.resumed", {});
+      }
+      return;
+    }
+
+    try {
+      const state: KernelState = await this.createCheckpointManager().restore(checkpointId);
+      if (state.runId !== runId) {
+        this.emit(runId, "run.failed", {
+          message: `Checkpoint ${checkpointId} belongs to run ${state.runId}`,
+        });
+        return;
+      }
+      const graph = graphFromSnapshot(state.graph);
+      const run = existing ?? this.defaultRun("Restored from checkpoint", "headless");
+      run.runId = runId;
+      run.status = "running";
+      run.checkpointId = checkpointId;
+      run.graph = graphSummary(graph);
+      this.runs.set(runId, run);
+      this.graphs.set(runId, graph);
+      this.emit(runId, "checkpoint.restored", {
+        checkpointId,
+        planId: state.planId,
+        graphId: graph.id,
+        ...graphSummary(graph),
+      });
+      this.emit(runId, "graph.normalized", this.graphPayload(graph));
+      this.emit(runId, "interrupt.resumed", { fromCheckpoint: checkpointId });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const run = existing ?? this.defaultRun("Failed checkpoint restore", "headless");
+      run.runId = runId;
+      run.status = "failed";
+      this.runs.set(runId, run);
+      this.emit(runId, "run.failed", { message });
+      this.flushDrainIfIdle();
+    }
+  }
+
   private defaultRun(prompt: string, mode: RunMode): RunRecord {
     return {
       runId: "",
@@ -665,12 +734,7 @@ export class OrchestratorKernel {
         break;
       }
       case "resume": {
-        const r = this.runs.get(message.runId);
-        if (!r) return;
-        r.status = "running";
-        this.emit(message.runId, "interrupt.resumed", {
-          ...(message.fromCheckpoint !== undefined ? { fromCheckpoint: message.fromCheckpoint } : {}),
-        });
+        void this.restoreCheckpointRun(message.runId, message.fromCheckpoint);
         break;
       }
       case "inspect": {

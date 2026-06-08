@@ -1,4 +1,9 @@
-import { EventWriter } from "@kirakira/event-store";
+import { join } from "node:path";
+import {
+  EventWriter,
+  FsCheckpointRepository,
+  resolveEventStoreBasePath,
+} from "@kirakira/event-store";
 import { OrchestratorKernel } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
 import type {
   ControlMessage,
@@ -19,8 +24,12 @@ export class KernelBridge {
   }
 
   async create(): Promise<void> {
-    const writer = new EventWriter({ basePath: this.eventStoreBasePath ?? "" });
-    this.kernel = new OrchestratorKernel(writer);
+    const basePath = resolveEventStoreBasePath(this.eventStoreBasePath);
+    const writer = new EventWriter({ basePath });
+    this.kernel = new OrchestratorKernel(writer, {
+      checkpointRepository: new FsCheckpointRepository(join(basePath, "_graph_checkpoints")),
+      checkpointDurability: "async",
+    });
     await this.kernel.start();
   }
 

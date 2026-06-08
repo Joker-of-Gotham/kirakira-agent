@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { EventWriter } from "../../../packages/event-store/src/index.js";
+import type {
+  CheckpointEnvelope,
+  EventWriter,
+} from "../../../packages/event-store/src/index.js";
 import type { RunEvent } from "../../../packages/runtime-contracts/src/index.js";
 import {
   OrchestratorKernel,
@@ -19,6 +22,22 @@ class MemoryEventWriter {
   }
 
   close(): void {}
+}
+
+class MemoryCheckpointRepository {
+  readonly envelopes = new Map<string, CheckpointEnvelope>();
+
+  async save(envelope: CheckpointEnvelope): Promise<void> {
+    this.envelopes.set(envelope.id, envelope);
+  }
+
+  async load(id: string): Promise<CheckpointEnvelope | undefined> {
+    return this.envelopes.get(id);
+  }
+
+  async delete(id: string): Promise<void> {
+    this.envelopes.delete(id);
+  }
 }
 
 function createKernel(options: OrchestratorKernelOptions = {}): {
@@ -153,5 +172,70 @@ describe("daemon orchestrator graph execution", () => {
       preview: "child summary",
       artifactRefs: ["artifact-child"],
     });
+  });
+
+  it("restores graph state from durable async checkpoints", async () => {
+    const checkpointRepository = new MemoryCheckpointRepository();
+    const { kernel, writer } = createKernel({
+      checkpointRepository,
+      checkpointDurability: "async",
+      planner: {
+        async completeText() {
+          return JSON.stringify({
+            goal: "Inspect runtime in parallel",
+            steps: [
+              {
+                id: "inspect-contracts",
+                description: "Inspect contracts",
+                kind: "synthesize",
+                dependsOn: [],
+                canParallelize: true,
+              },
+              {
+                id: "inspect-runtime",
+                description: "Inspect runtime",
+                kind: "synthesize",
+                dependsOn: [],
+                canParallelize: true,
+              },
+            ],
+            estimatedComplexity: "moderate",
+            requiresSubagents: false,
+          });
+        },
+      },
+    });
+    await kernel.start();
+    const checkpointSaved = waitForEvent(kernel, (event) => event.kind === "checkpoint.saved");
+    const completed = waitForEvent(kernel, (event) => event.kind === "run.completed");
+
+    const runId = await kernel.submitRun("Inspect runtime in parallel", "headless", {
+      workspaceRoot: "C:/workspace",
+    });
+    const checkpointEvent = await checkpointSaved;
+    await completed;
+    const checkpointId = checkpointEvent.payload.checkpointId;
+    expect(typeof checkpointId).toBe("string");
+    expect(checkpointRepository.envelopes.has(checkpointId as string)).toBe(true);
+
+    const restored = waitForEvent(kernel, (event) => event.kind === "checkpoint.restored");
+    kernel.forwardControl({
+      type: "resume",
+      runId,
+      fromCheckpoint: checkpointId as string,
+    });
+    const restoredEvent = await restored;
+
+    expect(restoredEvent.payload).toMatchObject({
+      checkpointId,
+      totalNodes: expect.any(Number),
+      completedNodes: expect.any(Number),
+    });
+    const kinds = writer.events.map((event) => event.kind);
+    expect(kinds).toEqual(expect.arrayContaining(["checkpoint.restored", "interrupt.resumed"]));
+    const snapshot = kernel.snapshotRunForDaemon(runId);
+    expect(snapshot.run?.status).toBe("running");
+    expect(snapshot.run?.checkpointId).toBe(checkpointId);
+    expect(snapshot.run?.graph.totalNodes).toBeGreaterThan(0);
   });
 });

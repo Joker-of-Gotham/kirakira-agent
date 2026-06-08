@@ -44,7 +44,6 @@ export class SuperstepManager {
     const totalNodes = graph.nodes.size;
     if (completedCount === 0) return false;
 
-    this.dispatched = 0;
     return completedCount < totalNodes;
   }
 
@@ -60,6 +59,7 @@ export class SuperstepManager {
     for (const listener of this.listeners) {
       listener(event);
     }
+    this.dispatched = 0;
   }
 
   getStepIndex(): number {

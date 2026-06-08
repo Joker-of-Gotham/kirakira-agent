@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { CheckpointEnvelope } from "../../../packages/event-store/src/index.js";
 import type { ReactWorkerConfig } from "../../../packages/agent-runtime/src/index.js";
 import { CheckpointManager } from "../../../packages/orchestrator-kernel/src/checkpoint/checkpoint-manager.js";
 import { DependencyResolver } from "../../../packages/orchestrator-kernel/src/compiler/dependency-resolver.js";
@@ -117,6 +118,28 @@ function kernelExecutorDeps(executor: TaskExecutor) {
     drain: new DrainController(),
     routingContext: { interactive: false },
   };
+}
+
+function parallelPlan(): RunPlan {
+  return basePlan({
+    requiresSubagents: false,
+    steps: [
+      {
+        id: "step-a",
+        kind: "synthesize",
+        description: "Inspect contracts",
+        dependsOn: [],
+        canParallelize: true,
+      },
+      {
+        id: "step-b",
+        kind: "synthesize",
+        description: "Inspect runtime",
+        dependsOn: [],
+        canParallelize: true,
+      },
+    ],
+  });
 }
 
 describe("orchestrator task executor", () => {
@@ -317,5 +340,45 @@ describe("orchestrator task executor", () => {
       },
     });
     expect(events.at(-1)).toMatchObject({ kind: "run_completed", runId: "run-1" });
+  });
+
+  it("saves async checkpoints at superstep boundaries", async () => {
+    const saved = new Map<string, CheckpointEnvelope>();
+    const deps = kernelExecutorDeps(fallbackExecutor());
+    deps.checkpointManager = new CheckpointManager(
+      {
+        async save(envelope) {
+          saved.set(envelope.id, envelope);
+        },
+        async load(id) {
+          return saved.get(id);
+        },
+        async delete(id) {
+          saved.delete(id);
+        },
+      },
+      "async",
+    );
+    deps.superstep = new SuperstepManager(2);
+    const loop = new KernelLoop(deps);
+    const events = [];
+
+    for await (const event of loop.run("run-1", parallelPlan())) {
+      events.push(event);
+    }
+
+    const boundaryIndex = events.findIndex((event) => event.kind === "superstep_boundary");
+    const checkpointIndex = events.findIndex((event) => event.kind === "checkpoint_saved");
+    expect(boundaryIndex).toBeGreaterThanOrEqual(0);
+    expect(checkpointIndex).toBeGreaterThan(boundaryIndex);
+    expect(saved.size).toBeGreaterThan(0);
+    expect([...saved.values()][0]).toMatchObject({
+      runId: "run-1",
+      version: "kirakira.checkpoint.v1",
+      payload: {
+        runId: "run-1",
+        planId: "plan-1",
+      },
+    });
   });
 });

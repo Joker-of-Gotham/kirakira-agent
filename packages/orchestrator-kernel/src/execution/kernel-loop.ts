@@ -174,14 +174,15 @@ export class KernelLoop {
         scheduler.lanes[chosen].active = Math.max(0, scheduler.lanes[chosen].active - 1);
         this.deps.superstep.notifyFinished();
       }
-      if (this.deps.superstep.detectBoundary(graph)) {
+      const superstepBoundary = this.deps.superstep.detectBoundary(graph);
+      if (superstepBoundary) {
         this.deps.superstep.onBoundary(runId);
         yield { kind: "superstep_boundary", runId };
       }
       const ckCtx = {
         durability: this.deps.checkpointManager.getDurability(),
         nextHasSideEffect: true,
-        superstepBoundary: false,
+        superstepBoundary,
         runInterruptRequested: false,
       };
       if (await this.deps.checkpointManager.shouldCheckpoint(ckCtx)) {
