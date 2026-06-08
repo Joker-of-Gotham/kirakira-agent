@@ -1,5 +1,9 @@
-import { AgentRuntime } from "@kirakira/agent-runtime";
-import type { EventWriter } from "@kirakira/event-store";
+import {
+  AgentRuntime,
+  type ModelPlannerClient,
+  type ReactWorkerConfig,
+} from "@kirakira/agent-runtime";
+import type { CheckpointRepository, EventWriter } from "@kirakira/event-store";
 import type {
   ControlMessage,
   RunEvent,
@@ -7,6 +11,30 @@ import type {
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
+import { CheckpointManager } from "./checkpoint/checkpoint-manager.js";
+import { DependencyResolver } from "./compiler/dependency-resolver.js";
+import { GoalCompiler } from "./compiler/goal-compiler.js";
+import { PlanNormalizer } from "./compiler/plan-normalizer.js";
+import { ControlInbox } from "./control/control-inbox.js";
+import { DrainController } from "./execution/drain.js";
+import { KernelLoop } from "./execution/kernel-loop.js";
+import { SubagentTaskExecutor } from "./execution/subagent-task-executor.js";
+import { SuperstepManager } from "./execution/superstep.js";
+import { BackpressureController } from "./scheduler/backpressure.js";
+import { LaneRouter } from "./scheduler/lane-router.js";
+import { ResourceBudgetManager } from "./scheduler/resource-budget.js";
+import type {
+  BudgetConfig,
+  LaneType,
+  PlanContext,
+  RoutingContext,
+  RunEvent as KernelRunEvent,
+  RuntimeSubagentBridge,
+  TaskExecutor,
+  TaskGraph,
+  TaskNode,
+  TaskResult,
+} from "./types.js";
 
 export type RunMode = RuntimeRunMode;
 export type RunOptions = RuntimeRunOptions;
@@ -41,16 +69,133 @@ interface RunRecord {
   draining: boolean;
 }
 
+export interface OrchestratorKernelOptions {
+  planner?: ModelPlannerClient;
+  planContext?: Partial<PlanContext> | ((input: {
+    prompt: string;
+    mode: RunMode;
+    options?: RunOptions;
+  }) => PlanContext);
+  fallbackExecutor?: TaskExecutor;
+  subagentBridge?: RuntimeSubagentBridge;
+  checkpointRepository?: CheckpointRepository;
+  budgets?: Partial<BudgetConfig>;
+  routingContext?: Partial<RoutingContext>;
+  parentWorkerConfig?: (input: {
+    runId: string;
+    prompt: string;
+    mode: RunMode;
+    options?: RunOptions;
+  }) => ReactWorkerConfig;
+}
+
+class DeterministicPlanner implements ModelPlannerClient {
+  async completeText(message: { user: string }): Promise<string> {
+    let goal = "Run task";
+    try {
+      const parsed = JSON.parse(message.user) as { goal?: unknown };
+      if (typeof parsed.goal === "string" && parsed.goal.trim().length > 0) {
+        goal = parsed.goal;
+      }
+    } catch {
+      // Fall back to a stable local plan.
+    }
+    return JSON.stringify({
+      version: "kirakira.runplan.v1",
+      goal,
+      steps: [
+        {
+          id: "synthesize",
+          description: goal,
+          kind: "synthesize",
+          dependsOn: [],
+          canParallelize: false,
+        },
+      ],
+      estimatedComplexity: "simple",
+      requiresSubagents: false,
+    });
+  }
+}
+
+class LocalTaskExecutor implements TaskExecutor {
+  async execute(node: TaskNode, lane: LaneType): Promise<TaskResult> {
+    return {
+      output: {
+        nodeId: node.id,
+        kind: node.kind,
+        lane,
+        description: node.spec.description,
+      },
+    };
+  }
+}
+
+class LocalSubagentBridge implements RuntimeSubagentBridge {
+  async run(request: Parameters<RuntimeSubagentBridge["run"]>[0]): Promise<TaskResult> {
+    return {
+      output: {
+        parentTaskId: request.parentTaskId,
+        taskBrief: request.spec.taskBrief,
+      },
+    };
+  }
+}
+
+const DEFAULT_BUDGETS: BudgetConfig = {
+  modelLimit: 1_000_000,
+  sandboxSlotLimit: 8,
+  mcpQpsLimit: 100,
+  artifactIoLimit: 100,
+};
+
+const NOOP_CHECKPOINT_REPOSITORY: CheckpointRepository = {
+  async save() {},
+  async load() {
+    return undefined;
+  },
+  async delete() {},
+};
+
+function graphSummary(graph: TaskGraph): RunRecord["graph"] {
+  const nodes = [...graph.nodes.values()];
+  return {
+    totalNodes: nodes.length,
+    completedNodes: nodes.filter((node) => node.status === "completed").length,
+    runningNodes: nodes.filter((node) => node.status === "running").length,
+    failedNodes: nodes.filter((node) => node.status === "failed").length,
+  };
+}
+
+function resultPreview(result: TaskResult): string | undefined {
+  if (typeof result.output === "string") return result.output.slice(0, 240);
+  try {
+    return JSON.stringify(result.output).slice(0, 240);
+  } catch {
+    return undefined;
+  }
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is string => typeof item === "string");
+  return out.length > 0 ? out : undefined;
+}
+
 export class OrchestratorKernel {
   private readonly writer: EventWriter;
   private readonly runtime: AgentRuntime;
+  private readonly options: OrchestratorKernelOptions;
   private readonly runs = new Map<string, RunRecord>();
+  private readonly graphs = new Map<string, TaskGraph>();
+  private readonly parentWorkerIds = new Map<string, string>();
   private readonly eventHandlers = new Set<(event: RunEvent) => void>();
   private drainWaiters: (() => void)[] = [];
   private started = false;
 
-  constructor(writer: EventWriter) {
+  constructor(writer: EventWriter, options: OrchestratorKernelOptions = {}) {
     this.writer = writer;
+    this.options = options;
     this.runtime = new AgentRuntime((e) => {
       this.append(e);
     });
@@ -67,6 +212,8 @@ export class OrchestratorKernel {
       this.runtime.removeRunWorkers(runId);
     }
     this.runs.clear();
+    this.graphs.clear();
+    this.parentWorkerIds.clear();
     this.writer.close();
   }
 
@@ -111,6 +258,296 @@ export class OrchestratorKernel {
     this.broadcastHandlers(event);
   }
 
+  private parentWorkerConfig(
+    runId: string,
+    prompt: string,
+    mode: RunMode,
+    options?: RunOptions,
+  ): ReactWorkerConfig {
+    if (this.options.parentWorkerConfig) {
+      return this.options.parentWorkerConfig({ runId, prompt, mode, options });
+    }
+    return {
+      id: `${runId}-supervisor`,
+      runId,
+      workloadType: "supervisor",
+      model: "default",
+      systemPrompt: "Kirakira daemon supervisor",
+      contextBudget: {
+        maxTokens: 16_384,
+        reservedForOutput: 2_048,
+        toolSchemaAllocation: 2_048,
+        skillHintAllocation: 2_048,
+        historyAllocation: 10_240,
+      },
+      maxTurns: 12,
+      ...(options?.budgetUsd !== undefined ? { costBudgetUsd: options.budgetUsd } : {}),
+    };
+  }
+
+  private planContext(prompt: string, mode: RunMode, options?: RunOptions): PlanContext {
+    const configured = this.options.planContext;
+    if (typeof configured === "function") {
+      return configured({ prompt, mode, options });
+    }
+    const metadata = options?.metadata ?? {};
+    return {
+      workspace: options?.workspaceRoot ?? ".",
+      availableTools: stringArray(metadata.availableTools) ?? [],
+      availableSkills: stringArray(metadata.availableSkills) ?? [],
+      availableMcpServers: stringArray(metadata.availableMcpServers) ?? [],
+      constraints: stringArray(metadata.constraints),
+      ...(configured ?? {}),
+    };
+  }
+
+  private createKernelLoop(
+    runId: string,
+    parentConfig: ReactWorkerConfig,
+    workspaceRoot: string,
+    traceId: string,
+  ): KernelLoop {
+    const fallback = this.options.fallbackExecutor ?? new LocalTaskExecutor();
+    const bridge = this.options.subagentBridge ?? new LocalSubagentBridge();
+    const executor = new SubagentTaskExecutor({
+      bridge,
+      getContext: () => ({
+        runId,
+        parentConfig,
+        parentWorkerId: parentConfig.id,
+        workspaceRoot,
+        traceId,
+      }),
+      fallback,
+    });
+    return new KernelLoop({
+      normalizer: new PlanNormalizer(),
+      resolver: new DependencyResolver(),
+      executor,
+      laneRouter: new LaneRouter(),
+      budgetManager: new ResourceBudgetManager({
+        ...DEFAULT_BUDGETS,
+        ...(this.options.budgets ?? {}),
+      }),
+      backpressure: new BackpressureController(),
+      checkpointManager: new CheckpointManager(
+        this.options.checkpointRepository ?? NOOP_CHECKPOINT_REPOSITORY,
+        "exit",
+      ),
+      inbox: new ControlInbox(),
+      superstep: new SuperstepManager(),
+      drain: new DrainController(),
+      routingContext: {
+        interactive: false,
+        ...(this.options.routingContext ?? {}),
+      },
+    });
+  }
+
+  private graphPayload(graph: TaskGraph): Record<string, unknown> {
+    const summary = graphSummary(graph);
+    return {
+      graphId: graph.id,
+      runId: graph.runId,
+      rootNodeId: graph.rootNodeId,
+      ...summary,
+      nodes: [...graph.nodes.values()].map((node) => ({
+        id: node.id,
+        kind: node.kind,
+        status: node.status,
+        description: node.spec.description,
+        ...(node.assignedWorkerId !== undefined ? { workerId: node.assignedWorkerId } : {}),
+        ...(node.error !== undefined ? { error: node.error } : {}),
+      })),
+      edges: graph.edges.map((edge, index) => ({
+        id: `${edge.from}:${edge.to}:${edge.kind}:${index}`,
+        from: edge.from,
+        to: edge.to,
+        kind: edge.kind,
+      })),
+    };
+  }
+
+  private taskPayload(
+    runId: string,
+    event: Extract<KernelRunEvent, { kind: "task_started" | "task_completed" | "task_failed" }>,
+  ): Record<string, unknown> {
+    const node = this.graphs.get(runId)?.nodes.get(event.nodeId);
+    return {
+      taskId: event.nodeId,
+      nodeId: event.nodeId,
+      ...(node !== undefined ? { kind: node.kind, description: node.spec.description } : {}),
+      ...(event.kind === "task_started" ? { workerId: event.workerId, lane: event.lane } : {}),
+      ...(event.kind === "task_completed"
+        ? {
+            result: event.result,
+            preview: resultPreview(event.result),
+            artifactRefs: event.result.artifactRefs,
+          }
+        : {}),
+      ...(event.kind === "task_failed" ? { error: event.error } : {}),
+    };
+  }
+
+  private subagentPayload(
+    runId: string,
+    event: Extract<KernelRunEvent, { kind: "task_started" | "task_completed" | "task_failed" }>,
+  ): Record<string, unknown> | null {
+    const node = this.graphs.get(runId)?.nodes.get(event.nodeId);
+    if (!node || node.kind !== "subagent") return null;
+    const contract = node.spec.subagent;
+    return {
+      subagentId: event.nodeId,
+      parentTaskId: event.nodeId,
+      parentWorkerId: this.parentWorkerIds.get(runId),
+      ...(event.kind === "task_started" ? { workerId: event.workerId, lane: event.lane } : {}),
+      ...(contract !== undefined
+        ? {
+            taskPreview: contract.taskBrief,
+            capabilities: contract.capabilities,
+            modelPreference: contract.modelPreference,
+            runtimePolicy: contract.runtimePolicy,
+            policyCeiling: contract.policyCeiling,
+            inputArtifactRefs: contract.inputArtifactRefs,
+            outputSchema: contract.outputSchema,
+          }
+        : {}),
+      ...(event.kind === "task_completed"
+        ? {
+            status: "completed",
+            result: event.result,
+            preview: resultPreview(event.result),
+            artifactRefs: event.result.artifactRefs,
+          }
+        : {}),
+      ...(event.kind === "task_failed" ? { status: "failed", error: event.error } : {}),
+    };
+  }
+
+  private updateGraphOnTaskStart(runId: string): void {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    run.graph = {
+      ...run.graph,
+      runningNodes: run.graph.runningNodes + 1,
+    };
+  }
+
+  private updateGraphOnTaskEnd(runId: string, status: "completed" | "failed"): void {
+    const run = this.runs.get(runId);
+    if (!run) return;
+    run.graph = {
+      ...run.graph,
+      runningNodes: Math.max(0, run.graph.runningNodes - 1),
+      completedNodes: status === "completed" ? run.graph.completedNodes + 1 : run.graph.completedNodes,
+      failedNodes: status === "failed" ? run.graph.failedNodes + 1 : run.graph.failedNodes,
+    };
+  }
+
+  private applyKernelEvent(runId: string, event: KernelRunEvent): void {
+    const run = this.runs.get(runId);
+    switch (event.kind) {
+      case "plan_attached":
+        this.emit(runId, "plan.compiled", {
+          planId: event.plan.id,
+          goal: event.plan.goal,
+          stepCount: event.plan.steps.length,
+          estimatedComplexity: event.plan.estimatedComplexity,
+          requiresSubagents: event.plan.requiresSubagents,
+          plan: event.plan as unknown as Record<string, unknown>,
+        });
+        break;
+      case "graph_normalized":
+        this.graphs.set(runId, event.graph);
+        if (run) run.graph = graphSummary(event.graph);
+        this.emit(runId, "graph.normalized", this.graphPayload(event.graph));
+        break;
+      case "task_started": {
+        this.updateGraphOnTaskStart(runId);
+        this.emit(runId, "task.started", this.taskPayload(runId, event));
+        const subagent = this.subagentPayload(runId, event);
+        if (subagent) this.emit(runId, "subagent.spawned", subagent);
+        break;
+      }
+      case "task_completed": {
+        this.updateGraphOnTaskEnd(runId, "completed");
+        this.emit(runId, "task.completed", this.taskPayload(runId, event));
+        const subagent = this.subagentPayload(runId, event);
+        if (subagent) this.emit(runId, "subagent.completed", subagent);
+        break;
+      }
+      case "task_failed": {
+        this.updateGraphOnTaskEnd(runId, "failed");
+        this.emit(runId, "task.failed", this.taskPayload(runId, event));
+        const subagent = this.subagentPayload(runId, event);
+        if (subagent) this.emit(runId, "subagent.completed", subagent);
+        break;
+      }
+      case "checkpoint_saved":
+        if (run) run.checkpointId = event.checkpointId;
+        this.emit(runId, "checkpoint.saved", { checkpointId: event.checkpointId });
+        break;
+      case "superstep_boundary":
+        this.emit(runId, "graph.normalized", { superstepBoundary: true });
+        break;
+      case "run_completed":
+        this.graphs.set(runId, event.graph);
+        if (run) {
+          run.status = "completed";
+          run.graph = graphSummary(event.graph);
+        }
+        this.runtime.removeRunWorkers(runId);
+        this.parentWorkerIds.delete(runId);
+        this.emit(runId, "graph.normalized", this.graphPayload(event.graph));
+        this.emit(runId, "run.completed", {
+          graphId: event.graph.id,
+          ...graphSummary(event.graph),
+        });
+        this.flushDrainIfIdle();
+        break;
+      case "run_failed":
+        if (run) run.status = "failed";
+        this.emit(runId, "run.failed", {
+          code: event.code,
+          message: event.message,
+          ...(event.nodeId !== undefined ? { nodeId: event.nodeId } : {}),
+        });
+        this.flushDrainIfIdle();
+        break;
+    }
+  }
+
+  private async executeGraphRun(
+    runId: string,
+    prompt: string,
+    mode: RunMode,
+    options: RunOptions | undefined,
+    parentConfig: ReactWorkerConfig,
+  ): Promise<void> {
+    try {
+      const context = this.planContext(prompt, mode, options);
+      const compiler = new GoalCompiler(this.options.planner ?? new DeterministicPlanner());
+      const plan = await compiler.compile(prompt, context);
+      const loop = this.createKernelLoop(
+        runId,
+        parentConfig,
+        context.workspace,
+        `run:${runId}`,
+      );
+      for await (const event of loop.run(runId, plan)) {
+        this.applyKernelEvent(runId, event);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const run = this.runs.get(runId);
+      if (run) run.status = "failed";
+      this.emit(runId, "run.failed", { message });
+      this.runtime.removeRunWorkers(runId);
+      this.parentWorkerIds.delete(runId);
+      this.flushDrainIfIdle();
+    }
+  }
+
   private defaultRun(prompt: string, mode: RunMode): RunRecord {
     return {
       runId: "",
@@ -140,27 +577,17 @@ export class OrchestratorKernel {
     this.runs.set(runId, rec);
     this.emit(runId, "run.created", { prompt, mode });
     this.emit(runId, "run.started", { prompt, mode });
-    const workerId = `${runId}-worker`;
+    const parentConfig = this.parentWorkerConfig(runId, prompt, mode, options);
+    this.parentWorkerIds.set(runId, parentConfig.id);
     this.runtime.registerWorker({
-      id: workerId,
+      id: parentConfig.id,
       runId,
-      workloadType: mode,
+      workloadType: parentConfig.workloadType,
       status: "active",
       turnCount: 0,
-      model: "default",
+      model: parentConfig.model,
     });
-    rec.graph = {
-      totalNodes: 1,
-      completedNodes: 0,
-      runningNodes: 1,
-      failedNodes: 0,
-    };
-    this.emit(runId, "graph.normalized", {
-      totalNodes: rec.graph.totalNodes,
-      completedNodes: rec.graph.completedNodes,
-      runningNodes: rec.graph.runningNodes,
-      failedNodes: rec.graph.failedNodes,
-    });
+    void this.executeGraphRun(runId, prompt, mode, options, parentConfig);
     return runId;
   }
 
@@ -171,7 +598,7 @@ export class OrchestratorKernel {
         break;
       }
       case "steer": {
-        const wId = `${message.runId}-worker`;
+        const wId = this.parentWorkerIds.get(message.runId) ?? `${message.runId}-supervisor`;
         try {
           const cur = this.runtime.getWorkerStatus(wId);
           this.runtime.updateWorker(wId, { turnCount: cur.turnCount + 1 });
@@ -233,6 +660,7 @@ export class OrchestratorKernel {
         r.status = "drained";
         this.emit(message.runId, "run.drained", { reason: message.reason ?? "cancelled" });
         this.runtime.removeRunWorkers(message.runId);
+        this.parentWorkerIds.delete(message.runId);
         this.flushDrainIfIdle();
         break;
       }
@@ -307,7 +735,10 @@ export class OrchestratorKernel {
     }>;
   } {
     const run = this.runs.get(runId) ?? null;
-    const workers = this.runtime.listActiveWorkers().filter((w) => w.id.startsWith(`${runId}-`));
+    const parentWorkerId = this.parentWorkerIds.get(runId);
+    const workers = this.runtime
+      .listActiveWorkers()
+      .filter((w) => w.id === parentWorkerId || w.id.startsWith(`${runId}-`));
     const approvals = run ? [...run.pendingApprovals.values()] : [];
     return { run, workers, approvals };
   }
