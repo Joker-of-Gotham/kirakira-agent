@@ -12,6 +12,19 @@ export type {
 export type { BrowserGatewayTransportOptions } from "./browser-gateway-transport.js";
 export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";
 
+export { createRunInspector } from "./inspector.js";
+
+export type {
+  RunInspectorCheckpoint,
+  RunInspectorDetail,
+  RunInspectorFocus,
+  RunInspectorFocusKind,
+  RunInspectorLane,
+  RunInspectorLaneId,
+  RunInspectorOptions,
+  RunInspectorProjection,
+} from "./inspector.js";
+
 export {
   createEmptyRunDashboard,
   projectRunDashboard,

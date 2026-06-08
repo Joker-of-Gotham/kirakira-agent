@@ -6,8 +6,10 @@ import {
   CircleDot,
   Clock3,
   Cpu,
+  ExternalLink,
   FileSearch,
   GitBranch,
+  ListTree,
   Play,
   PlugZap,
   ShieldCheck,
@@ -16,7 +18,11 @@ import {
 } from "lucide-react";
 import {
   createEmptyRunDashboard,
+  createRunInspector,
   projectRunDashboard,
+  type RunInspectorFocus,
+  type RunInspectorLane,
+  type RunInspectorProjection,
   type RunDashboardProjection,
   type RunDashboardStatus,
   type RuntimeConnectionState,
@@ -98,6 +104,7 @@ export function KirakiraWorkbench({
   const [error, setError] = useState<string | undefined>();
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
+  const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
 
   useEffect(() => {
     let disposed = false;
@@ -125,6 +132,14 @@ export function KirakiraWorkbench({
   const projection = useMemo(
     () => projectRunDashboard(createEmptyRunDashboard(runId), events, { latestEventLimit: 40 }),
     [events, runId],
+  );
+  const inspector = useMemo(
+    () => createRunInspector(projection, { selectedFocusId }),
+    [projection, selectedFocusId],
+  );
+  const timelineEvents = useMemo(
+    () => [...projection.latestEvents].reverse(),
+    [projection.latestEvents],
   );
 
   useEffect(() => {
@@ -290,11 +305,16 @@ export function KirakiraWorkbench({
               </button>
             </div>
 
-            <ol className="kk-timeline">
-              {projection.latestEvents.length === 0 ? (
+            <ol
+              className="kk-timeline"
+              role="log"
+              aria-live="polite"
+              aria-relevant="additions text"
+            >
+              {timelineEvents.length === 0 ? (
                 <li className="kk-empty kk-empty-large">Start a run to populate the timeline</li>
               ) : (
-                projection.latestEvents.map((item) => (
+                timelineEvents.map((item) => (
                   <li key={item.id} className="kk-timeline-item">
                     <span className="kk-timeline-rail" />
                     <div>
@@ -335,12 +355,15 @@ export function KirakiraWorkbench({
           </div>
         </section>
 
+        <RunInspectorPanel inspector={inspector} onSelectFocus={setSelectedFocusId} />
+
         <form className="kk-composer" onSubmit={submit}>
-          <div className="kk-mode-switch" role="radiogroup" aria-label="Run mode">
+          <div className="kk-mode-switch" role="group" aria-label="Run mode">
             {(["interactive", "headless", "dry_run"] as const).map((item) => (
               <button
                 key={item}
                 type="button"
+                aria-pressed={mode === item}
                 className={mode === item ? "kk-mode-active" : ""}
                 onClick={() => setMode(item)}
               >
@@ -518,5 +541,122 @@ function Stat({
         <strong>{value}</strong>
       </div>
     </article>
+  );
+}
+
+const focusKindLabel: Record<RunInspectorFocus["kind"], string> = {
+  run: "Run",
+  graph: "Graph",
+  subagent: "Subagent",
+  research: "Research",
+  approval: "Approval",
+  tool: "Tool",
+  artifact: "Artifact",
+};
+
+function RunInspectorPanel({
+  inspector,
+  onSelectFocus,
+}: {
+  inspector: RunInspectorProjection;
+  onSelectFocus: (id: string) => void;
+}) {
+  const focus = inspector.selectedFocus;
+  const checkpointLabel = inspector.checkpoint
+    ? `Checkpoint ${inspector.checkpoint.id}${inspector.checkpoint.seq !== undefined ? ` #${inspector.checkpoint.seq}` : ""}`
+    : `${inspector.focusItems.length} focus records`;
+
+  return (
+    <section className="kk-inspector-panel" aria-labelledby="kk-inspector-heading">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Inspector</p>
+          <h2 id="kk-inspector-heading">Run Detail</h2>
+        </div>
+        <div className="kk-inspector-live" role="status" aria-live="polite">
+          <ListTree size={16} />
+          {checkpointLabel}
+        </div>
+      </div>
+
+      <div className="kk-inspector-grid">
+        <div className="kk-inspector-lanes" aria-label="Run lanes">
+          {inspector.lanes.map((lane) => (
+            <LaneMeter key={lane.id} lane={lane} />
+          ))}
+        </div>
+
+        <div className="kk-focus-list" aria-label="Inspectable records">
+          {inspector.focusItems.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={
+                item.id === inspector.selectedFocusId
+                  ? "kk-focus-item kk-focus-item-active"
+                  : "kk-focus-item"
+              }
+              aria-pressed={item.id === inspector.selectedFocusId}
+              onClick={() => onSelectFocus(item.id)}
+            >
+              <span className={`kk-dot kk-dot-${item.phase}`} />
+              <span>
+                <strong>{item.label}</strong>
+                <small>{focusKindLabel[item.kind]}</small>
+              </span>
+              <span className={`kk-pill kk-pill-${item.phase}`}>{item.phase}</span>
+            </button>
+          ))}
+        </div>
+
+        <article className="kk-focus-detail" aria-live="polite">
+          {focus ? (
+            <>
+              <header>
+                <span className={`kk-pill kk-pill-${focus.phase}`}>{focusKindLabel[focus.kind]}</span>
+                <h3>{focus.label}</h3>
+                <p>{focus.summary}</p>
+              </header>
+              {focus.details.length === 0 ? (
+                <div className="kk-empty">No metadata</div>
+              ) : (
+                <dl className="kk-detail-list">
+                  {focus.details.map((item) => (
+                    <div key={`${focus.id}-${item.label}`}>
+                      <dt>{item.label}</dt>
+                      <dd>
+                        {item.href ? (
+                          <a href={item.href} target="_blank" rel="noreferrer">
+                            {item.value}
+                            <ExternalLink size={13} aria-hidden="true" />
+                          </a>
+                        ) : (
+                          item.value
+                        )}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </>
+          ) : (
+            <div className="kk-empty">No runtime focus</div>
+          )}
+        </article>
+      </div>
+    </section>
+  );
+}
+
+function LaneMeter({ lane }: { lane: RunInspectorLane }) {
+  const activeLabel = lane.count === 0 ? "0" : `${lane.activeCount}/${lane.count}`;
+  return (
+    <div className="kk-lane-meter">
+      <span className={`kk-dot kk-dot-${lane.phase}`} />
+      <span>
+        <strong>{lane.label}</strong>
+        <small>{activeLabel}</small>
+      </span>
+    </div>
   );
 }

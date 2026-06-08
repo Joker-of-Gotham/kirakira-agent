@@ -207,7 +207,7 @@ a:focus-visible {
   min-width: 0;
   padding: 20px 22px 18px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
   gap: 14px;
 }
 
@@ -282,6 +282,7 @@ a:focus-visible {
 .kk-stat,
 .kk-primary-pane,
 .kk-agent-pane,
+.kk-inspector-panel,
 .kk-rail-section,
 .kk-composer {
   background: var(--kk-surface);
@@ -331,6 +332,7 @@ a:focus-visible {
 
 .kk-primary-pane,
 .kk-agent-pane,
+.kk-inspector-panel,
 .kk-rail-section {
   min-width: 0;
   padding: 14px;
@@ -468,7 +470,8 @@ a:focus-visible {
 .kk-pill-requested,
 .kk-pill-pending,
 .kk-pill-ready,
-.kk-pill-created {
+.kk-pill-created,
+.kk-pill-updated {
   color: var(--kk-cyan);
   background: #e7f5f8;
 }
@@ -482,6 +485,194 @@ a:focus-visible {
 .kk-pill-failed {
   color: var(--kk-red);
   background: #faecec;
+}
+
+.kk-dot-requested,
+.kk-dot-created,
+.kk-dot-updated {
+  background: var(--kk-cyan);
+}
+
+.kk-dot-completed,
+.kk-dot-resolved {
+  background: var(--kk-green);
+}
+
+.kk-inspector-panel {
+  box-shadow: none;
+}
+
+.kk-inspector-grid {
+  display: grid;
+  grid-template-columns: minmax(128px, 0.55fr) minmax(190px, 0.85fr) minmax(0, 1.4fr);
+  gap: 12px;
+  min-width: 0;
+}
+
+.kk-inspector-live,
+.kk-lane-meter,
+.kk-focus-item {
+  display: flex;
+  align-items: center;
+}
+
+.kk-inspector-live {
+  gap: 7px;
+  color: var(--kk-text-muted);
+  font-size: 0.82rem;
+}
+
+.kk-inspector-lanes,
+.kk-focus-list,
+.kk-detail-list {
+  display: grid;
+  gap: 7px;
+}
+
+.kk-lane-meter {
+  min-width: 0;
+  gap: 8px;
+  padding: 7px 0;
+  border-top: 1px solid var(--kk-border);
+}
+
+.kk-lane-meter:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.kk-lane-meter span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.kk-lane-meter strong,
+.kk-lane-meter small,
+.kk-focus-item strong,
+.kk-focus-item small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-lane-meter strong,
+.kk-focus-item strong {
+  color: var(--kk-ink);
+  font-size: 0.86rem;
+}
+
+.kk-lane-meter small,
+.kk-focus-item small {
+  color: var(--kk-text-muted);
+  font-size: 0.76rem;
+}
+
+.kk-focus-list {
+  min-width: 0;
+  align-content: start;
+  max-height: 250px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.kk-focus-item {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: #fbfcfc;
+  cursor: pointer;
+  text-align: left;
+}
+
+.kk-focus-item > span:nth-child(2) {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.kk-focus-item-active,
+.kk-focus-item:hover {
+  border-color: var(--kk-border-strong);
+  background: var(--kk-surface-muted);
+}
+
+.kk-focus-detail {
+  min-width: 0;
+  border-left: 1px solid var(--kk-border);
+  padding-left: 12px;
+}
+
+.kk-focus-detail header {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+.kk-focus-detail header .kk-pill {
+  justify-self: start;
+}
+
+.kk-focus-detail h3,
+.kk-focus-detail p,
+.kk-detail-list,
+.kk-detail-list dt,
+.kk-detail-list dd {
+  margin: 0;
+}
+
+.kk-focus-detail h3 {
+  color: var(--kk-ink);
+  font-size: 1rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.kk-focus-detail p {
+  color: var(--kk-text-muted);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.kk-detail-list div {
+  display: grid;
+  grid-template-columns: minmax(82px, 0.35fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-top: 7px;
+  border-top: 1px solid var(--kk-border);
+}
+
+.kk-detail-list div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.kk-detail-list dt {
+  color: var(--kk-text-muted);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.kk-detail-list dd {
+  min-width: 0;
+  color: var(--kk-text);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.kk-detail-list a {
+  color: var(--kk-blue);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .kk-composer {
@@ -779,6 +970,17 @@ a:focus-visible {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .kk-inspector-grid {
+    grid-template-columns: minmax(128px, 0.55fr) minmax(0, 1fr);
+  }
+
+  .kk-focus-detail {
+    grid-column: 1 / -1;
+    border-left: 0;
+    border-top: 1px solid var(--kk-border);
+    padding: 12px 0 0;
+  }
 }
 
 @media (max-width: 820px) {
@@ -818,10 +1020,15 @@ a:focus-visible {
 
   .kk-stats,
   .kk-main-grid,
+  .kk-inspector-grid,
   .kk-right-rail,
   .kk-composer {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .kk-focus-detail {
+    grid-column: auto;
   }
 
   .kk-composer {
@@ -847,7 +1054,8 @@ a:focus-visible {
   .kk-submit,
   .kk-nav-item,
   .kk-run-item,
-  .kk-icon-button {
+  .kk-icon-button,
+  .kk-focus-item {
     transition:
       background-color 120ms ease,
       border-color 120ms ease,
@@ -857,7 +1065,8 @@ a:focus-visible {
   .kk-submit:hover,
   .kk-icon-button:hover,
   .kk-nav-item:hover,
-  .kk-run-item:hover {
+  .kk-run-item:hover,
+  .kk-focus-item:hover {
     transform: translateY(-1px);
   }
 }
