@@ -54,6 +54,7 @@ const PROVIDER_ALIASES = new Map([
   ["bailian", "aliyun-bailian"],
   ["alibaba-bailian", "aliyun-bailian"],
   ["dashscope", "aliyun-bailian"],
+  ["aliyun", "aliyun-bailian"],
   ["ark", "volcengine-ark"],
   ["volcano-ark", "volcengine-ark"],
   ["bytedance", "volcengine-ark"],
@@ -72,8 +73,17 @@ export function getProvider(providerId) {
   return LLM_PROVIDERS.find((provider) => provider.id === normalized);
 }
 
+export function isUsableApiKey(value) {
+  const trimmed = String(value ?? "").trim();
+  return Boolean(trimmed && trimmed !== "EMPTY" && trimmed !== "your-api-key");
+}
+
 export function getProviderKey(provider, env = process.env) {
-  return env[provider.keyEnv] || (normalizeProviderId(env.LLM_PROVIDER) === provider.id ? env.LLM_API_KEY : "");
+  const providerSpecific = String(env[provider.keyEnv] ?? "").trim();
+  const generic = String(env.LLM_API_KEY ?? "").trim();
+  if (isUsableApiKey(providerSpecific)) return providerSpecific;
+  if (normalizeProviderId(env.LLM_PROVIDER) === provider.id && isUsableApiKey(generic)) return generic;
+  return "";
 }
 
 export function detectProviders(env = process.env) {

@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "defaultProfile": "container",
+  "profiles": {
+    "container": {
+      "mode": "container",
+      "workspaceRoot": "/workspace",
+      "appRoot": "/app",
+      "composeFiles": ["docker-compose.yml"],
+      "composeProfiles": ["cli"],
+      "envFiles": [".env"],
+      "services": {
+        "kirakirad": "tcp://kirakirad:17777",
+        "postgres": "postgres://kirakira:kirakira@postgres:5432/kirakira",
+        "redis": "redis://redis:6379",
+        "qdrant": "http://qdrant:6333",
+        "neo4j": "bolt://neo4j:7687",
+        "minio": "http://minio:9000"
+      },
+      "mcp": {
+        "workspaceRoot": "/workspace",
+        "appRoot": "/app"
+      }
+    },
+    "host": {
+      "mode": "host",
+      "workspaceRoot": ".",
+      "appRoot": ".",
+      "composeFiles": [],
+      "composeProfiles": [],
+      "envFiles": [".env"],
+      "services": {
+        "kirakirad": "tcp://127.0.0.1:17777",
+        "postgres": "postgres://kirakira:kirakira@127.0.0.1:5432/kirakira",
+        "redis": "redis://127.0.0.1:6379",
+        "qdrant": "http://127.0.0.1:6333",
+        "neo4j": "bolt://127.0.0.1:7687",
+        "minio": "http://127.0.0.1:9000"
+      },
+      "mcp": {
+        "workspaceRoot": ".",
+        "appRoot": "."
+      }
+    },
+    "test-host": {
+      "mode": "host",
+      "workspaceRoot": ".",
+      "appRoot": ".",
+      "composeFiles": ["docker-compose.test.yml"],
+      "composeProfiles": [],
+      "envFiles": [".env"],
+      "services": {
+        "postgres": "postgres://kirakira:kirakira@127.0.0.1:55432/kirakira",
+        "redis": "redis://127.0.0.1:56379",
+        "qdrant": "http://127.0.0.1:56333",
+        "neo4j": "bolt://127.0.0.1:57687",
+        "minio": "http://127.0.0.1:59000"
+      },
+      "mcp": {
+        "workspaceRoot": ".",
+        "appRoot": "."
+      }
+    },
+    "ci": {
+      "mode": "hybrid",
+      "workspaceRoot": ".",
+      "appRoot": ".",
+      "composeFiles": ["docker-compose.test.yml"],
+      "composeProfiles": [],
+      "envFiles": [],
+      "services": {},
+      "mcp": {
+        "workspaceRoot": ".",
+        "appRoot": "."
+      }
+    }
+  }
+}

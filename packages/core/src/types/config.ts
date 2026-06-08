@@ -30,6 +30,58 @@ export interface RegistrySource {
   priority?: number;
 }
 
+export type HandoffMode = "tool" | "supervisor" | "swarm";
+export type SubagentContextMode = "isolated" | "filtered" | "inherit";
+
+export interface OrchestrationConfig {
+  handoff_mode?: HandoffMode;
+  max_concurrency?: number;
+  default_subagent_turns?: number;
+  subagent_system_preamble?: string;
+  subagent_context?: SubagentContextMode;
+  trace_handoffs?: boolean;
+}
+
+export type ResearchSourcePolicy = "workspace" | "web" | "hybrid" | "verified";
+
+export interface DeepResearchConfig {
+  enabled?: boolean;
+  max_depth?: number;
+  max_breadth?: number;
+  max_tool_calls?: number;
+  require_citations?: boolean;
+  source_policy?: ResearchSourcePolicy;
+  workspace_dir?: string;
+}
+
+export interface RuntimeServiceDecl {
+  name: string;
+  url_env?: string;
+  required?: boolean;
+}
+
+export interface RuntimeProfileDecl {
+  name: string;
+  mode: "container" | "host" | "hybrid";
+  compose_profiles?: string[];
+  env_files?: string[];
+  workspace_root_env?: string;
+  services?: RuntimeServiceDecl[];
+}
+
+export interface PresentationConfig {
+  web?: {
+    enabled?: boolean;
+    dev_url_env?: string;
+    api_base_url_env?: string;
+  };
+  desktop?: {
+    enabled?: boolean;
+    web_url_env?: string;
+    preload_contract?: "strict-ipc";
+  };
+}
+
 export interface AgentToml {
   schema_version: number;
   workspace_name?: string;
@@ -86,6 +138,14 @@ export interface AgentToml {
     default_source?: string;
     install_scope?: "workspace" | "user";
   };
+
+  orchestration?: OrchestrationConfig;
+  deep_research?: DeepResearchConfig;
+  runtime?: {
+    default_profile?: string;
+    profiles?: RuntimeProfileDecl[];
+  };
+  presentation?: PresentationConfig;
 
   features?: {
     tool_search?: boolean;

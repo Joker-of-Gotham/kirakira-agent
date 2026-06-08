@@ -12,15 +12,15 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: kirakira
-      POSTGRES_PASSWORD: kirakira
-      POSTGRES_DB: kirakira
+      POSTGRES_USER: ${KIRAKIRA_POSTGRES_USER:-kirakira}
+      POSTGRES_PASSWORD: ${KIRAKIRA_POSTGRES_PASSWORD:-kirakira}
+      POSTGRES_DB: ${KIRAKIRA_POSTGRES_DB:-kirakira}
     expose:
       - "5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kirakira -d kirakira"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -53,14 +53,16 @@ services:
   neo4j:
     image: neo4j:5-community
     environment:
-      NEO4J_AUTH: neo4j/testpassword
+      NEO4J_AUTH: ${KIRAKIRA_NEO4J_AUTH:-neo4j/testpassword}
+      KIRAKIRA_NEO4J_USER: ${KIRAKIRA_NEO4J_USER:-neo4j}
+      KIRAKIRA_NEO4J_PASSWORD: ${KIRAKIRA_NEO4J_PASSWORD:-testpassword}
     expose:
       - "7687"
       - "7474"
     volumes:
       - neo4j-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p testpassword 'RETURN 1'"]
+      test: ["CMD-SHELL", "cypher-shell -u \"$${KIRAKIRA_NEO4J_USER}\" -p \"$${KIRAKIRA_NEO4J_PASSWORD}\" 'RETURN 1'"]
       interval: 10s
       timeout: 10s
       retries: 20
@@ -69,8 +71,8 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${KIRAKIRA_MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${KIRAKIRA_MINIO_ROOT_PASSWORD:-minioadmin}
     expose:
       - "9000"
       - "9001"
@@ -122,15 +124,15 @@ services:
       FORCE_COLOR: "3"
       COLORTERM: truecolor
       TERM: xterm-256color
-      DATABASE_URL: postgres://kirakira:kirakira@postgres:5432/kirakira
-      REDIS_URL: redis://redis:6379
-      QDRANT_URL: http://qdrant:6333
-      NEO4J_URI: bolt://neo4j:7687
-      NEO4J_USER: neo4j
-      NEO4J_PASSWORD: testpassword
-      S3_ENDPOINT: http://minio:9000
-      S3_ACCESS_KEY_ID: minioadmin
-      S3_SECRET_ACCESS_KEY: minioadmin
+      DATABASE_URL: ${DATABASE_URL:-postgres://kirakira:kirakira@postgres:5432/kirakira}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
+      NEO4J_USER: ${KIRAKIRA_NEO4J_USER:-neo4j}
+      NEO4J_PASSWORD: ${KIRAKIRA_NEO4J_PASSWORD:-testpassword}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
     working_dir: /workspace
     volumes:
       - .:/workspace

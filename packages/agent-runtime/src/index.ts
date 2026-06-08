@@ -42,6 +42,8 @@ export type {
   SkillHint,
   SkillRegistration,
   SubagentCapability,
+  SubagentContextMode,
+  SubagentRuntimePolicy,
   TokenUsage,
   ToolResult,
   ToolSchema,
@@ -63,7 +65,7 @@ export { ArtifactStore } from "./sandbox/artifact-store.js";
 export { BudgetTracker } from "./context/budget-tracker.js";
 export { ContextAssembler, type ContextAssemblerInitOptions } from "./context/assembler.js";
 export { CostGuard } from "./loop/cost-guard.js";
-export { EphemeralWorker } from "./worker/ephemeral-worker.js";
+export { EphemeralWorker, type EphemeralWorkerRunOptions } from "./worker/ephemeral-worker.js";
 export { HistoryCompressor } from "./context/history-compressor.js";
 export { InterruptHandler } from "./interrupt/interrupt-handler.js";
 export { ModelClient } from "./model/model-client.js";

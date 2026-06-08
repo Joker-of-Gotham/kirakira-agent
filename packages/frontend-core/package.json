@@ -1,0 +1,21 @@
+{
+  "name": "@kirakira/frontend-core",
+  "version": "0.1.0",
+  "description": "Browser-safe presentation contracts and run projections for Kirakira web and desktop surfaces",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/event-store": "workspace:*"
+  }
+}

@@ -50,7 +50,7 @@ export class ContextAssembler {
     private options: ContextAssemblerInitOptions = {},
   ) {}
 
-  setTaskPreamble(preamble: string): void {
+  setTaskPreamble(preamble: string | undefined): void {
     this.options = { ...this.options, taskPreamble: preamble };
   }
 

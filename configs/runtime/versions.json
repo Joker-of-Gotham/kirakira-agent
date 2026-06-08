@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "node": "22",
+  "pnpm": "10.33.2",
+  "typescript": "5.8.3",
+  "go": "1.23",
+  "python": "3.12",
+  "dockerImages": {
+    "postgres": "pgvector/pgvector:pg16",
+    "redis": "redis:7-alpine",
+    "qdrant": "qdrant/qdrant:latest",
+    "neo4j": "neo4j:5-community",
+    "minio": "minio/minio:latest"
+  },
+  "registries": {
+    "npm": "https://registry.npmjs.org",
+    "npmMirror": "https://registry.npmmirror.com",
+    "pypi": "https://pypi.org/simple"
+  }
+}

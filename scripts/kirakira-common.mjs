@@ -1,49 +1,38 @@
 import { existsSync, readFileSync, writeFileSync, copyFileSync } from "node:fs";
 import { join } from "node:path";
 
-const DEFAULT_MCP_SERVERS = {
-  "filesystem-core": {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
-    env: { NODE_NO_WARNINGS: "1" },
-  },
-  "filesystem-search": {
-    command: "npx",
-    args: ["-y", "mcp-ripgrep@latest"],
-    env: { NODE_NO_WARNINGS: "1" },
-  },
-  "filesystem-git": {
-    command: "npx",
-    args: ["-y", "@cyanheads/git-mcp-server"],
-    env: { NODE_NO_WARNINGS: "1", NODE_ENV: "production" },
-  },
-  "filesystem-patch": {
-    command: "node",
-    args: [
-      "/app/packages/mcp-filesystem-patch/dist/index.js",
-      "--workspace",
-      "/workspace",
-    ],
-  },
-  "filesystem-artifact": {
-    command: "node",
-    args: [
-      "/app/packages/mcp-filesystem-artifact/dist/index.js",
-      "--workspace",
-      "/workspace",
-    ],
-  },
-  memory: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-memory"],
-    env: { NODE_NO_WARNINGS: "1" },
-  },
-  github: {
-    command: "npx",
-    args: ["-y", "@modelcontextprotocol/server-github"],
-    env: { NODE_NO_WARNINGS: "1" },
-  },
-};
+import { renderMcpServers, resolveRuntimeProfile } from "./runtime-profile.mjs";
+
+function loadEnvFileIntoProcess(workspaceRoot) {
+  const envPath = join(workspaceRoot, ".env");
+  if (!existsSync(envPath)) return;
+  const lines = readFileSync(envPath, "utf8").split(/\r?\n/u);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = unquoteEnvValue(trimmed.slice(eq + 1).trim());
+    if (key && process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
+
+function unquoteEnvValue(value) {
+  if (
+    (value.startsWith('"') && value.endsWith('"'))
+    || (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function defaultMcpServers() {
+  return renderMcpServers(resolveRuntimeProfile());
+}
 
 const OBSOLETE_MCP_SERVERS = new Set([
   "filesystem",
@@ -66,6 +55,8 @@ export function ensureEnvFile(workspaceRoot) {
 
 export function ensureMcpConfig(workspaceRoot) {
   const configPath = join(workspaceRoot, ".mcp.json");
+  loadEnvFileIntoProcess(workspaceRoot);
+  const defaultServers = defaultMcpServers();
   let existing = { mcpServers: {} };
 
   if (existsSync(configPath)) {
@@ -81,14 +72,14 @@ export function ensureMcpConfig(workspaceRoot) {
 
   const customServers = {};
   for (const [name, config] of Object.entries(existing.mcpServers ?? {})) {
-    if (Object.prototype.hasOwnProperty.call(DEFAULT_MCP_SERVERS, name)) continue;
+    if (Object.prototype.hasOwnProperty.call(defaultServers, name)) continue;
     if (OBSOLETE_MCP_SERVERS.has(name)) continue;
     customServers[name] = config;
   }
 
   const next = {
     mcpServers: {
-      ...DEFAULT_MCP_SERVERS,
+      ...defaultServers,
       ...customServers,
     },
   };

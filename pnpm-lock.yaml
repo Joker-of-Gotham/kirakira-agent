@@ -295,6 +295,12 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
 
+  packages/frontend-core:
+    dependencies:
+      '@kirakira/event-store':
+        specifier: workspace:*
+        version: link:../event-store
+
   packages/mcp-adapter:
     dependencies:
       '@kirakira/audit-ledger':

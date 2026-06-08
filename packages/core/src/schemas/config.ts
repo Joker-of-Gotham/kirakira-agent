@@ -33,6 +33,21 @@ const registrySourceSchema = z.object({
   priority: z.number().int().optional(),
 });
 
+const runtimeServiceDeclSchema = z.object({
+  name: z.string().min(1),
+  url_env: z.string().optional(),
+  required: z.boolean().optional(),
+});
+
+const runtimeProfileDeclSchema = z.object({
+  name: z.string().min(1),
+  mode: z.enum(["container", "host", "hybrid"]),
+  compose_profiles: z.array(z.string()).optional(),
+  env_files: z.array(z.string()).optional(),
+  workspace_root_env: z.string().optional(),
+  services: z.array(runtimeServiceDeclSchema).optional(),
+});
+
 export const agentTomlSchema = z.object({
   schema_version: z.number().int().positive(),
   workspace_name: z.string().optional(),
@@ -105,6 +120,55 @@ export const agentTomlSchema = z.object({
       sources: z.array(registrySourceSchema).optional(),
       default_source: z.string().optional(),
       install_scope: z.enum(["workspace", "user"]).optional(),
+    })
+    .optional(),
+
+  orchestration: z
+    .object({
+      handoff_mode: z.enum(["tool", "supervisor", "swarm"]).optional(),
+      max_concurrency: z.number().int().positive().optional(),
+      default_subagent_turns: z.number().int().positive().optional(),
+      subagent_system_preamble: z.string().optional(),
+      subagent_context: z.enum(["isolated", "filtered", "inherit"]).optional(),
+      trace_handoffs: z.boolean().optional(),
+    })
+    .optional(),
+
+  deep_research: z
+    .object({
+      enabled: z.boolean().optional(),
+      max_depth: z.number().int().positive().optional(),
+      max_breadth: z.number().int().positive().optional(),
+      max_tool_calls: z.number().int().positive().optional(),
+      require_citations: z.boolean().optional(),
+      source_policy: z.enum(["workspace", "web", "hybrid", "verified"]).optional(),
+      workspace_dir: z.string().optional(),
+    })
+    .optional(),
+
+  runtime: z
+    .object({
+      default_profile: z.string().optional(),
+      profiles: z.array(runtimeProfileDeclSchema).optional(),
+    })
+    .optional(),
+
+  presentation: z
+    .object({
+      web: z
+        .object({
+          enabled: z.boolean().optional(),
+          dev_url_env: z.string().optional(),
+          api_base_url_env: z.string().optional(),
+        })
+        .optional(),
+      desktop: z
+        .object({
+          enabled: z.boolean().optional(),
+          web_url_env: z.string().optional(),
+          preload_contract: z.enum(["strict-ipc"]).optional(),
+        })
+        .optional(),
     })
     .optional(),
 
@@ -209,4 +273,10 @@ export const localConfigSchema = z.object({
   feature_overrides: z.record(z.boolean()).optional(),
 });
 
-export { providerTypeSchema, modelProviderDeclSchema, registrySourceSchema };
+export {
+  providerTypeSchema,
+  modelProviderDeclSchema,
+  registrySourceSchema,
+  runtimeProfileDeclSchema,
+  runtimeServiceDeclSchema,
+};

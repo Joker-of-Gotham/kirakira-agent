@@ -1,23 +1,46 @@
 import { ulid } from "ulid";
 
 import { reactLoop, type RuntimeDeps } from "../loop/react-loop.js";
-import type { EphemeralResult, ReactWorkerConfig } from "../types.js";
+import type {
+  EphemeralResult,
+  ReactWorkerConfig,
+  SubagentRuntimePolicy,
+} from "../types.js";
 
 import { WorkerLifecycle } from "./lifecycle.js";
 
-export class EphemeralWorker {
-  constructor(private readonly parentConfig: ReactWorkerConfig) {}
+const DEFAULT_SUBAGENT_POLICY: Required<SubagentRuntimePolicy> = {
+  maxTurns: 32,
+  systemPreamble:
+    "Operate as a bounded specialist subagent. Stay within the delegated scope, use only granted tools and skills, and return concise evidence-backed results.",
+  contextMode: "filtered",
+  traceHandoffs: true,
+};
 
-  async run(task: string, deps: RuntimeDeps): Promise<EphemeralResult> {
+export interface EphemeralWorkerRunOptions {
+  policy?: SubagentRuntimePolicy;
+}
+
+export class EphemeralWorker {
+  constructor(
+    private readonly parentConfig: ReactWorkerConfig,
+    private readonly policy: SubagentRuntimePolicy = {},
+  ) {}
+
+  async run(
+    task: string,
+    deps: RuntimeDeps,
+    options: EphemeralWorkerRunOptions = {},
+  ): Promise<EphemeralResult> {
+    const policy = this.resolvePolicy(options.policy);
     deps.contextAssembler.setTaskPreamble(task);
     const cfg: ReactWorkerConfig = {
       ...this.parentConfig,
       id: ulid(),
       parentWorkerId: this.parentConfig.id,
-      maxTurns: Math.min(this.parentConfig.maxTurns, 32),
-      systemPrompt: `${this.parentConfig.systemPrompt}
-
-You are a subagent; answer succinctly.`,
+      maxTurns: Math.min(this.parentConfig.maxTurns, policy.maxTurns),
+      systemPrompt: [this.parentConfig.systemPrompt, policy.systemPreamble].join("\n\n"),
+      subagentPolicy: policy,
     };
     const lifecycle = WorkerLifecycle.create(cfg);
     let state = WorkerLifecycle.start(lifecycle);
@@ -36,11 +59,24 @@ You are a subagent; answer succinctly.`,
       }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
+    } finally {
+      deps.contextAssembler.setTaskPreamble(undefined);
     }
     return {
       workerId: cfg.id,
       ...(finalText !== undefined ? { finalText } : {}),
       ...(error !== undefined ? { error } : {}),
+    };
+  }
+
+  private resolvePolicy(
+    override: SubagentRuntimePolicy | undefined,
+  ): Required<SubagentRuntimePolicy> {
+    return {
+      ...DEFAULT_SUBAGENT_POLICY,
+      ...this.parentConfig.subagentPolicy,
+      ...this.policy,
+      ...override,
     };
   }
 }

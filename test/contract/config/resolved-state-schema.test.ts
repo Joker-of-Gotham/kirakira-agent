@@ -25,6 +25,48 @@ describe("resolved state schema stability", () => {
         default_source: "default",
         install_scope: "workspace",
       },
+      orchestration: {
+        handoff_mode: "tool",
+        max_concurrency: 4,
+        default_subagent_turns: 32,
+        subagent_system_preamble: "Stay scoped.",
+        subagent_context: "filtered",
+        trace_handoffs: true,
+      },
+      deep_research: {
+        enabled: true,
+        max_depth: 3,
+        max_breadth: 4,
+        max_tool_calls: 24,
+        require_citations: true,
+        source_policy: "hybrid",
+        workspace_dir: ".kirakira/research",
+      },
+      runtime: {
+        default_profile: "container",
+        profiles: [
+          {
+            name: "container",
+            mode: "container",
+            compose_profiles: ["cli"],
+            env_files: [".env"],
+            workspace_root_env: "KIRAKIRA_WORKSPACE_ROOT",
+            services: [{ name: "postgres", url_env: "DATABASE_URL", required: true }],
+          },
+        ],
+      },
+      presentation: {
+        web: {
+          enabled: true,
+          dev_url_env: "KIRAKIRA_WEB_URL",
+          api_base_url_env: "KIRAKIRA_API_BASE_URL",
+        },
+        desktop: {
+          enabled: true,
+          web_url_env: "KIRAKIRA_WEB_URL",
+          preload_contract: "strict-ipc",
+        },
+      },
       features: {
         tool_search: true,
         lazy_schema_injection: true,

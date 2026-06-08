@@ -131,6 +131,7 @@ export interface ReactWorkerConfig {
   skillScope?: string[];
   mcpServers?: string[];
   sandboxProfile?: string;
+  subagentPolicy?: SubagentRuntimePolicy;
 }
 
 /** ReAct loop worker state (`ReactWorkerState` in public API). */
@@ -327,6 +328,15 @@ export interface SandboxPolicyCeiling {
 export interface SubagentCapability {
   kind: "tool" | "skill" | "mcp";
   name: string;
+}
+
+export type SubagentContextMode = "isolated" | "filtered" | "inherit";
+
+export interface SubagentRuntimePolicy {
+  maxTurns?: number;
+  systemPreamble?: string;
+  contextMode?: SubagentContextMode;
+  traceHandoffs?: boolean;
 }
 
 export interface EphemeralAgentConfig extends WorkerConfig {

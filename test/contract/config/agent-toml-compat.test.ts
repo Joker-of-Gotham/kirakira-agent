@@ -18,6 +18,10 @@ describe("agent.toml fixture compatibility", () => {
     expect(cfg.output?.exec_default).toBe("json");
     expect(cfg.approvals?.mode).toBe("ask");
     expect(cfg.skills?.discover).toEqual([".kirakira/skills"]);
+    expect(cfg.orchestration?.handoff_mode).toBe("tool");
+    expect(cfg.deep_research?.source_policy).toBe("hybrid");
+    expect(cfg.runtime?.profiles?.[0]?.services?.[0]?.url_env).toBe("DATABASE_URL");
+    expect(cfg.presentation?.desktop?.preload_contract).toBe("strict-ipc");
     expect(cfg.compat?.read_claude).toBe(true);
     expect(cfg.compat?.read_cursor).toBe(true);
   });

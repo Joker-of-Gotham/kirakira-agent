@@ -10,6 +10,7 @@ The repo is converging on a few hard constraints:
 - **one interaction surface**: the primary product surface is the interactive TUI
 - **one provider contract**: users provide keys; provider catalogs handle URLs and model discovery
 - **one runtime story**: Docker services, policy transport, MCP, and the CLI must stay aligned
+- **one profile contract**: host, container, test, CI, MCP, and future presentation surfaces resolve paths and service URLs through runtime profiles
 
 ## High-level layout
 
@@ -66,6 +67,7 @@ This is deliberately opinionated. The point is to remove branchy startup behavio
 | `packages/kirakirad` | daemon process for policy/runtime control transport |
 | `packages/mcp-adapter` | MCP client, gateway, stdio transport handling |
 | `packages/policy-engine` | PDP transport selection, fallback behavior, decision interface |
+| `packages/frontend-core` | browser-safe transport contract and run-event projection for future web/desktop surfaces |
 | `policies/` | Rego policy and bundled data |
 
 ## Provider model
@@ -131,6 +133,39 @@ There are two layers:
 - **runtime execution** through `packages/mcp-adapter`
 
 The startup design goal is that a user should not need one manual installation path for local runs and a different hidden path for the containerized runtime.
+
+## Runtime profiles
+
+Runtime environment selection now has an explicit profile baseline in
+[`configs/runtime/profiles.json`](../configs/runtime/profiles.json), with shared
+toolchain pins in [`configs/runtime/versions.json`](../configs/runtime/versions.json).
+
+The profile contract is deliberately separate from a single Docker compose file:
+
+- `container` keeps the canonical Docker workspace path (`/workspace`) and app path (`/app`)
+- `host` resolves services through localhost and renders host-oriented MCP roots
+- `test-host` matches the published ports in `docker-compose.test.yml`
+- `ci` provides a non-interactive profile for future automation
+
+[`scripts/runtime-profile.mjs`](../scripts/runtime-profile.mjs) renders the
+selected profile into environment variables, compose flags, and MCP defaults.
+`scripts/kirakira-common.mjs` now obtains managed MCP defaults from the same
+renderer instead of owning separate hardcoded `/workspace` and `/app` constants.
+
+## Presentation baseline
+
+Kirakira still does not ship a full web or Electron UI. The first current
+presentation package is [`packages/frontend-core`](../packages/frontend-core),
+which defines a browser-safe runtime transport interface and projects
+`RunEvent` streams into a dashboard model. This keeps the future web and
+desktop shells aligned to the daemon/event-store boundary instead of duplicating
+CLI-only chat state.
+
+The visual design direction is intentionally not finalized in code yet. The
+local design skills under `.agents/skills` require a confirmed design brief
+before a major visual system is created; until then, presentation work should
+stay on contracts, projections, security boundaries, and neutral diagnostic
+surfaces.
 
 ## Policy transport
 

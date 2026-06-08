@@ -21,6 +21,8 @@ export {
   providerTypeSchema,
   modelProviderDeclSchema,
   registrySourceSchema,
+  runtimeProfileDeclSchema,
+  runtimeServiceDeclSchema,
 } from "./schemas/config.js";
 export {
   skillFrontmatterSchema,
