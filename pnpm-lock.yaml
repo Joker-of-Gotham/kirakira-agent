@@ -129,6 +129,9 @@ importers:
       '@kirakira/frontend-core':
         specifier: workspace:*
         version: link:../../packages/frontend-core
+      '@kirakira/runtime-contracts':
+        specifier: workspace:*
+        version: link:../../packages/runtime-contracts
       react:
         specifier: 19.2.5
         version: 19.2.5

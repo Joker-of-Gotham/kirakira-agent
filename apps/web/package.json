@@ -12,6 +12,7 @@
   "dependencies": {
     "@kirakira/frontend-app": "workspace:*",
     "@kirakira/frontend-core": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
     "react": "19.2.5",
     "react-dom": "19.2.5"
   },

@@ -18,8 +18,19 @@ describe("web runtime config", () => {
     );
 
     expect(config.mode).toBe("gateway");
+    expect(config.gatewayEndpoint?.url).toBe("ws://127.0.0.1:17373/runtime");
     expect(config.transport?.mode).toBe("browser-gateway");
     expect(config.error).toBeUndefined();
+  });
+
+  it("returns a config error for non-websocket gateway endpoints", () => {
+    const config = resolveWebRuntimeConfig(
+      env({ VITE_KIRAKIRA_GATEWAY_URL: "http://127.0.0.1:17373/runtime" }),
+    );
+
+    expect(config.mode).toBe("gateway");
+    expect(config.transport).toBeUndefined();
+    expect(config.error).toContain("protocol is not allowed");
   });
 
   it("allows explicit mock mode", () => {

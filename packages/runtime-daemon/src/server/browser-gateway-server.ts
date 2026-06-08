@@ -1,12 +1,18 @@
 import { createServer, type IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
+import {
+  DEFAULT_BROWSER_GATEWAY_ENDPOINT,
+  isLoopbackRuntimeHost,
+  normalizeRuntimePath,
+  renderRuntimeEndpoint,
+} from "@kirakira/runtime-contracts";
 import { WebSocketServer } from "ws";
 import type { ServerMessage } from "./protocol.js";
 import { RuntimeSocketHub, type RuntimeSocketServerOptions } from "./runtime-socket.js";
 
-export const DEFAULT_BROWSER_GATEWAY_HOST = "127.0.0.1";
-export const DEFAULT_BROWSER_GATEWAY_PORT = 17373;
-export const DEFAULT_BROWSER_GATEWAY_PATH = "/runtime";
+export const DEFAULT_BROWSER_GATEWAY_HOST = DEFAULT_BROWSER_GATEWAY_ENDPOINT.host;
+export const DEFAULT_BROWSER_GATEWAY_PORT = DEFAULT_BROWSER_GATEWAY_ENDPOINT.port;
+export const DEFAULT_BROWSER_GATEWAY_PATH = DEFAULT_BROWSER_GATEWAY_ENDPOINT.path;
 
 export interface BrowserGatewayConfig {
   enabled?: boolean;
@@ -27,14 +33,6 @@ export interface BrowserGatewayListenInfo {
 
 export type BrowserGatewayServerOptions = RuntimeSocketServerOptions;
 
-const normalizePath = (path: string): string => (path.startsWith("/") ? path : `/${path}`);
-
-const isLoopbackHost = (host: string): boolean =>
-  host === "127.0.0.1" ||
-  host === "localhost" ||
-  host === "::1" ||
-  host === "[::1]";
-
 const originHost = (origin: string): string | null => {
   try {
     return new URL(origin).hostname;
@@ -50,7 +48,7 @@ const isAllowedOrigin = (
   if (!origin) return false;
   if (allowedOrigins && allowedOrigins.length > 0) return allowedOrigins.includes(origin);
   const host = originHost(origin);
-  return host !== null && isLoopbackHost(host);
+  return host !== null && isLoopbackRuntimeHost(host);
 };
 
 const hasToken = (request: IncomingMessage, token: string | undefined): boolean => {
@@ -81,8 +79,8 @@ export class BrowserGatewayServer {
     }
     const host = config.host ?? DEFAULT_BROWSER_GATEWAY_HOST;
     const port = config.port ?? DEFAULT_BROWSER_GATEWAY_PORT;
-    const path = normalizePath(config.path ?? DEFAULT_BROWSER_GATEWAY_PATH);
-    if (!isLoopbackHost(host) && !config.token) {
+    const path = normalizeRuntimePath(config.path, DEFAULT_BROWSER_GATEWAY_PATH);
+    if (!isLoopbackRuntimeHost(host) && !config.token) {
       throw new Error("Browser gateway requires a token when binding outside loopback");
     }
 
@@ -135,7 +133,12 @@ export class BrowserGatewayServer {
       host,
       port: actualPort,
       path,
-      url: `ws://${host}:${actualPort}${path}`,
+      url: renderRuntimeEndpoint({
+        protocol: DEFAULT_BROWSER_GATEWAY_ENDPOINT.protocol,
+        host,
+        port: actualPort,
+        path,
+      }).url,
       tokenRequired: Boolean(config.token),
     };
     return this.listenInfo;

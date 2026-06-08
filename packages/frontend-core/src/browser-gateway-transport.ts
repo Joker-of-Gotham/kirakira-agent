@@ -1,11 +1,13 @@
 import type {
   RuntimeClientMessage,
+  RuntimeEndpointParts,
   RuntimeRunMode,
   RuntimeServerMessage,
 } from "@kirakira/runtime-contracts";
 import {
   RuntimeRequestTracker,
   parseRuntimeServerMessage,
+  parseWebSocketRuntimeEndpoint,
 } from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
@@ -18,7 +20,7 @@ import type {
 } from "./transport.js";
 
 export interface BrowserGatewayTransportOptions {
-  endpoint: string;
+  endpoint: string | RuntimeEndpointParts;
   token?: string;
   connectTimeoutMs?: number;
   requestTimeoutMs?: number;
@@ -45,6 +47,14 @@ const appendToken = (endpoint: string, token: string | undefined): string => {
   return url.toString();
 };
 
+const endpointUrl = (endpoint: string | RuntimeEndpointParts): string => {
+  if (typeof endpoint === "string") return parseWebSocketRuntimeEndpoint(endpoint).url;
+  if (endpoint.protocol !== "ws" && endpoint.protocol !== "wss") {
+    throw new Error(`Runtime gateway endpoint protocol is not allowed: ${endpoint.protocol}`);
+  }
+  return endpoint.url;
+};
+
 const eventMatches = (
   event: Extract<RuntimeServerMessage, { type: "event" }>["event"],
   subscription: ActiveSubscription,
@@ -68,6 +78,7 @@ export function createBrowserGatewayTransport(
   const requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
   const connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
   const socketFactory = options.socketFactory ?? ((url) => new WebSocket(url));
+  const gatewayUrl = endpointUrl(options.endpoint);
   const pending = new RuntimeRequestTracker({
     timeoutMs: requestTimeoutMs,
     timeoutMessage: (label) => `Runtime gateway request timed out: ${label}`,
@@ -167,7 +178,7 @@ export function createBrowserGatewayTransport(
     mode: "browser-gateway",
     async connect() {
       if (socket?.readyState === WebSocket.OPEN) return;
-      const ws = socketFactory(appendToken(options.endpoint, options.token));
+      const ws = socketFactory(appendToken(gatewayUrl, options.token));
       socket = ws;
       await new Promise<void>((resolve, reject) => {
         const timeout = setTimeout(() => {

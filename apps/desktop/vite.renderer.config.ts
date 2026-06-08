@@ -1,19 +1,29 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import {
+  DEFAULT_DESKTOP_RENDERER_ENDPOINT,
+  parseHttpRuntimeEndpoint,
+  renderRuntimeEndpoint,
+  type RuntimeEndpointParts,
+} from "@kirakira/runtime-contracts";
 
 const desktopRendererUrl = () => {
   const override =
     process.env.KIRAKIRA_DESKTOP_RENDERER_URL?.trim()
     || process.env.KIRAKIRA_DESKTOP_DEV_URL?.trim();
-  if (override) return override;
-  return `http://127.0.0.1:${process.env.KIRAKIRA_DESKTOP_RENDERER_PORT?.trim() || "5174"}`;
+  if (override) return parseHttpRuntimeEndpoint(override);
+  return renderRuntimeEndpoint({
+    ...DEFAULT_DESKTOP_RENDERER_ENDPOINT,
+    port:
+      process.env.KIRAKIRA_DESKTOP_RENDERER_PORT?.trim() ||
+      DEFAULT_DESKTOP_RENDERER_ENDPOINT.port,
+  });
 };
 
-const devServerFromUrl = (value: string) => {
-  const url = new URL(value);
+const devServerFromUrl = (endpoint: RuntimeEndpointParts) => {
   return {
-    host: url.hostname,
-    port: Number(url.port),
+    host: endpoint.host,
+    port: endpoint.port,
     strictPort: true,
   };
 };

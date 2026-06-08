@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { createBrowserGatewayTransport } from "../../../packages/frontend-core/src/index.js";
-import type { RuntimeServerMessage } from "../../../packages/runtime-contracts/src/index.js";
+import {
+  parseHttpRuntimeEndpoint,
+  parseWebSocketRuntimeEndpoint,
+  type RuntimeServerMessage,
+} from "../../../packages/runtime-contracts/src/index.js";
 
 class FakeWebSocket {
   static readonly OPEN = 1;
@@ -48,6 +52,37 @@ const idFactory = () => {
 };
 
 describe("browser gateway runtime transport", () => {
+  it("accepts typed websocket endpoints and appends tokens only when connecting", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    const endpoint = parseWebSocketRuntimeEndpoint(
+      "ws://127.0.0.1:17373/runtime?discard=true#fragment",
+    );
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint,
+      token: "secret",
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    expect(endpoint.url).toBe("ws://127.0.0.1:17373/runtime");
+    expect(socket?.url).toBe("ws://127.0.0.1:17373/runtime?token=secret");
+  });
+
+  it("rejects typed non-websocket endpoints", () => {
+    const endpoint = parseHttpRuntimeEndpoint("http://127.0.0.1:5183/");
+
+    expect(() => createBrowserGatewayTransport({ endpoint })).toThrow(
+      "protocol is not allowed",
+    );
+  });
+
   it("submits prompts through the runtime protocol and resolves ack run ids", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;

@@ -1,43 +1,30 @@
 #!/usr/bin/env node
 import {
   DaemonLifecycle,
-  DEFAULT_BROWSER_GATEWAY_HOST,
-  DEFAULT_BROWSER_GATEWAY_PATH,
-  DEFAULT_BROWSER_GATEWAY_PORT,
   registerShutdownHandlers,
   type BrowserGatewayConfig,
 } from "../index.js";
+import {
+  DEFAULT_BROWSER_GATEWAY_ENDPOINT,
+  parseRuntimeOriginList,
+  parseRuntimePort,
+} from "@kirakira/runtime-contracts";
 
 const truthy = (value: string | undefined): boolean =>
   value === "1" || value === "true" || value === "yes";
-
-const numberEnv = (value: string | undefined, fallback: number): number => {
-  if (!value) return fallback;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const listEnv = (value: string | undefined): string[] | undefined => {
-  if (!value) return undefined;
-  const items = value
-    .split(",")
-    .map((item) => item.trim())
-    .filter((item) => item.length > 0);
-  return items.length > 0 ? items : undefined;
-};
 
 const browserGatewayConfig = (): BrowserGatewayConfig | undefined => {
   if (!truthy(process.env.KIRAKIRA_BROWSER_GATEWAY_ENABLED)) return undefined;
   return {
     enabled: true,
-    host: process.env.KIRAKIRA_BROWSER_GATEWAY_HOST ?? DEFAULT_BROWSER_GATEWAY_HOST,
-    port: numberEnv(
+    host: process.env.KIRAKIRA_BROWSER_GATEWAY_HOST ?? DEFAULT_BROWSER_GATEWAY_ENDPOINT.host,
+    port: parseRuntimePort(
       process.env.KIRAKIRA_BROWSER_GATEWAY_PORT,
-      DEFAULT_BROWSER_GATEWAY_PORT,
+      DEFAULT_BROWSER_GATEWAY_ENDPOINT.port,
     ),
-    path: process.env.KIRAKIRA_BROWSER_GATEWAY_PATH ?? DEFAULT_BROWSER_GATEWAY_PATH,
+    path: process.env.KIRAKIRA_BROWSER_GATEWAY_PATH ?? DEFAULT_BROWSER_GATEWAY_ENDPOINT.path,
     token: process.env.KIRAKIRA_BROWSER_GATEWAY_TOKEN,
-    allowedOrigins: listEnv(process.env.KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS),
+    allowedOrigins: parseRuntimeOriginList(process.env.KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS),
   };
 };
 

@@ -4,6 +4,29 @@ export type {
   RuntimeRunOptions,
 } from "./control.js";
 export type {
+  RuntimeEndpointInput,
+  RuntimeEndpointDefault,
+  RuntimeEndpointParts,
+  RuntimeEndpointProtocol,
+  RuntimeHttpProtocol,
+  RuntimeWebSocketProtocol,
+} from "./endpoint.js";
+export {
+  DEFAULT_BROWSER_GATEWAY_ENDPOINT,
+  DEFAULT_DESKTOP_RENDERER_ENDPOINT,
+  DEFAULT_WEB_ENDPOINT,
+  browserGatewayEndpointFromParts,
+  isLoopbackRuntimeHost,
+  normalizeRuntimePath,
+  parseHttpRuntimeEndpoint,
+  parseRuntimeEndpoint,
+  parseRuntimeOriginList,
+  parseRuntimePort,
+  parseWebSocketRuntimeEndpoint,
+  renderRuntimeEndpoint,
+  runtimeOrigin,
+} from "./endpoint.js";
+export type {
   ApprovalRecord,
   ArtifactRecord,
   Checkpoint,

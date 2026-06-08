@@ -173,7 +173,8 @@ Kirakira now has a shared presentation contract plus early host-run shells:
 
 Both presentation shells use the `workbench-host` profile and the browser runtime
 gateway rather than duplicating CLI-only chat state. A Vite server on `5173` is
-not the Kirakira workbench default.
+not a Kirakira validation target; use the Kirakira web shell on `5183`, desktop
+renderer on `5174`, and browser gateway on `17373/runtime`.
 
 ## Policy transport
 

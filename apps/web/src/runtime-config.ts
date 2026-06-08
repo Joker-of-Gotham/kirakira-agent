@@ -2,12 +2,17 @@ import {
   createBrowserGatewayTransport,
   type RuntimeTransport,
 } from "@kirakira/frontend-core";
+import {
+  parseWebSocketRuntimeEndpoint,
+  type RuntimeEndpointParts,
+} from "@kirakira/runtime-contracts";
 
 export type KirakiraWebRuntimeMode = "auto" | "mock" | "gateway";
 
 export interface WebRuntimeConfig {
   mode: KirakiraWebRuntimeMode;
   environmentLabel: string;
+  gatewayEndpoint?: RuntimeEndpointParts;
   transport?: RuntimeTransport;
   error?: string;
 }
@@ -28,11 +33,22 @@ export function resolveWebRuntimeConfig(env: ImportMetaEnv): WebRuntimeConfig {
   }
 
   if (endpoint) {
+    let gatewayEndpoint: RuntimeEndpointParts;
+    try {
+      gatewayEndpoint = parseWebSocketRuntimeEndpoint(endpoint);
+    } catch (error) {
+      return {
+        mode: "gateway",
+        environmentLabel: "Gateway misconfigured",
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
     return {
       mode: "gateway",
       environmentLabel: "Browser gateway",
+      gatewayEndpoint,
       transport: createBrowserGatewayTransport({
-        endpoint,
+        endpoint: gatewayEndpoint,
         token: token && token.length > 0 ? token : undefined,
       }),
     };

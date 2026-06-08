@@ -31,6 +31,7 @@ export default defineConfig({
       workspaceAlias("@kirakira/memory-vector", "packages/memory-vector"),
       workspaceAlias("@kirakira/orchestrator-kernel", "packages/orchestrator-kernel"),
       workspaceAlias("@kirakira/policy-engine", "packages/policy-engine"),
+      workspaceAlias("@kirakira/runtime-contracts", "packages/runtime-contracts"),
       workspaceAlias("@kirakira/runtime-daemon", "packages/runtime-daemon"),
       workspaceAlias("@kirakira/skill-runtime", "packages/skill-runtime"),
     ],

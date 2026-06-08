@@ -4,6 +4,7 @@ import {
   BrowserGatewayServer,
   type BrowserGatewayListenInfo,
 } from "../../../packages/runtime-daemon/src/index.js";
+import { DEFAULT_BROWSER_GATEWAY_ENDPOINT } from "../../../packages/runtime-contracts/src/index.js";
 
 const waitOpen = (ws: WebSocket) =>
   new Promise<void>((resolve, reject) => {
@@ -35,10 +36,14 @@ describe("BrowserGatewayServer", () => {
     });
     const info: BrowserGatewayListenInfo = await server.start({
       port: 0,
+      path: "runtime",
       allowedOrigins: ["http://127.0.0.1:5179"],
     });
 
     try {
+      expect(info.host).toBe(DEFAULT_BROWSER_GATEWAY_ENDPOINT.host);
+      expect(info.path).toBe(DEFAULT_BROWSER_GATEWAY_ENDPOINT.path);
+      expect(info.url).toBe(`ws://127.0.0.1:${info.port}/runtime`);
       const health = await fetch(`http://${info.host}:${info.port}/healthz`);
       expect(health.ok).toBe(true);
 
