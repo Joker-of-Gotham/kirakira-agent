@@ -238,11 +238,15 @@ function applySubagent(
   state: RunDashboardProjection,
   event: RunEvent,
 ): RunDashboardProjection {
+  const phase =
+    event.kind === "subagent.completed" && event.payload.status === "failed"
+      ? "failed"
+      : SUBAGENT_PHASE_BY_EVENT[event.kind];
   return setEntityPhase(
     state,
     "subagents",
     event,
-    SUBAGENT_PHASE_BY_EVENT[event.kind],
+    phase,
   );
 }
 

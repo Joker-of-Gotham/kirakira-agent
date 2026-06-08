@@ -27,7 +27,33 @@ export interface RuntimeDeps {
   };
   workspace: Workspace;
   artifactStore?: ArtifactStore;
+  delegateRunner?: DelegateRunner;
 }
+
+export interface DelegateRequest {
+  subagentId: string;
+  parentWorkerId: string;
+  parentConfig: ReactWorkerState["config"];
+  runId: string;
+  task: string;
+  action: Action & { kind: "delegate" };
+}
+
+export type DelegateResult =
+  | {
+      success: true;
+      workerId: string;
+      finalText: string;
+      artifactRefs?: string[];
+    }
+  | {
+      success: false;
+      workerId?: string;
+      error: string;
+      artifactRefs?: string[];
+    };
+
+export type DelegateRunner = (request: DelegateRequest) => Promise<DelegateResult>;
 
 const STEP_SCHEMA: Record<string, unknown> = {
   type: "object",
@@ -49,6 +75,15 @@ interface StructuredStep {
   output?: string;
   skillName?: string;
   command?: string;
+}
+
+function delegateTask(action: Action): string {
+  const args = action.args ?? {};
+  const fromArgs = args.task ?? args.brief ?? args.prompt ?? args.instruction;
+  if (typeof fromArgs === "string" && fromArgs.trim().length > 0) {
+    return fromArgs.trim();
+  }
+  return (action.output ?? "").trim();
 }
 
 function asAction(step: StructuredStep): Action {
@@ -272,17 +307,145 @@ ${execRes.stderr}`;
     }
 
     if (action.kind === "delegate") {
-      turnManager.completeTurn(
-        turn,
-        action,
-        { content: action.output ?? "delegate: subagent execution pending upstream" },
-        { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-      );
-      state = turnManager.applyState({ ...state });
+      const delegateAction = action as Action & { kind: "delegate" };
+      const task = delegateTask(delegateAction);
+      const subagentId = ulid();
+      if (!task) {
+        consecutiveErrors += 1;
+        turnManager.completeTurn(
+          turn,
+          delegateAction,
+          { content: "ERROR: delegate missing task", truncated: false },
+          { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        );
+        state = turnManager.applyState({ ...state });
+        yield await emitEvent(deps.eventWriter, {
+          runId: state.config.runId,
+          kind: "subagent.completed",
+          payload: {
+            subagentId,
+            parentWorkerId: state.config.id,
+            status: "failed",
+            error: "delegate missing task",
+          },
+        });
+        continue;
+      }
       yield await emitEvent(deps.eventWriter, {
         runId: state.config.runId,
         kind: "subagent.spawned",
-        payload: { hint: action.output },
+        payload: {
+          subagentId,
+          parentWorkerId: state.config.id,
+          taskPreview: task.slice(0, 2000),
+        },
+      });
+      if (!deps.delegateRunner) {
+        consecutiveErrors += 1;
+        turnManager.completeTurn(
+          turn,
+          delegateAction,
+          { content: "ERROR: delegate runner unavailable", truncated: false },
+          { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        );
+        state = turnManager.applyState({ ...state });
+        yield await emitEvent(deps.eventWriter, {
+          runId: state.config.runId,
+          kind: "subagent.completed",
+          payload: {
+            subagentId,
+            parentWorkerId: state.config.id,
+            status: "failed",
+            error: "delegate runner unavailable",
+          },
+        });
+        continue;
+      }
+      let result: DelegateResult;
+      try {
+        result = await deps.delegateRunner({
+          subagentId,
+          parentWorkerId: state.config.id,
+          parentConfig: state.config,
+          runId: state.config.runId,
+          task,
+          action: delegateAction,
+        });
+      } catch (error) {
+        result = {
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+      if (!result.success) {
+        consecutiveErrors += 1;
+        turnManager.completeTurn(
+          turn,
+          delegateAction,
+          {
+            content: `ERROR: subagent ${result.workerId ?? subagentId} failed: ${result.error}`,
+            ...(result.artifactRefs && result.artifactRefs.length > 0
+              ? { artifactRefs: result.artifactRefs }
+              : {}),
+            truncated: false,
+          },
+          { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        );
+        state = turnManager.applyState({
+          ...state,
+          artifacts: [
+            ...new Set([...state.artifacts, ...(result.artifactRefs ?? [])]),
+          ],
+        });
+        yield await emitEvent(deps.eventWriter, {
+          runId: state.config.runId,
+          kind: "subagent.completed",
+          payload: {
+            subagentId,
+            workerId: result.workerId,
+            parentWorkerId: state.config.id,
+            status: "failed",
+            error: result.error,
+            ...(result.artifactRefs && result.artifactRefs.length > 0
+              ? { artifactRefs: result.artifactRefs }
+              : {}),
+          },
+        });
+        continue;
+      }
+      const finalText = result.finalText;
+      turnManager.completeTurn(
+        turn,
+        delegateAction,
+        {
+          content: finalText,
+          ...(result.artifactRefs && result.artifactRefs.length > 0
+            ? { artifactRefs: result.artifactRefs }
+            : {}),
+          truncated: false,
+        },
+        { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+      );
+      consecutiveErrors = 0;
+      state = turnManager.applyState({
+        ...state,
+        artifacts: [
+          ...new Set([...state.artifacts, ...(result.artifactRefs ?? [])]),
+        ],
+      });
+      yield await emitEvent(deps.eventWriter, {
+        runId: state.config.runId,
+        kind: "subagent.completed",
+        payload: {
+          subagentId,
+          workerId: result.workerId,
+          parentWorkerId: state.config.id,
+          status: "completed",
+          preview: finalText.slice(0, 2000),
+          ...(result.artifactRefs && result.artifactRefs.length > 0
+            ? { artifactRefs: result.artifactRefs }
+            : {}),
+        },
       });
       continue;
     }

@@ -51,4 +51,17 @@ describe("frontend-core run dashboard projection", () => {
     expect(projection.latestEvents).toHaveLength(1);
     expect(projection.latestEvents[0]?.kind).toBe("run.started");
   });
+
+  it("projects failed subagent completions as failed dashboard entities", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event("subagent.spawned", { subagentId: "agent-a" }, 1),
+      event(
+        "subagent.completed",
+        { subagentId: "agent-a", status: "failed", error: "boom" },
+        2,
+      ),
+    ]);
+
+    expect(projection.entities.subagents["agent-a"]).toBe("failed");
+  });
 });

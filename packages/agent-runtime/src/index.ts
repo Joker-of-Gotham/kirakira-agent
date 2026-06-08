@@ -66,6 +66,10 @@ export { BudgetTracker } from "./context/budget-tracker.js";
 export { ContextAssembler, type ContextAssemblerInitOptions } from "./context/assembler.js";
 export { CostGuard } from "./loop/cost-guard.js";
 export { EphemeralWorker, type EphemeralWorkerRunOptions } from "./worker/ephemeral-worker.js";
+export {
+  createEphemeralDelegateRunner,
+  type EphemeralDelegateRunnerOptions,
+} from "./worker/delegate-runner.js";
 export { HistoryCompressor } from "./context/history-compressor.js";
 export { InterruptHandler } from "./interrupt/interrupt-handler.js";
 export { ModelClient } from "./model/model-client.js";
@@ -86,5 +90,11 @@ export { buildStructuredPrompt, parseStructuredOutput } from "./model/structured
 export { deserializeWorkerState, serializeWorkerState } from "./interrupt/serializer.js";
 export { handleToolResult } from "./tools/tool-result-handler.js";
 export { isExitCondition, lastActionFailed } from "./loop/exit-conditions.js";
-export { reactLoop, type RuntimeDeps } from "./loop/react-loop.js";
+export {
+  reactLoop,
+  type DelegateRequest,
+  type DelegateResult,
+  type DelegateRunner,
+  type RuntimeDeps,
+} from "./loop/react-loop.js";
 export { resumeFromInterrupt } from "./interrupt/resume-executor.js";
