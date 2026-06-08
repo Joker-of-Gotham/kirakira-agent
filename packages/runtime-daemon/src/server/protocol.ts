@@ -1,48 +1,12 @@
-import type { ControlMessage } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
-import type { EventFilter } from "@kirakira/event-store";
-import type { RunEvent } from "@kirakira/event-store";
-import type { RunStateSnapshot } from "../snapshot.js";
+import type {
+  ControlMessage,
+  EventFilter,
+  RuntimeClientMessage,
+  RuntimeServerMessage,
+} from "@kirakira/runtime-contracts";
 
-export type ClientMessage =
-  | {
-      type: "control";
-      message: ControlMessage;
-      messageId?: string;
-    }
-  | {
-      type: "subscribe";
-      runId?: string;
-      filter?: EventFilter;
-      afterSeq?: number;
-      messageId?: string;
-    }
-  | {
-      type: "unsubscribe";
-      subscriptionId: string;
-      messageId?: string;
-    }
-  | {
-      type: "get_state";
-      runId: string;
-      messageId: string;
-    }
-  | {
-      type: "ping";
-      messageId?: string;
-    };
-
-export type ServerMessage =
-  | { type: "event"; event: RunEvent }
-  | { type: "state_snapshot"; state: RunStateSnapshot }
-  | { type: "error"; code: string; message: string; details?: unknown }
-  | { type: "ack"; messageId: string; result?: unknown }
-  | { type: "pong"; messageId?: string }
-  | {
-      type: "subscribed";
-      subscriptionId: string;
-      messageId?: string;
-      replayedThroughSeq?: number;
-    };
+export type ClientMessage = RuntimeClientMessage;
+export type ServerMessage = RuntimeServerMessage;
 
 export function parseClientMessage(raw: unknown): ClientMessage | null {
   if (!raw || typeof raw !== "object") return null;

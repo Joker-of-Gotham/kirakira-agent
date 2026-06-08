@@ -5,7 +5,7 @@ import type {
   SubagentContractRecord,
   SubagentResultRecord,
   SubagentScopeRecord,
-} from "@kirakira/event-store";
+} from "@kirakira/runtime-contracts";
 
 export type RunDashboardStatus =
   | "idle"

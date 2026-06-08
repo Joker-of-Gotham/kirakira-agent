@@ -1,0 +1,28 @@
+{
+  "name": "@kirakira/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kirakira Agent desktop workbench",
+  "type": "module",
+  "main": "./dist/main/main.js",
+  "scripts": {
+    "build": "vite build --config vite.renderer.config.ts && tsc -p tsconfig.main.json",
+    "dev:renderer": "vite --config vite.renderer.config.ts --host 127.0.0.1 --port 5174",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json"
+  },
+  "dependencies": {
+    "@kirakira/frontend-app": "workspace:*",
+    "@kirakira/frontend-core": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
+    "@kirakira/runtime-daemon": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "electron": "^42.3.3",
+    "vite": "^8.0.16"
+  }
+}

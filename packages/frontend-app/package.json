@@ -1,0 +1,32 @@
+{
+  "name": "@kirakira/frontend-app",
+  "version": "0.1.0",
+  "description": "Shared React workbench for Kirakira web and desktop runtime surfaces",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./styles.css": "./src/styles.css"
+  },
+  "sideEffects": ["./src/styles.css"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/frontend-core": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
+    "lucide-react": "^1.17.0",
+    "react": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0"
+  }
+}

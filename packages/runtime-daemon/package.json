@@ -17,6 +17,7 @@
     "@kirakira/agent-runtime": "workspace:*",
     "@kirakira/event-store": "workspace:*",
     "@kirakira/orchestrator-kernel": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
     "ulid": "^2.3.0",
     "ws": "^8.18.0"
   },

@@ -1,4 +1,4 @@
-import type { EventFilter } from "@kirakira/event-store";
+import type { EventFilter } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 
 export interface SessionSubscription {

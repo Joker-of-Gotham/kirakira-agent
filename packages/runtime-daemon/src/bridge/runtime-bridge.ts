@@ -1,5 +1,5 @@
 import type { WorkerState, WorkerSummary } from "@kirakira/agent-runtime";
-import type { RunEvent } from "@kirakira/event-store";
+import type { RunEvent } from "@kirakira/runtime-contracts";
 import type { OrchestratorKernel } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
 
 export class RuntimeBridge {

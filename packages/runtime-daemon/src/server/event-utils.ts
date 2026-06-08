@@ -1,5 +1,4 @@
-import type { EventFilter } from "@kirakira/event-store";
-import type { RunEvent } from "@kirakira/event-store";
+import type { EventFilter, RunEvent } from "@kirakira/runtime-contracts";
 
 export function eventMatchesSubscription(
   ev: RunEvent,

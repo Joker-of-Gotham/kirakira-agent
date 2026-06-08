@@ -1,36 +1,16 @@
 import { AgentRuntime } from "@kirakira/agent-runtime";
-import type { EventWriter, RunEvent } from "@kirakira/event-store";
+import type { EventWriter } from "@kirakira/event-store";
+import type {
+  ControlMessage,
+  RunEvent,
+  RuntimeRunMode,
+  RuntimeRunOptions,
+} from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 
-export type RunMode = "interactive" | "headless" | "dry_run";
-
-export interface RunOptions {
-  budgetUsd?: number;
-  workspaceRoot?: string;
-  metadata?: Record<string, unknown>;
-}
-
-export type ControlMessage =
-  | { type: "submit"; prompt: string; mode: RunMode; options?: RunOptions }
-  | {
-      type: "steer";
-      runId: string;
-      instruction: string;
-      priority?: "high" | "normal";
-    }
-  | { type: "enqueue"; prompt: string; priority?: number; runId?: string }
-  | {
-      type: "approve";
-      runId: string;
-      ticketId: string;
-      decision: "approve" | "reject";
-      reason?: string;
-    }
-  | { type: "provide_input"; runId: string; interruptId: string; data: unknown }
-  | { type: "drain" }
-  | { type: "cancel"; runId: string; reason?: string }
-  | { type: "resume"; runId: string; fromCheckpoint?: string }
-  | { type: "inspect"; runId: string; includeEvents?: boolean };
+export type RunMode = RuntimeRunMode;
+export type RunOptions = RuntimeRunOptions;
+export type { ControlMessage };
 
 interface RunRecord {
   runId: string;

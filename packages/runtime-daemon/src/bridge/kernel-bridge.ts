@@ -1,11 +1,14 @@
 import { EventWriter } from "@kirakira/event-store";
-import type { RunEvent } from "@kirakira/event-store";
-import {
-  OrchestratorKernel,
-  type ControlMessage,
-  type RunMode,
-  type RunOptions,
-} from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import { OrchestratorKernel } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import type {
+  ControlMessage,
+  RunEvent,
+  RuntimeRunMode,
+  RuntimeRunOptions,
+} from "@kirakira/runtime-contracts";
+
+type RunMode = RuntimeRunMode;
+type RunOptions = RuntimeRunOptions;
 
 export class KernelBridge {
   private readonly eventStoreBasePath?: string;

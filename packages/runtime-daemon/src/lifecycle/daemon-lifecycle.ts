@@ -1,8 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { EventReader } from "@kirakira/event-store";
-import type { EventFilter, RunEvent } from "@kirakira/event-store";
-import type { ControlMessage } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import type { ControlMessage, EventFilter, RunEvent } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
 import { KernelBridge } from "../bridge/kernel-bridge.js";

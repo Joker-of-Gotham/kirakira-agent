@@ -1,4 +1,9 @@
-import type { EventFilter, RunEvent } from "@kirakira/event-store";
+import type {
+  EventFilter,
+  RunEvent,
+  RuntimeRunMode,
+  RuntimeRunOptions,
+} from "@kirakira/runtime-contracts";
 
 export type RuntimeTransportMode = "browser-gateway" | "desktop-ipc" | "mock";
 export type RuntimeConnectionState =
@@ -12,10 +17,12 @@ export type Unsubscribe = () => void;
 
 export interface SubmitPromptRequest {
   prompt: string;
-  mode?: "interactive" | "batch" | "background";
+  mode?: RuntimeRunMode;
+  options?: RuntimeRunOptions;
 }
 
 export interface ApprovalDecision {
+  runId: string;
   ticketId: string;
   decision: "approve" | "reject";
   reason?: string;

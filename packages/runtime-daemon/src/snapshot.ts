@@ -1,35 +1,13 @@
-import type { WorkerSummary } from "@kirakira/agent-runtime";
 import type { OrchestratorKernel } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import type { RunStateSnapshot } from "@kirakira/runtime-contracts";
 
-export interface TaskGraphSummary {
-  totalNodes: number;
-  completedNodes: number;
-  runningNodes: number;
-  failedNodes: number;
-}
-
-export interface ApprovalSummary {
-  ticketId: string;
-  action: string;
-  reason: string;
-  requestedAt: string;
-}
-
-export interface CostInfo {
-  totalCostUsd: number;
-  totalTokens: number;
-  budgetRemainingUsd?: number;
-}
-
-export interface RunStateSnapshot {
-  runId: string;
-  status: string;
-  graph?: TaskGraphSummary;
-  activeWorkers: WorkerSummary[];
-  pendingApprovals: ApprovalSummary[];
-  costSummary: CostInfo;
-  checkpointId?: string;
-}
+export type {
+  ApprovalSummary,
+  CostInfo,
+  RunStateSnapshot,
+  RuntimeWorkerSummary,
+  TaskGraphSummary,
+} from "@kirakira/runtime-contracts";
 
 export function buildRunStateSnapshot(
   kernel: OrchestratorKernel,

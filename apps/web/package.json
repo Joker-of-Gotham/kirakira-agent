@@ -1,0 +1,24 @@
+{
+  "name": "@kirakira/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Kirakira Agent web workbench",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite --host 127.0.0.1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@kirakira/frontend-app": "workspace:*",
+    "@kirakira/frontend-core": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.16"
+  }
+}

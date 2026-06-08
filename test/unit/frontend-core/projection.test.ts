@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunEvent } from "../../../packages/event-store/src/index.js";
+import type { RunEvent } from "../../../packages/runtime-contracts/src/index.js";
 import {
   createEmptyRunDashboard,
   projectRunDashboard,

@@ -1,7 +1,7 @@
 {
-  "name": "@kirakira/frontend-core",
+  "name": "@kirakira/runtime-contracts",
   "version": "0.1.0",
-  "description": "Browser-safe presentation contracts and run projections for Kirakira web and desktop surfaces",
+  "description": "Browser-safe serializable runtime contracts for Kirakira run events, controls, snapshots, and daemon protocol frames",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,8 +14,5 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit"
-  },
-  "dependencies": {
-    "@kirakira/runtime-contracts": "workspace:*"
   }
 }

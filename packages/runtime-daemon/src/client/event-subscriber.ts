@@ -1,12 +1,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { EventFilter } from "@kirakira/event-store";
-import type { RunEvent } from "@kirakira/event-store";
+import type { EventFilter, RunEvent, RunStateSnapshot } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
 import { parseServerMessage } from "../server/protocol.js";
 import type { ServerMessage } from "../server/protocol.js";
-import type { RunStateSnapshot } from "../snapshot.js";
 
 const defaultSocketPath = () => join(homedir(), ".kirakira-agent", "daemon.sock");
 

@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@kirakira/core": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
     "better-sqlite3": "^11.8.1",
     "ulid": "^2.3.0"
   },

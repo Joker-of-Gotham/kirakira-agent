@@ -1,6 +1,10 @@
-export type { ControlMessage, RunMode, RunOptions } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
-
-export type { EventFilter, RunEvent } from "@kirakira/event-store";
+export type {
+  ControlMessage,
+  EventFilter,
+  RunEvent,
+  RuntimeRunMode as RunMode,
+  RuntimeRunOptions as RunOptions,
+} from "@kirakira/runtime-contracts";
 
 export type { WorkerSummary } from "@kirakira/agent-runtime";
 

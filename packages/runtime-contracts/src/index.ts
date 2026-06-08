@@ -1,4 +1,9 @@
 export type {
+  ControlMessage,
+  RuntimeRunMode,
+  RuntimeRunOptions,
+} from "./control.js";
+export type {
   ApprovalRecord,
   ArtifactRecord,
   Checkpoint,
@@ -25,5 +30,16 @@ export type {
   TaskNode,
   TaskNodeStatus,
   ToolInvocationRecord,
-} from "@kirakira/runtime-contracts";
-export { stableStringify } from "@kirakira/runtime-contracts";
+} from "./events.js";
+export { stableStringify } from "./events.js";
+export type {
+  RuntimeClientMessage,
+  RuntimeServerMessage,
+} from "./protocol.js";
+export type {
+  ApprovalSummary,
+  CostInfo,
+  RunStateSnapshot,
+  RuntimeWorkerSummary,
+  TaskGraphSummary,
+} from "./snapshot.js";

@@ -1,11 +1,17 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ControlMessage, RunMode } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import type {
+  ControlMessage,
+  RunStateSnapshot,
+  RuntimeRunMode,
+  RuntimeRunOptions,
+} from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
 import { parseServerMessage } from "../server/protocol.js";
 import type { ServerMessage } from "../server/protocol.js";
-import type { RunStateSnapshot } from "../snapshot.js";
+
+type RunMode = RuntimeRunMode;
 
 const defaultSocketPath = () => join(homedir(), ".kirakira-agent", "daemon.sock");
 
@@ -165,10 +171,17 @@ export class DaemonClient {
     });
   }
 
-  async submitPrompt(prompt: string, mode: RunMode): Promise<string> {
+  async submitPrompt(
+    prompt: string,
+    mode: RunMode,
+    options?: RuntimeRunOptions,
+  ): Promise<string> {
     const result = await this.rpcResult({
       type: "control",
-      message: { type: "submit", prompt, mode },
+      message:
+        options !== undefined
+          ? { type: "submit", prompt, mode, options }
+          : { type: "submit", prompt, mode },
     });
     const runId = (result as { runId?: string } | null)?.runId;
     if (typeof runId !== "string") {
@@ -203,22 +216,23 @@ export class DaemonClient {
     ticketId: string,
     decision: "approve" | "reject",
     reason?: string,
+    runId = this.lastRunId,
   ): Promise<void> {
-    if (!this.lastRunId) throw new Error("No active run");
+    if (!runId) throw new Error("No active run");
     await this.rpcResult({
       type: "control",
       message: ctl(
         reason !== undefined
           ? {
               type: "approve",
-              runId: this.lastRunId,
+              runId,
               ticketId,
               decision,
               reason,
             }
           : {
               type: "approve",
-              runId: this.lastRunId,
+              runId,
               ticketId,
               decision,
             },

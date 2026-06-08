@@ -4,7 +4,7 @@ import type {
   DeepResearchProgressEvent,
   ResearchSourceKind,
 } from "@kirakira/deep-research";
-import type { RunEventKind } from "@kirakira/event-store";
+import type { RunEventKind } from "@kirakira/runtime-contracts";
 
 export type ResearchEventEmitter = (
   kind: RunEventKind,

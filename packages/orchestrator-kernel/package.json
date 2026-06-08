@@ -19,6 +19,7 @@
     "@kirakira/deep-research": "workspace:*",
     "@kirakira/event-store": "workspace:*",
     "@kirakira/policy-engine": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
     "p-queue": "^8.0.1",
     "ulid": "^2.3.0"
   },
