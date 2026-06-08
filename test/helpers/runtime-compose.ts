@@ -41,44 +41,120 @@ export function composeService(compose: ComposeFile, name: string): ComposeServi
   return service;
 }
 
-export function environmentValue(service: ComposeService, name: string): string | undefined {
+export function environmentValue(
+  service: ComposeService,
+  name: string,
+  env: Record<string, string | undefined> = process.env,
+): string | undefined {
   const environment = service.environment;
   if (!environment) return undefined;
   if (Array.isArray(environment)) {
     const entry = environment.find((item) => item.startsWith(`${name}=`));
-    return entry?.slice(name.length + 1);
+    return entry ? resolveComposeValue(entry.slice(name.length + 1), env) : undefined;
   }
   const value = environment[name];
-  return value === undefined || value === null ? undefined : String(value);
+  return value === undefined || value === null ? undefined : resolveComposeValue(String(value), env);
 }
 
-function readPortValue(value: string | number | undefined): number | undefined {
+function matchingBrace(value: string, openBraceIndex: number): number {
+  let depth = 1;
+  for (let index = openBraceIndex + 1; index < value.length; index += 1) {
+    if (value[index] === "$" && value[index + 1] === "{") {
+      depth += 1;
+      index += 1;
+      continue;
+    }
+    if (value[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return index;
+    }
+  }
+  return -1;
+}
+
+function evaluateComposeExpression(expression: string, env: Record<string, string | undefined>): string {
+  const match = /^([_a-zA-Z][_a-zA-Z0-9]*)(?:(:?[-?+])([\s\S]*))?$/u.exec(expression);
+  if (!match) return "";
+  const [, name, operator, operand = ""] = match;
+  const value = env[name];
+  if (!operator) return value ?? "";
+  if (operator === ":-") {
+    return value === undefined || value === "" ? resolveComposeValue(operand, env) : value;
+  }
+  if (operator === "-") {
+    return value === undefined ? resolveComposeValue(operand, env) : value;
+  }
+  return value ?? "";
+}
+
+export function resolveComposeValue(
+  value: string,
+  env: Record<string, string | undefined> = process.env,
+): string {
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    if (char !== "$") {
+      output += char;
+      continue;
+    }
+    if (value[index + 1] === "$") {
+      output += "$";
+      index += 1;
+      continue;
+    }
+    if (value[index + 1] === "{") {
+      const closeIndex = matchingBrace(value, index + 1);
+      if (closeIndex === -1) {
+        output += char;
+        continue;
+      }
+      output += evaluateComposeExpression(value.slice(index + 2, closeIndex), env);
+      index = closeIndex;
+      continue;
+    }
+    output += char;
+  }
+  return output;
+}
+
+function readPortValue(
+  value: string | number | undefined,
+  env: Record<string, string | undefined> = process.env,
+): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value === "number") return value;
-  const port = Number(value);
+  const port = Number(resolveComposeValue(value, env));
   return Number.isInteger(port) ? port : undefined;
 }
 
-function parseStringPort(value: string): { published?: number; target?: number } {
-  const withoutProtocol = value.split("/")[0] ?? value;
+function parseStringPort(
+  value: string,
+  env: Record<string, string | undefined> = process.env,
+): { published?: number; target?: number } {
+  const withoutProtocol = resolveComposeValue(value, env).split("/")[0] ?? value;
   const parts = withoutProtocol.split(":");
   if (parts.length === 1) {
-    const target = readPortValue(parts[0]);
+    const target = readPortValue(parts[0], env);
     return { published: target, target };
   }
   return {
-    published: readPortValue(parts[parts.length - 2]),
-    target: readPortValue(parts[parts.length - 1]),
+    published: readPortValue(parts[parts.length - 2], env),
+    target: readPortValue(parts[parts.length - 1], env),
   };
 }
 
-export function publishedPortForTarget(service: ComposeService, targetPort: number): number {
+export function publishedPortForTarget(
+  service: ComposeService,
+  targetPort: number,
+  env: Record<string, string | undefined> = process.env,
+): number {
   for (const port of service.ports ?? []) {
     const mapping = typeof port === "string"
-      ? parseStringPort(port)
+      ? parseStringPort(port, env)
       : {
-          published: readPortValue(port.published),
-          target: readPortValue(port.target),
+          published: readPortValue(port.published, env),
+          target: readPortValue(port.target, env),
         };
     if (mapping.target === targetPort && mapping.published !== undefined) {
       return mapping.published;

@@ -2,19 +2,19 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_USER: kirakira_test
-      POSTGRES_PASSWORD: kirakira_test
-      POSTGRES_DB: kirakira_test
-    ports: ["5432:5432"]
+      POSTGRES_USER: ${KIRAKIRA_POSTGRES_USER:-kirakira_test}
+      POSTGRES_PASSWORD: ${KIRAKIRA_POSTGRES_PASSWORD:-kirakira_test}
+      POSTGRES_DB: ${KIRAKIRA_POSTGRES_DB:-kirakira_test}
+    ports: ["${KIRAKIRA_POSTGRES_PORT:-5432}:5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U kirakira_test"]
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 10
 
   redis:
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["${KIRAKIRA_REDIS_PORT:-6379}:6379"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
@@ -23,7 +23,7 @@ services:
 
   qdrant:
     image: qdrant/qdrant:latest
-    ports: ["6333:6333", "6334:6334"]
+    ports: ["${KIRAKIRA_QDRANT_HTTP_PORT:-6333}:6333", "${KIRAKIRA_QDRANT_GRPC_PORT:-6334}:6334"]
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
       interval: 5s
@@ -33,10 +33,12 @@ services:
   neo4j:
     image: neo4j:5-community
     environment:
-      NEO4J_AUTH: neo4j/testpassword
-    ports: ["7687:7687", "7474:7474"]
+      NEO4J_AUTH: ${KIRAKIRA_NEO4J_AUTH:-${KIRAKIRA_NEO4J_USER:-neo4j}/${KIRAKIRA_NEO4J_PASSWORD:-testpassword}}
+      KIRAKIRA_NEO4J_USER: ${KIRAKIRA_NEO4J_USER:-neo4j}
+      KIRAKIRA_NEO4J_PASSWORD: ${KIRAKIRA_NEO4J_PASSWORD:-testpassword}
+    ports: ["${KIRAKIRA_NEO4J_BOLT_PORT:-7687}:7687", "${KIRAKIRA_NEO4J_HTTP_PORT:-7474}:7474"]
     healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p testpassword 'RETURN 1'"]
+      test: ["CMD-SHELL", "cypher-shell -u \"$${KIRAKIRA_NEO4J_USER}\" -p \"$${KIRAKIRA_NEO4J_PASSWORD}\" 'RETURN 1'"]
       interval: 10s
       timeout: 10s
       retries: 10
@@ -45,9 +47,9 @@ services:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports: ["9000:9000", "9001:9001"]
+      MINIO_ROOT_USER: ${KIRAKIRA_MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${KIRAKIRA_MINIO_ROOT_PASSWORD:-minioadmin}
+    ports: ["${KIRAKIRA_MINIO_API_PORT:-9000}:9000", "${KIRAKIRA_MINIO_CONSOLE_PORT:-9001}:9001"]
     healthcheck:
       test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 5s

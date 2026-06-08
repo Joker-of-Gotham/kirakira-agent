@@ -101,6 +101,197 @@ function resolveBindingValue(target, value) {
   return value;
 }
 
+function firstConfiguredEnvValue(target, env) {
+  for (const name of envNames(target)) {
+    const value = env[name];
+    if (value !== undefined && value !== "") return value;
+  }
+  return undefined;
+}
+
+function resolveConfiguredValue(spec, env) {
+  if (!isRecord(spec)) return spec;
+  const envValue = firstConfiguredEnvValue(spec.env, env);
+  if (envValue !== undefined) return envValue;
+  if (Object.prototype.hasOwnProperty.call(spec, "default")) return spec.default;
+  return undefined;
+}
+
+function collectConfiguredEnv(output, spec, value) {
+  if (value === undefined || value === null || !isRecord(spec)) return;
+  for (const name of envNames(spec.env)) {
+    output[name] = String(value);
+  }
+}
+
+function mergeSpecRecord(...records) {
+  const merged = {};
+  for (const record of records) {
+    if (!isRecord(record)) continue;
+    for (const [key, value] of Object.entries(record)) {
+      if (isRecord(value) && isRecord(merged[key])) {
+        merged[key] = { ...merged[key], ...value };
+      } else {
+        merged[key] = value;
+      }
+    }
+  }
+  return merged;
+}
+
+function hostForUrl(host) {
+  const value = String(host);
+  return value.includes(":") && !value.startsWith("[") ? `[${value}]` : value;
+}
+
+function renderAuthority({ host, port, username, password, authInUrl }) {
+  const userInfo = authInUrl === true && username !== undefined
+    ? `${encodeURIComponent(String(username))}${
+        password === undefined ? "" : `:${encodeURIComponent(String(password))}`
+      }@`
+    : "";
+  const portPart = port === undefined || port === "" ? "" : `:${port}`;
+  return `${userInfo}${hostForUrl(host)}${portPart}`;
+}
+
+function serviceUrlPath(descriptor, resolved) {
+  const path = resolved.database ?? resolved.path;
+  if (path === undefined || path === null || path === "") return "";
+  const pathText = String(path);
+  if (resolved.database === undefined && pathText.startsWith("/")) return pathText;
+  return `/${encodeURIComponent(pathText)}`;
+}
+
+function resolveServiceDescriptor(name, config, profile, env) {
+  const base = config.serviceBindings?.[name];
+  if (!isRecord(base)) {
+    throw new Error(`Runtime profile service "${name}" is missing a serviceBindings descriptor`);
+  }
+  const descriptor = mergeSpecRecord(
+    base,
+    profile.serviceEndpointDefaults,
+    profile.serviceEndpoints?.[name],
+  );
+  const serviceEnv = {};
+  const resolved = {};
+  for (const key of ["scheme", "host", "port", "username", "password", "database", "path"]) {
+    const value = resolveConfiguredValue(descriptor[key], env);
+    if (value !== undefined) resolved[key] = value;
+    collectConfiguredEnv(serviceEnv, descriptor[key], value);
+  }
+  if (resolved.scheme === undefined || resolved.host === undefined) {
+    throw new Error(`Runtime profile service "${name}" requires scheme and host`);
+  }
+  const url = `${resolved.scheme}://${renderAuthority({
+    host: resolved.host,
+    port: resolved.port,
+    username: resolved.username,
+    password: resolved.password,
+    authInUrl: descriptor.authInUrl,
+  })}${serviceUrlPath(descriptor, resolved)}`;
+  return { url, serviceEnv };
+}
+
+function resolveServiceEndpoints(config, profile, env) {
+  const services = {};
+  const serviceEnv = {};
+  if (isRecord(profile.serviceEndpoints)) {
+    for (const serviceName of Object.keys(profile.serviceEndpoints)) {
+      const rendered = resolveServiceDescriptor(serviceName, config, profile, env);
+      services[serviceName] = rendered.url;
+      Object.assign(serviceEnv, rendered.serviceEnv);
+    }
+    return { services, serviceEnv };
+  }
+
+  for (const [serviceName, url] of Object.entries(profile.services ?? {})) {
+    if (typeof url === "string") services[serviceName] = url;
+  }
+  return { services, serviceEnv };
+}
+
+function resolveEndpointSpecs(endpoint, env, options = {}) {
+  if (!isRecord(endpoint)) return { endpoint, endpointEnv: {} };
+  const endpointEnv = {};
+  const resolved = { ...endpoint };
+  for (const key of ["protocol", "host", "port", "path", options.urlField ?? "url"]) {
+    const value = resolveConfiguredValue(endpoint[key], env);
+    if (value !== undefined) resolved[key] = value;
+    collectConfiguredEnv(endpointEnv, endpoint[key], value);
+  }
+
+  const urlField = options.urlField ?? "url";
+  if (
+    typeof resolved[urlField] !== "string"
+    && typeof resolved.host === "string"
+    && resolved.port !== undefined
+  ) {
+    const protocol = resolved.protocol ?? options.protocol ?? "http";
+    const path = typeof resolved.path === "string"
+      ? (resolved.path.startsWith("/") ? resolved.path : `/${resolved.path}`)
+      : "";
+    resolved[urlField] = `${protocol}://${hostForUrl(resolved.host)}:${resolved.port}${path}`;
+  }
+
+  return { endpoint: resolved, endpointEnv };
+}
+
+function resolveDynamicProfile(config, profile, env) {
+  const { services, serviceEnv } = resolveServiceEndpoints(config, profile, env);
+  const resolvedEnv = { ...serviceEnv };
+
+  const webResult = resolveEndpointSpecs(profile.presentation?.web, env, {
+    protocol: "http",
+    urlField: "url",
+  });
+  Object.assign(resolvedEnv, webResult.endpointEnv);
+
+  const desktopResult = resolveEndpointSpecs(profile.presentation?.desktop, env, {
+    protocol: "http",
+    urlField: "rendererUrl",
+  });
+  Object.assign(resolvedEnv, desktopResult.endpointEnv);
+
+  const gatewayResult = resolveEndpointSpecs(profile.daemon?.browserGateway, env, {
+    protocol: "ws",
+    urlField: "endpoint",
+  });
+  if (
+    isRecord(gatewayResult.endpoint)
+    && gatewayResult.endpoint.allowedOrigins === undefined
+  ) {
+    const allowedOrigins = [
+      webResult.endpoint?.url,
+      desktopResult.endpoint?.rendererUrl,
+    ].filter((value) => typeof value === "string" && value.length > 0);
+    if (allowedOrigins.length > 0) {
+      gatewayResult.endpoint = {
+        ...gatewayResult.endpoint,
+        allowedOrigins,
+      };
+    }
+  }
+  Object.assign(resolvedEnv, gatewayResult.endpointEnv);
+
+  return {
+    services,
+    resolvedEnv,
+    daemon: profile.daemon
+      ? {
+          ...profile.daemon,
+          browserGateway: gatewayResult.endpoint,
+        }
+      : profile.daemon,
+    presentation: profile.presentation
+      ? {
+          ...profile.presentation,
+          web: webResult.endpoint,
+          desktop: desktopResult.endpoint,
+        }
+      : profile.presentation,
+  };
+}
+
 function renderBoundEnv(env, profile) {
   const bindings = profile.envBindings ?? {};
   for (const [serviceName, url] of Object.entries(profile.services ?? {})) {
@@ -157,9 +348,11 @@ export function resolveRuntimeProfile(
     throw new Error(`Unknown runtime profile "${name}". Available profiles: ${available}`);
   }
   const envBindings = mergeEnvBindings(config.envBindings, profile.envBindings);
+  const dynamicProfile = resolveDynamicProfile(config, profile, env);
   return {
     name,
     ...profile,
+    ...dynamicProfile,
     envBindings,
     workspaceRoot: env.KIRAKIRA_WORKSPACE_ROOT ?? profile.workspaceRoot,
     appRoot: env.KIRAKIRA_APP_ROOT ?? profile.appRoot,
@@ -184,6 +377,7 @@ export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {
     KIRAKIRA_APP_ROOT: profile.appRoot,
     KIRAKIRA_MCP_WORKSPACE_ROOT: profile.mcp?.workspaceRoot ?? profile.workspaceRoot,
     KIRAKIRA_MCP_APP_ROOT: profile.mcp?.appRoot ?? profile.appRoot,
+    ...(profile.resolvedEnv ?? {}),
   };
   renderBoundEnv(env, profile);
   return env;

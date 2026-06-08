@@ -66,6 +66,41 @@ describe("runtime profile rendering", () => {
     expect(env.KIRAKIRA_DESKTOP_DEV_URL).toBe("http://127.0.0.1:5174");
   });
 
+  it("keeps container service URLs on internal ports when host published ports are overridden", () => {
+    const profile = resolveRuntimeProfile("container", loadRuntimeProfiles(), {
+      KIRAKIRA_POSTGRES_PORT: "15432",
+      KIRAKIRA_REDIS_PORT: "16379",
+      KIRAKIRA_QDRANT_HTTP_PORT: "16333",
+      KIRAKIRA_NEO4J_BOLT_PORT: "17687",
+      KIRAKIRA_MINIO_API_PORT: "19000",
+    });
+    const env = renderRuntimeEnv(profile);
+
+    expect(env.DATABASE_URL).toBe("postgres://kirakira:kirakira@postgres:5432/kirakira");
+    expect(env.REDIS_URL).toBe("redis://redis:6379");
+    expect(env.QDRANT_URL).toBe("http://qdrant:6333");
+    expect(env.NEO4J_URI).toBe("bolt://neo4j:7687");
+    expect(env.S3_ENDPOINT).toBe("http://minio:9000");
+  });
+
+  it("renders workbench presentation and gateway URLs from endpoint port overrides", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {
+      KIRAKIRA_WEB_PORT: "5184",
+      KIRAKIRA_DESKTOP_RENDERER_PORT: "5175",
+      KIRAKIRA_BROWSER_GATEWAY_PORT: "17383",
+    });
+    const env = renderRuntimeEnv(profile);
+
+    expect(env.KIRAKIRA_WEB_URL).toBe("http://127.0.0.1:5184");
+    expect(env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5175");
+    expect(env.KIRAKIRA_DESKTOP_DEV_URL).toBe("http://127.0.0.1:5175");
+    expect(env.VITE_KIRAKIRA_GATEWAY_URL).toBe("ws://127.0.0.1:17383/runtime");
+    expect(env.KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS).toBe(
+      "http://127.0.0.1:5184,http://127.0.0.1:5175",
+    );
+    expect(JSON.stringify(env)).not.toContain("5173");
+  });
+
   it("renders service env and aliases from declarative bindings", () => {
     const config = {
       schemaVersion: 1,

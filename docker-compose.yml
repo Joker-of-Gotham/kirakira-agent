@@ -53,7 +53,7 @@ services:
   neo4j:
     image: neo4j:5-community
     environment:
-      NEO4J_AUTH: ${KIRAKIRA_NEO4J_AUTH:-neo4j/testpassword}
+      NEO4J_AUTH: ${KIRAKIRA_NEO4J_AUTH:-${KIRAKIRA_NEO4J_USER:-neo4j}/${KIRAKIRA_NEO4J_PASSWORD:-testpassword}}
       KIRAKIRA_NEO4J_USER: ${KIRAKIRA_NEO4J_USER:-neo4j}
       KIRAKIRA_NEO4J_PASSWORD: ${KIRAKIRA_NEO4J_PASSWORD:-testpassword}
     expose:
@@ -119,20 +119,20 @@ services:
       - .env
     environment:
       KIRAKIRA_WORKSPACE_ROOT: /workspace
-      KIRAKIRA_PDP_ENDPOINT: tcp://kirakirad:17777
+      KIRAKIRA_PDP_ENDPOINT: ${KIRAKIRA_PDP_ENDPOINT:-tcp://kirakirad:17777}
       KIRAKIRA_POLICY_BUNDLE: /workspace/policies
       FORCE_COLOR: "3"
       COLORTERM: truecolor
       TERM: xterm-256color
-      DATABASE_URL: ${DATABASE_URL:-postgres://kirakira:kirakira@postgres:5432/kirakira}
+      DATABASE_URL: ${DATABASE_URL:-postgres://${KIRAKIRA_POSTGRES_USER:-kirakira}:${KIRAKIRA_POSTGRES_PASSWORD:-kirakira}@postgres:5432/${KIRAKIRA_POSTGRES_DB:-kirakira}}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       NEO4J_URI: ${NEO4J_URI:-bolt://neo4j:7687}
       NEO4J_USER: ${KIRAKIRA_NEO4J_USER:-neo4j}
       NEO4J_PASSWORD: ${KIRAKIRA_NEO4J_PASSWORD:-testpassword}
       S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
-      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-minioadmin}
-      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-minioadmin}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:-${KIRAKIRA_MINIO_ROOT_USER:-minioadmin}}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:-${KIRAKIRA_MINIO_ROOT_PASSWORD:-minioadmin}}
     working_dir: /workspace
     volumes:
       - .:/workspace

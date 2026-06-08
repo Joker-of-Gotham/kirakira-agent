@@ -1,7 +1,15 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const devServerFromUrl = (value = "http://127.0.0.1:5174") => {
+const desktopRendererUrl = () => {
+  const override =
+    process.env.KIRAKIRA_DESKTOP_RENDERER_URL?.trim()
+    || process.env.KIRAKIRA_DESKTOP_DEV_URL?.trim();
+  if (override) return override;
+  return `http://127.0.0.1:${process.env.KIRAKIRA_DESKTOP_RENDERER_PORT?.trim() || "5174"}`;
+};
+
+const devServerFromUrl = (value: string) => {
   const url = new URL(value);
   return {
     host: url.hostname,
@@ -17,7 +25,5 @@ export default defineConfig({
     outDir: "dist/renderer",
     emptyOutDir: true,
   },
-  server: devServerFromUrl(
-    process.env.KIRAKIRA_DESKTOP_RENDERER_URL ?? process.env.KIRAKIRA_DESKTOP_DEV_URL,
-  ),
+  server: devServerFromUrl(desktopRendererUrl()),
 });
