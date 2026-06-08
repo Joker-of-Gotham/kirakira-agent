@@ -53,4 +53,75 @@ describe("workbench launcher plan", () => {
       args: ["--filter", "@kirakira/runtime-daemon", "start"],
     });
   });
+
+  it("plans new workbench surfaces from profile configuration", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const configurableProfile = {
+      ...profile,
+      workbench: {
+        ...profile.workbench,
+        packages: {
+          ...profile.workbench.packages,
+          inspector: {
+            package: "@kirakira/web",
+            script: "typecheck",
+          },
+        },
+        surfaces: {
+          ...profile.workbench.surfaces,
+          inspector: [
+            {
+              package: "inspector",
+              mode: "foreground",
+            },
+          ],
+        },
+      },
+    };
+
+    const plan = buildWorkbenchPlan(configurableProfile, "inspector", { skipInfra: true });
+
+    expect(plan.surface).toBe("inspector");
+    expect(plan.steps).toEqual([
+      {
+        name: "inspector",
+        mode: "foreground",
+        command: process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+        args: ["--filter", "@kirakira/web", "typecheck"],
+        env: plan.env,
+      },
+    ]);
+  });
+
+  it("uses the profile default surface when no surface is requested", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const plan = buildWorkbenchPlan(profile, undefined, { skipInfra: true, skipDaemon: true });
+
+    expect(plan.surface).toBe("web");
+    expect(plan.steps.map((step) => step.name)).toEqual(["web"]);
+  });
+
+  it("fails loudly for unknown surfaces and package references", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+
+    expect(() => buildWorkbenchPlan(profile, "unknown", { skipInfra: true })).toThrow(
+      /Unknown workbench surface "unknown"/u,
+    );
+
+    expect(() =>
+      buildWorkbenchPlan(
+        {
+          ...profile,
+          workbench: {
+            ...profile.workbench,
+            surfaces: {
+              broken: [{ package: "missing", mode: "foreground" }],
+            },
+          },
+        },
+        "broken",
+        { skipInfra: true },
+      ),
+    ).toThrow(/Workbench package step "missing" is not defined/u);
+  });
 });

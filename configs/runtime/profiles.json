@@ -1,6 +1,56 @@
 {
   "schemaVersion": 1,
   "defaultProfile": "container",
+  "envBindings": {
+    "services": {
+      "kirakirad": "KIRAKIRA_PDP_ENDPOINT",
+      "postgres": "DATABASE_URL",
+      "redis": "REDIS_URL",
+      "qdrant": "QDRANT_URL",
+      "neo4j": "NEO4J_URI",
+      "minio": "S3_ENDPOINT"
+    },
+    "values": {
+      "daemon.socketPath": {
+        "env": "KIRAKIRA_DAEMON_SOCKET",
+        "resolve": "daemonSocketPath"
+      },
+      "daemon.eventStorePath": "KIRAKIRA_EVENT_STORE_PATH",
+      "daemon.browserGateway.host": "KIRAKIRA_BROWSER_GATEWAY_HOST",
+      "daemon.browserGateway.port": "KIRAKIRA_BROWSER_GATEWAY_PORT",
+      "daemon.browserGateway.path": "KIRAKIRA_BROWSER_GATEWAY_PATH",
+      "daemon.browserGateway.token": [
+        "KIRAKIRA_BROWSER_GATEWAY_TOKEN",
+        "VITE_KIRAKIRA_GATEWAY_TOKEN"
+      ],
+      "presentation.web.url": "KIRAKIRA_WEB_URL",
+      "presentation.desktop.rendererUrl": [
+        "KIRAKIRA_DESKTOP_RENDERER_URL",
+        "KIRAKIRA_DESKTOP_DEV_URL"
+      ]
+    },
+    "booleans": {
+      "daemon.browserGateway.enabled": {
+        "env": "KIRAKIRA_BROWSER_GATEWAY_ENABLED",
+        "true": "1",
+        "false": "0"
+      }
+    },
+    "joined": {
+      "daemon.browserGateway.allowedOrigins": {
+        "env": "KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS",
+        "separator": ","
+      }
+    },
+    "computed": {
+      "browserGatewayEndpoint": {
+        "source": "daemon.browserGateway",
+        "urlEnv": "VITE_KIRAKIRA_GATEWAY_URL",
+        "modeEnv": "VITE_KIRAKIRA_RUNTIME_MODE",
+        "mode": "gateway"
+      }
+    }
+  },
   "profiles": {
     "container": {
       "mode": "container",
@@ -77,10 +127,52 @@
         }
       },
       "workbench": {
+        "defaultSurface": "web",
         "infraServices": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"],
-        "daemonPackage": "@kirakira/runtime-daemon",
-        "webPackage": "@kirakira/web",
-        "desktopPackage": "@kirakira/desktop"
+        "packages": {
+          "daemon": {
+            "package": "@kirakira/runtime-daemon",
+            "script": "start"
+          },
+          "web": {
+            "package": "@kirakira/web",
+            "script": "dev"
+          },
+          "desktop": {
+            "package": "@kirakira/desktop",
+            "script": "dev:renderer"
+          }
+        },
+        "surfaces": {
+          "daemon": [
+            {
+              "package": "daemon",
+              "mode": "foreground"
+            }
+          ],
+          "web": [
+            {
+              "package": "daemon",
+              "mode": "background",
+              "skipWhen": "skipDaemon"
+            },
+            {
+              "package": "web",
+              "mode": "foreground"
+            }
+          ],
+          "desktop": [
+            {
+              "package": "daemon",
+              "mode": "background",
+              "skipWhen": "skipDaemon"
+            },
+            {
+              "package": "desktop",
+              "mode": "foreground"
+            }
+          ]
+        }
       },
       "mcp": {
         "workspaceRoot": ".",

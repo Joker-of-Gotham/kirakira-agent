@@ -47,6 +47,13 @@ export { SessionManager } from "./server/session-manager.js";
 
 export { eventMatchesSubscription } from "./server/event-utils.js";
 
+export type { DaemonSocketPathOptions } from "./ipc/socket-path.js";
+export {
+  daemonSocketWebSocketUrl,
+  isWindowsNamedPipePath,
+  resolveDaemonSocketPath,
+} from "./ipc/socket-path.js";
+
 export { KernelBridge } from "./bridge/kernel-bridge.js";
 export { RuntimeBridge } from "./bridge/runtime-bridge.js";
 

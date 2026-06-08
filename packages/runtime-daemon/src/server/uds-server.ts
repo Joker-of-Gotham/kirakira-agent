@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname } from "node:path";
 import { WebSocketServer } from "ws";
+import { isWindowsNamedPipePath } from "../ipc/socket-path.js";
 import type { ServerMessage } from "./protocol.js";
 import { RuntimeSocketHub, type RuntimeSocketServerOptions } from "./runtime-socket.js";
 
@@ -20,13 +21,15 @@ export class UdsServer {
     if (this.server) {
       throw new Error("UdsServer already listening");
     }
-    const dir = dirname(socketPath);
-    mkdirSync(dir, { recursive: true });
-    if (existsSync(socketPath)) {
-      try {
-        unlinkSync(socketPath);
-      } catch {
-        throw new Error(`Unable to remove stale socket at ${socketPath}`);
+    if (!isWindowsNamedPipePath(socketPath)) {
+      const dir = dirname(socketPath);
+      mkdirSync(dir, { recursive: true });
+      if (existsSync(socketPath)) {
+        try {
+          unlinkSync(socketPath);
+        } catch {
+          throw new Error(`Unable to remove stale socket at ${socketPath}`);
+        }
       }
     }
     const server = createServer();

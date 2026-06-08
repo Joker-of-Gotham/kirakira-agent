@@ -1,11 +1,10 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import { EventReader } from "@kirakira/event-store";
 import type { ControlMessage, EventFilter, RunEvent } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
 import { KernelBridge } from "../bridge/kernel-bridge.js";
 import { RuntimeBridge } from "../bridge/runtime-bridge.js";
+import { resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { eventMatchesSubscription } from "../server/event-utils.js";
 import type { ClientMessage, ServerMessage } from "../server/protocol.js";
 import { SessionManager, type Session } from "../server/session-manager.js";
@@ -59,7 +58,7 @@ export class DaemonLifecycle {
       throw new Error("Daemon already running");
     }
     this.shutdownTimeoutMs = config.shutdownTimeoutMs ?? 30_000;
-    this.socketPath = config.socketPath ?? join(homedir(), ".kirakira-agent", "daemon.sock");
+    this.socketPath = resolveDaemonSocketPath(config.socketPath);
     this.eventStorePath = config.eventStorePath ?? "";
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);

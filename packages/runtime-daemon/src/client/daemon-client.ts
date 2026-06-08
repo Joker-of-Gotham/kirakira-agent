@@ -1,5 +1,3 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type {
   ControlMessage,
   EventFilter,
@@ -11,12 +9,11 @@ import type {
 import { RuntimeRequestTracker as RuntimeRequestTrackerImpl } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
+import { daemonSocketWebSocketUrl, resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { parseServerMessage } from "../server/protocol.js";
 import type { ServerMessage } from "../server/protocol.js";
 
 type RunMode = RuntimeRunMode;
-
-const defaultSocketPath = () => join(homedir(), ".kirakira-agent", "daemon.sock");
 
 export interface SubscribeToRunOptions {
   afterSeq?: number;
@@ -42,7 +39,7 @@ export class DaemonClient {
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private manualClose = false;
-  private lastSocketPath = defaultSocketPath();
+  private lastSocketPath = resolveDaemonSocketPath();
   private lastRunId: string | null = null;
   private readonly messageHandlers = new Set<(m: ServerMessage) => void>();
 
@@ -53,7 +50,7 @@ export class DaemonClient {
 
   async connect(socketPath?: string): Promise<void> {
     this.manualClose = false;
-    this.lastSocketPath = socketPath ?? defaultSocketPath();
+    this.lastSocketPath = resolveDaemonSocketPath(socketPath);
     await this.openOnce(this.lastSocketPath);
   }
 
@@ -99,7 +96,7 @@ export class DaemonClient {
   }
 
   private async openOnce(socketPath: string): Promise<void> {
-    const url = `ws+unix:${socketPath}:/`;
+    const url = daemonSocketWebSocketUrl(socketPath);
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(url);
       this.ws = ws;

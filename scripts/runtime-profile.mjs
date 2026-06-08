@@ -1,20 +1,13 @@
 #!/usr/bin/env node
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, posix, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join, posix, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const defaultProfilesPath = join(repoRoot, "configs", "runtime", "profiles.json");
-
-const SERVICE_ENV = {
-  kirakirad: "KIRAKIRA_PDP_ENDPOINT",
-  postgres: "DATABASE_URL",
-  redis: "REDIS_URL",
-  qdrant: "QDRANT_URL",
-  neo4j: "NEO4J_URI",
-  minio: "S3_ENDPOINT",
-};
 
 function browserGatewayEndpoint(gateway) {
   if (!gateway || gateway.enabled === false) return undefined;
@@ -33,6 +26,112 @@ function browserGatewayEndpoint(gateway) {
   const port = gateway.port;
   const path = gateway.path;
   return `${protocol}://${host}:${port}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function mergeRecordMap(base = {}, override = {}) {
+  return { ...(isRecord(base) ? base : {}), ...(isRecord(override) ? override : {}) };
+}
+
+function mergeEnvBindings(base = {}, override = {}) {
+  return {
+    services: mergeRecordMap(base.services, override.services),
+    values: mergeRecordMap(base.values, override.values),
+    booleans: mergeRecordMap(base.booleans, override.booleans),
+    joined: mergeRecordMap(base.joined, override.joined),
+    computed: mergeRecordMap(base.computed, override.computed),
+  };
+}
+
+function pathValue(root, path) {
+  if (typeof path !== "string" || path.length === 0) return undefined;
+  return path.split(".").reduce((value, segment) => {
+    if (!isRecord(value)) return undefined;
+    return value[segment];
+  }, root);
+}
+
+function envNames(target) {
+  if (typeof target === "string") return [target];
+  if (Array.isArray(target)) return target.filter((name) => typeof name === "string");
+  if (isRecord(target)) return envNames(target.env);
+  return [];
+}
+
+function setEnvValue(env, target, value) {
+  if (value === undefined || value === null) return;
+  for (const name of envNames(target)) {
+    env[name] = String(value);
+  }
+}
+
+function isWindowsNamedPipePath(value) {
+  const normalized = String(value).replace(/\//gu, "\\").toLowerCase();
+  return normalized.startsWith("\\\\.\\pipe\\") || normalized.startsWith("\\\\?\\pipe\\");
+}
+
+function sanitizePipeName(value) {
+  return String(value).replace(/[^A-Za-z0-9_.-]+/gu, "-").replace(/^-+|-+$/gu, "") || "daemon";
+}
+
+function resolveDaemonSocketPath(value, options = {}) {
+  const platform = options.platform ?? process.platform;
+  const configured = typeof value === "string" ? value.trim() : "";
+  if (platform !== "win32") {
+    return configured || join(options.homeDir ?? homedir(), ".kirakira-agent", "daemon.sock");
+  }
+  if (configured && isWindowsNamedPipePath(configured)) {
+    return configured;
+  }
+  const pathForName = configured || join(options.homeDir ?? homedir(), ".kirakira-agent", "daemon.sock");
+  const cwd = options.cwd ?? repoRoot;
+  const absoluteBasis = isAbsolute(pathForName) ? pathForName : resolve(cwd, pathForName);
+  const base = sanitizePipeName(basename(pathForName).replace(/\.sock$/iu, ""));
+  const digest = createHash("sha256").update(absoluteBasis).digest("hex").slice(0, 12);
+  return `\\\\.\\pipe\\kirakira-agent-${base}-${digest}`;
+}
+
+function resolveBindingValue(target, value) {
+  if (isRecord(target) && target.resolve === "daemonSocketPath") {
+    return resolveDaemonSocketPath(value);
+  }
+  return value;
+}
+
+function renderBoundEnv(env, profile) {
+  const bindings = profile.envBindings ?? {};
+  for (const [serviceName, url] of Object.entries(profile.services ?? {})) {
+    setEnvValue(env, bindings.services?.[serviceName], typeof url === "string" ? url : undefined);
+  }
+  for (const [path, target] of Object.entries(bindings.values ?? {})) {
+    setEnvValue(env, target, resolveBindingValue(target, pathValue(profile, path)));
+  }
+  for (const [path, target] of Object.entries(bindings.booleans ?? {})) {
+    const value = pathValue(profile, path);
+    if (value === undefined) continue;
+    const trueValue = isRecord(target) && target.true !== undefined ? target.true : "1";
+    const falseValue = isRecord(target) && target.false !== undefined ? target.false : "0";
+    setEnvValue(env, target, value === false ? falseValue : trueValue);
+  }
+  for (const [path, target] of Object.entries(bindings.joined ?? {})) {
+    const value = pathValue(profile, path);
+    if (!Array.isArray(value)) continue;
+    const separator = isRecord(target) && typeof target.separator === "string" ? target.separator : ",";
+    setEnvValue(env, target, value.join(separator));
+  }
+
+  const gatewayBinding = bindings.computed?.browserGatewayEndpoint;
+  if (gatewayBinding) {
+    const gateway = pathValue(profile, gatewayBinding.source ?? "daemon.browserGateway");
+    const endpoint = browserGatewayEndpoint(gateway);
+    if (endpoint) {
+      setEnvValue(env, gatewayBinding.urlEnv, endpoint);
+      setEnvValue(env, gatewayBinding.modeEnv, gatewayBinding.mode ?? "gateway");
+    }
+  }
 }
 
 export function loadRuntimeProfiles(configPath = defaultProfilesPath) {
@@ -57,9 +156,11 @@ export function resolveRuntimeProfile(
     const available = Object.keys(config.profiles ?? {}).sort().join(", ");
     throw new Error(`Unknown runtime profile "${name}". Available profiles: ${available}`);
   }
+  const envBindings = mergeEnvBindings(config.envBindings, profile.envBindings);
   return {
     name,
     ...profile,
+    envBindings,
     workspaceRoot: env.KIRAKIRA_WORKSPACE_ROOT ?? profile.workspaceRoot,
     appRoot: env.KIRAKIRA_APP_ROOT ?? profile.appRoot,
     mcp: {
@@ -84,45 +185,7 @@ export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {
     KIRAKIRA_MCP_WORKSPACE_ROOT: profile.mcp?.workspaceRoot ?? profile.workspaceRoot,
     KIRAKIRA_MCP_APP_ROOT: profile.mcp?.appRoot ?? profile.appRoot,
   };
-  for (const [serviceName, url] of Object.entries(profile.services ?? {})) {
-    const envName = SERVICE_ENV[serviceName];
-    if (envName && typeof url === "string") {
-      env[envName] = url;
-    }
-  }
-  const daemon = profile.daemon ?? {};
-  if (typeof daemon.socketPath === "string") {
-    env.KIRAKIRA_DAEMON_SOCKET = daemon.socketPath;
-  }
-  if (typeof daemon.eventStorePath === "string") {
-    env.KIRAKIRA_EVENT_STORE_PATH = daemon.eventStorePath;
-  }
-  const gateway = daemon.browserGateway;
-  if (gateway) {
-    env.KIRAKIRA_BROWSER_GATEWAY_ENABLED = gateway.enabled === false ? "0" : "1";
-    if (typeof gateway.host === "string") env.KIRAKIRA_BROWSER_GATEWAY_HOST = gateway.host;
-    if (gateway.port !== undefined) env.KIRAKIRA_BROWSER_GATEWAY_PORT = String(gateway.port);
-    if (typeof gateway.path === "string") env.KIRAKIRA_BROWSER_GATEWAY_PATH = gateway.path;
-    if (typeof gateway.token === "string") {
-      env.KIRAKIRA_BROWSER_GATEWAY_TOKEN = gateway.token;
-      env.VITE_KIRAKIRA_GATEWAY_TOKEN = gateway.token;
-    }
-    if (Array.isArray(gateway.allowedOrigins)) {
-      env.KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS = gateway.allowedOrigins.join(",");
-    }
-    const endpoint = browserGatewayEndpoint(gateway);
-    if (endpoint) {
-      env.VITE_KIRAKIRA_RUNTIME_MODE = "gateway";
-      env.VITE_KIRAKIRA_GATEWAY_URL = endpoint;
-    }
-  }
-  if (typeof profile.presentation?.web?.url === "string") {
-    env.KIRAKIRA_WEB_URL = profile.presentation.web.url;
-  }
-  if (typeof profile.presentation?.desktop?.rendererUrl === "string") {
-    env.KIRAKIRA_DESKTOP_RENDERER_URL = profile.presentation.desktop.rendererUrl;
-    env.KIRAKIRA_DESKTOP_DEV_URL = profile.presentation.desktop.rendererUrl;
-  }
+  renderBoundEnv(env, profile);
   return env;
 }
 

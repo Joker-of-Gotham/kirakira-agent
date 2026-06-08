@@ -13,7 +13,6 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_WORKBENCH_PROFILE = "workbench-host";
-const SURFACES = new Set(["daemon", "web", "desktop"]);
 
 function pnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -22,7 +21,7 @@ function pnpmCommand() {
 function normalizeArgs(argv) {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
   const options = {
-    surface: "web",
+    surface: undefined,
     dryRun: false,
     skipInfra: false,
     skipDaemon: false,
@@ -30,10 +29,6 @@ function normalizeArgs(argv) {
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (SURFACES.has(arg)) {
-      options.surface = arg;
-      continue;
-    }
     if (arg === "--dry-run") {
       options.dryRun = true;
       continue;
@@ -47,8 +42,18 @@ function normalizeArgs(argv) {
       continue;
     }
     if (arg === "--profile") {
+      if (!args[index + 1] || args[index + 1].startsWith("--")) {
+        throw new Error("--profile requires a profile name");
+      }
       options.profileName = args[index + 1];
       index += 1;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown workbench argument: ${arg}`);
+    }
+    if (options.surface === undefined) {
+      options.surface = arg;
       continue;
     }
     throw new Error(`Unknown workbench argument: ${arg}`);
@@ -73,11 +78,54 @@ function pnpmStep(name, packageName, script, env, mode = "foreground") {
   };
 }
 
+function workbenchSurfaces(profile) {
+  return profile.workbench?.surfaces ?? {};
+}
+
+function resolveSurface(profile, requestedSurface) {
+  const surfaces = workbenchSurfaces(profile);
+  const surface = requestedSurface ?? profile.workbench?.defaultSurface;
+  if (!surface) {
+    const available = Object.keys(surfaces).sort().join(", ");
+    throw new Error(`Workbench profile "${profile.name}" has no default surface. Available: ${available}`);
+  }
+  if (!Array.isArray(surfaces[surface])) {
+    const available = Object.keys(surfaces).sort().join(", ");
+    throw new Error(`Unknown workbench surface "${surface}". Available surfaces: ${available}`);
+  }
+  return { name: surface, steps: surfaces[surface] };
+}
+
+function resolvePackageStep(profile, step, env) {
+  const packageKey = step.package;
+  const spec = profile.workbench?.packages?.[packageKey];
+  if (!spec?.package || !spec?.script) {
+    throw new Error(`Workbench package step "${packageKey}" is not defined in profile "${profile.name}"`);
+  }
+  return pnpmStep(step.name ?? packageKey, spec.package, spec.script, env, step.mode ?? "foreground");
+}
+
+function renderWorkbenchStep(profile, step, env, options) {
+  if (step.skipWhen && options[step.skipWhen]) return undefined;
+  if (step.package) return resolvePackageStep(profile, step, env);
+  if (step.command) {
+    return {
+      name: step.name ?? step.command,
+      mode: step.mode ?? "foreground",
+      command: step.command,
+      args: Array.isArray(step.args) ? step.args : [],
+      env: { ...env, ...(step.env ?? {}) },
+    };
+  }
+  throw new Error(`Invalid workbench step in profile "${profile.name}"`);
+}
+
 export function buildWorkbenchPlan(profile, surface, options = {}) {
   const env = renderRuntimeEnv(profile);
   const steps = [];
   const composeArgs = renderComposeArgs(profile);
   const infraServices = profile.workbench?.infraServices ?? [];
+  const selectedSurface = resolveSurface(profile, surface);
 
   if (!options.skipInfra && composeArgs.length > 0 && infraServices.length > 0) {
     steps.push({
@@ -89,26 +137,14 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
     });
   }
 
-  const daemonPackage = profile.workbench?.daemonPackage ?? "@kirakira/runtime-daemon";
-  const webPackage = profile.workbench?.webPackage ?? "@kirakira/web";
-  const desktopPackage = profile.workbench?.desktopPackage ?? "@kirakira/desktop";
-
-  if (surface === "daemon") {
-    steps.push(pnpmStep("daemon", daemonPackage, "start", env));
-  } else {
-    if (!options.skipDaemon) {
-      steps.push(pnpmStep("daemon", daemonPackage, "start", env, "background"));
-    }
-    if (surface === "web") {
-      steps.push(pnpmStep("web", webPackage, "dev", env));
-    } else if (surface === "desktop") {
-      steps.push(pnpmStep("desktop", desktopPackage, "dev:renderer", env));
-    }
+  for (const step of selectedSurface.steps) {
+    const rendered = renderWorkbenchStep(profile, step, env, options);
+    if (rendered) steps.push(rendered);
   }
 
   return {
     profile: profile.name,
-    surface,
+    surface: selectedSurface.name,
     env,
     steps,
   };

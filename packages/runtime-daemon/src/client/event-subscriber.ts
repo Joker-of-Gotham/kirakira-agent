@@ -1,12 +1,9 @@
-import { homedir } from "node:os";
-import { join } from "node:path";
 import type { EventFilter, RunEvent, RunStateSnapshot } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
+import { daemonSocketWebSocketUrl, resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { parseServerMessage } from "../server/protocol.js";
 import type { ServerMessage } from "../server/protocol.js";
-
-const defaultSocketPath = () => join(homedir(), ".kirakira-agent", "daemon.sock");
 
 export class EventSubscriber {
   private ws: WebSocket | null = null;
@@ -32,8 +29,8 @@ export class EventSubscriber {
   }
 
   async connect(socketPath?: string): Promise<void> {
-    const path = socketPath ?? defaultSocketPath();
-    const url = `ws+unix:${path}:/`;
+    const path = resolveDaemonSocketPath(socketPath);
+    const url = daemonSocketWebSocketUrl(path);
     await new Promise<void>((resolve, reject) => {
       const ws = new WebSocket(url);
       this.ws = ws;
