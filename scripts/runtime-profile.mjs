@@ -161,6 +161,68 @@ function renderAuthority({ host, port, username, password, authInUrl }) {
   return `${userInfo}${hostForUrl(host)}${portPart}`;
 }
 
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function runtimeServiceGroups(config) {
+  const catalog = isRecord(config.serviceCatalog) ? config.serviceCatalog : {};
+  return isRecord(catalog.groups) ? catalog.groups : {};
+}
+
+function runtimeServiceCatalog(config) {
+  const catalog = isRecord(config.serviceCatalog) ? config.serviceCatalog : {};
+  return isRecord(catalog.services) ? catalog.services : {};
+}
+
+export function expandRuntimeServiceRefs(refs = [], config = loadRuntimeProfiles()) {
+  if (!Array.isArray(refs)) {
+    throw new Error("Runtime service references must be a string array");
+  }
+  const groups = runtimeServiceGroups(config);
+  const expanded = [];
+  for (const ref of refs) {
+    if (typeof ref !== "string" || ref.length === 0) {
+      throw new Error("Runtime service references must be non-empty strings");
+    }
+    if (!ref.startsWith("@")) {
+      expanded.push(ref);
+      continue;
+    }
+    const groupName = ref.slice(1);
+    const group = groups[groupName];
+    if (!Array.isArray(group)) {
+      throw new Error(`Unknown runtime service group "${groupName}"`);
+    }
+    expanded.push(...group);
+  }
+  return uniqueStrings(expanded);
+}
+
+function serviceGroupRefs(groups = []) {
+  if (!Array.isArray(groups)) return [];
+  return groups.map((group) => `@${group}`);
+}
+
+function catalogPrimaryPortSpec(config, serviceName, endpointMode) {
+  const service = runtimeServiceCatalog(config)[serviceName];
+  if (!isRecord(service) || !isRecord(service.ports)) return undefined;
+  const primaryPort = service.primaryPort;
+  const portSpec = typeof primaryPort === "string"
+    ? service.ports[primaryPort]
+    : Object.values(service.ports)[0];
+  if (!isRecord(portSpec)) return undefined;
+  if (endpointMode === "published") {
+    return {
+      env: portSpec.env,
+      default: portSpec.default ?? portSpec.target,
+    };
+  }
+  return {
+    default: portSpec.target ?? portSpec.default,
+  };
+}
+
 function serviceUrlPath(descriptor, resolved) {
   const path = resolved.database ?? resolved.path;
   if (path === undefined || path === null || path === "") return "";
@@ -174,9 +236,12 @@ function resolveServiceDescriptor(name, config, profile, env) {
   if (!isRecord(base)) {
     throw new Error(`Runtime profile service "${name}" is missing a serviceBindings descriptor`);
   }
+  const catalogPortSpec = catalogPrimaryPortSpec(config, name, profile.serviceEndpointMode);
+  const catalogPort = catalogPortSpec ? { port: catalogPortSpec } : {};
   const descriptor = mergeSpecRecord(
     base,
     profile.serviceEndpointDefaults,
+    catalogPort,
     profile.serviceEndpoints?.[name],
   );
   const serviceEnv = {};
@@ -199,11 +264,24 @@ function resolveServiceDescriptor(name, config, profile, env) {
   return { url, serviceEnv };
 }
 
+function serviceEndpointSpecs(config, profile) {
+  const specs = {};
+  const groupRefs = serviceGroupRefs(profile.serviceEndpointGroups);
+  for (const serviceName of expandRuntimeServiceRefs(groupRefs, config)) {
+    specs[serviceName] = {};
+  }
+  if (isRecord(profile.serviceEndpoints)) {
+    Object.assign(specs, profile.serviceEndpoints);
+  }
+  return specs;
+}
+
 function resolveServiceEndpoints(config, profile, env) {
   const services = {};
   const serviceEnv = {};
-  if (isRecord(profile.serviceEndpoints)) {
-    for (const serviceName of Object.keys(profile.serviceEndpoints)) {
+  const specs = serviceEndpointSpecs(config, profile);
+  if (Object.keys(specs).length > 0) {
+    for (const serviceName of Object.keys(specs)) {
       const rendered = resolveServiceDescriptor(serviceName, config, profile, env);
       services[serviceName] = rendered.url;
       Object.assign(serviceEnv, rendered.serviceEnv);
@@ -215,6 +293,32 @@ function resolveServiceEndpoints(config, profile, env) {
     if (typeof url === "string") services[serviceName] = url;
   }
   return { services, serviceEnv };
+}
+
+function resolveContainerStartupRefs(startup, config) {
+  if (!isRecord(startup)) return startup;
+  const refs = [
+    ...serviceGroupRefs(startup.runtimeServiceGroups),
+    ...(Array.isArray(startup.runtimeServices) ? startup.runtimeServices : []),
+  ];
+  if (refs.length === 0) return startup;
+  return {
+    ...startup,
+    runtimeServices: expandRuntimeServiceRefs(refs, config),
+  };
+}
+
+function resolveWorkbenchRefs(workbench, config) {
+  if (!isRecord(workbench)) return workbench;
+  const refs = [
+    ...serviceGroupRefs(workbench.infraServiceGroups),
+    ...(Array.isArray(workbench.infraServices) ? workbench.infraServices : []),
+  ];
+  if (refs.length === 0) return workbench;
+  return {
+    ...workbench,
+    infraServices: expandRuntimeServiceRefs(refs, config),
+  };
 }
 
 function resolveEndpointSpecs(endpoint, env, options = {}) {
@@ -361,6 +465,8 @@ export function resolveRuntimeProfile(
     ...profile,
     ...dynamicProfile,
     envBindings,
+    containerStartup: resolveContainerStartupRefs(profile.containerStartup, config),
+    workbench: resolveWorkbenchRefs(profile.workbench, config),
     workspaceRoot: env.KIRAKIRA_WORKSPACE_ROOT ?? profile.workspaceRoot,
     appRoot: env.KIRAKIRA_APP_ROOT ?? profile.appRoot,
     mcp: {

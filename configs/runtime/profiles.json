@@ -54,17 +54,11 @@
   "serviceBindings": {
     "kirakirad": {
       "scheme": "tcp",
-      "host": "kirakirad",
-      "port": {
-        "default": 17777
-      }
+      "host": "kirakirad"
     },
     "postgres": {
       "scheme": "postgres",
       "host": "postgres",
-      "port": {
-        "default": 5432
-      },
       "username": {
         "env": "KIRAKIRA_POSTGRES_USER",
         "default": "kirakira"
@@ -81,24 +75,15 @@
     },
     "redis": {
       "scheme": "redis",
-      "host": "redis",
-      "port": {
-        "default": 6379
-      }
+      "host": "redis"
     },
     "qdrant": {
       "scheme": "http",
-      "host": "qdrant",
-      "port": {
-        "default": 6333
-      }
+      "host": "qdrant"
     },
     "neo4j": {
       "scheme": "bolt",
       "host": "neo4j",
-      "port": {
-        "default": 7687
-      },
       "username": {
         "env": "KIRAKIRA_NEO4J_USER",
         "default": "neo4j"
@@ -111,9 +96,6 @@
     "minio": {
       "scheme": "http",
       "host": "minio",
-      "port": {
-        "default": 9000
-      },
       "username": {
         "env": ["KIRAKIRA_MINIO_ROOT_USER", "S3_ACCESS_KEY_ID"],
         "default": "minioadmin"
@@ -121,6 +103,100 @@
       "password": {
         "env": ["KIRAKIRA_MINIO_ROOT_PASSWORD", "S3_SECRET_ACCESS_KEY"],
         "default": "minioadmin"
+      }
+    }
+  },
+  "serviceCatalog": {
+    "groups": {
+      "memory-stack": ["postgres", "redis", "qdrant", "neo4j", "minio"],
+      "runtime-stack": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"]
+    },
+    "services": {
+      "kirakirad": {
+        "composeService": "kirakirad",
+        "primaryPort": "pdp",
+        "ports": {
+          "health": {
+            "target": 8181,
+            "env": "KIRAKIRA_KIRAKIRAD_HEALTH_PORT",
+            "default": 8181
+          },
+          "pdp": {
+            "target": 17777,
+            "env": "KIRAKIRA_KIRAKIRAD_PDP_PORT",
+            "default": 17777
+          }
+        }
+      },
+      "postgres": {
+        "composeService": "postgres",
+        "primaryPort": "postgres",
+        "ports": {
+          "postgres": {
+            "target": 5432,
+            "env": "KIRAKIRA_POSTGRES_PORT",
+            "default": 5432
+          }
+        }
+      },
+      "redis": {
+        "composeService": "redis",
+        "primaryPort": "redis",
+        "ports": {
+          "redis": {
+            "target": 6379,
+            "env": "KIRAKIRA_REDIS_PORT",
+            "default": 6379
+          }
+        }
+      },
+      "qdrant": {
+        "composeService": "qdrant",
+        "primaryPort": "http",
+        "ports": {
+          "http": {
+            "target": 6333,
+            "env": "KIRAKIRA_QDRANT_HTTP_PORT",
+            "default": 6333
+          },
+          "grpc": {
+            "target": 6334,
+            "env": "KIRAKIRA_QDRANT_GRPC_PORT",
+            "default": 6334
+          }
+        }
+      },
+      "neo4j": {
+        "composeService": "neo4j",
+        "primaryPort": "bolt",
+        "ports": {
+          "bolt": {
+            "target": 7687,
+            "env": "KIRAKIRA_NEO4J_BOLT_PORT",
+            "default": 7687
+          },
+          "http": {
+            "target": 7474,
+            "env": "KIRAKIRA_NEO4J_HTTP_PORT",
+            "default": 7474
+          }
+        }
+      },
+      "minio": {
+        "composeService": "minio",
+        "primaryPort": "api",
+        "ports": {
+          "api": {
+            "target": 9000,
+            "env": "KIRAKIRA_MINIO_API_PORT",
+            "default": 9000
+          },
+          "console": {
+            "target": 9001,
+            "env": "KIRAKIRA_MINIO_CONSOLE_PORT",
+            "default": 9001
+          }
+        }
       }
     }
   },
@@ -132,14 +208,7 @@
       "composeFiles": ["docker-compose.yml"],
       "composeProfiles": ["cli"],
       "envFiles": [".env"],
-      "serviceEndpoints": {
-        "kirakirad": {},
-        "postgres": {},
-        "redis": {},
-        "qdrant": {},
-        "neo4j": {},
-        "minio": {}
-      },
+      "serviceEndpointGroups": ["runtime-stack"],
       "mcp": {
         "workspaceRoot": "/workspace",
         "appRoot": "/app"
@@ -151,7 +220,7 @@
         "workspaceBuildCachePath": ".kirakira/workspace-build.hash",
         "buildService": "kirakira-agent",
         "runService": "kirakira-agent",
-        "runtimeServices": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"],
+        "runtimeServiceGroups": ["runtime-stack"],
         "defaultCommand": ["chat"],
         "interactiveCommands": ["chat"],
         "runOptions": ["--rm", "--no-deps", "--pull", "never"],
@@ -190,46 +259,10 @@
       "composeFiles": [],
       "composeProfiles": [],
       "envFiles": [".env"],
+      "serviceEndpointMode": "published",
+      "serviceEndpointGroups": ["runtime-stack"],
       "serviceEndpointDefaults": {
         "host": "127.0.0.1"
-      },
-      "serviceEndpoints": {
-        "kirakirad": {
-          "port": {
-            "env": "KIRAKIRA_KIRAKIRAD_PDP_PORT",
-            "default": 17777
-          }
-        },
-        "postgres": {
-          "port": {
-            "env": "KIRAKIRA_POSTGRES_PORT",
-            "default": 5432
-          }
-        },
-        "redis": {
-          "port": {
-            "env": "KIRAKIRA_REDIS_PORT",
-            "default": 6379
-          }
-        },
-        "qdrant": {
-          "port": {
-            "env": "KIRAKIRA_QDRANT_HTTP_PORT",
-            "default": 6333
-          }
-        },
-        "neo4j": {
-          "port": {
-            "env": "KIRAKIRA_NEO4J_BOLT_PORT",
-            "default": 7687
-          }
-        },
-        "minio": {
-          "port": {
-            "env": "KIRAKIRA_MINIO_API_PORT",
-            "default": 9000
-          }
-        }
       },
       "mcp": {
         "workspaceRoot": ".",
@@ -243,46 +276,10 @@
       "composeFiles": ["docker-compose.yml", "docker-compose.ports.yml"],
       "composeProfiles": [],
       "envFiles": [".env"],
+      "serviceEndpointMode": "published",
+      "serviceEndpointGroups": ["runtime-stack"],
       "serviceEndpointDefaults": {
         "host": "127.0.0.1"
-      },
-      "serviceEndpoints": {
-        "kirakirad": {
-          "port": {
-            "env": "KIRAKIRA_KIRAKIRAD_PDP_PORT",
-            "default": 17777
-          }
-        },
-        "postgres": {
-          "port": {
-            "env": "KIRAKIRA_POSTGRES_PORT",
-            "default": 5432
-          }
-        },
-        "redis": {
-          "port": {
-            "env": "KIRAKIRA_REDIS_PORT",
-            "default": 6379
-          }
-        },
-        "qdrant": {
-          "port": {
-            "env": "KIRAKIRA_QDRANT_HTTP_PORT",
-            "default": 6333
-          }
-        },
-        "neo4j": {
-          "port": {
-            "env": "KIRAKIRA_NEO4J_BOLT_PORT",
-            "default": 7687
-          }
-        },
-        "minio": {
-          "port": {
-            "env": "KIRAKIRA_MINIO_API_PORT",
-            "default": 9000
-          }
-        }
       },
       "daemon": {
         "socketPath": ".kirakira/runtime/daemon.sock",
@@ -324,7 +321,7 @@
       },
       "workbench": {
         "defaultSurface": "web",
-        "infraServices": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"],
+        "infraServiceGroups": ["runtime-stack"],
         "packages": {
           "daemon": {
             "package": "@kirakira/runtime-daemon",
@@ -382,15 +379,13 @@
       "composeFiles": ["docker-compose.test.yml"],
       "composeProfiles": [],
       "envFiles": [".env"],
+      "serviceEndpointMode": "published",
+      "serviceEndpointGroups": ["memory-stack"],
       "serviceEndpointDefaults": {
         "host": "127.0.0.1"
       },
       "serviceEndpoints": {
         "postgres": {
-          "port": {
-            "env": "KIRAKIRA_POSTGRES_PORT",
-            "default": 5432
-          },
           "username": {
             "default": "kirakira_test"
           },
@@ -399,30 +394,6 @@
           },
           "database": {
             "default": "kirakira_test"
-          }
-        },
-        "redis": {
-          "port": {
-            "env": "KIRAKIRA_REDIS_PORT",
-            "default": 6379
-          }
-        },
-        "qdrant": {
-          "port": {
-            "env": "KIRAKIRA_QDRANT_HTTP_PORT",
-            "default": 6333
-          }
-        },
-        "neo4j": {
-          "port": {
-            "env": "KIRAKIRA_NEO4J_BOLT_PORT",
-            "default": 7687
-          }
-        },
-        "minio": {
-          "port": {
-            "env": "KIRAKIRA_MINIO_API_PORT",
-            "default": 9000
           }
         }
       },

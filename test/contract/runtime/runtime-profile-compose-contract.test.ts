@@ -27,7 +27,54 @@ function expectHostPort(url: URL, expectedPort: number): void {
 
 const emptyEnv = {};
 
+function runtimeServiceCatalog(config: ReturnType<typeof loadRuntimeProfiles>) {
+  const catalog = config.serviceCatalog?.services;
+  if (!catalog || typeof catalog !== "object") {
+    throw new Error("Runtime service catalog is missing");
+  }
+  return catalog;
+}
+
+function expectCatalogPortsInCompose(
+  config: ReturnType<typeof loadRuntimeProfiles>,
+  compose: ReturnType<typeof loadComposeFile>,
+  serviceName: string,
+): void {
+  const catalogService = runtimeServiceCatalog(config)[serviceName];
+  if (!catalogService || typeof catalogService !== "object") {
+    throw new Error(`Catalog service is missing: ${serviceName}`);
+  }
+  const composeName = typeof catalogService.composeService === "string"
+    ? catalogService.composeService
+    : serviceName;
+  const service = composeService(compose, composeName);
+  const ports = catalogService.ports;
+  if (!ports || typeof ports !== "object") {
+    throw new Error(`Catalog service is missing ports: ${serviceName}`);
+  }
+  const rawPorts = service.ports ?? [];
+  for (const port of Object.values(ports)) {
+    if (!port || typeof port !== "object") continue;
+    expect(rawPorts).toContain(`\${${port.env}:-${port.default}}:${port.target}`);
+  }
+}
+
 describe("runtime profile compose contracts", () => {
+  it("keeps the service catalog aligned with compose published port interpolation", () => {
+    const config = loadRuntimeProfiles();
+    const workbenchProfile = resolveRuntimeProfile("workbench-host", config, emptyEnv);
+    const testProfile = resolveRuntimeProfile("test-host", config, emptyEnv);
+    const portsCompose = loadComposeFile("docker-compose.ports.yml", import.meta.url);
+    const testCompose = loadComposeFile("docker-compose.test.yml", import.meta.url);
+
+    for (const serviceName of workbenchProfile.workbench?.infraServices ?? []) {
+      expectCatalogPortsInCompose(config, portsCompose, serviceName);
+    }
+    for (const serviceName of Object.keys(testProfile.services ?? {})) {
+      expectCatalogPortsInCompose(config, testCompose, serviceName);
+    }
+  });
+
   it("keeps test-host services aligned with docker-compose.test.yml", () => {
     const profile = resolveRuntimeProfile("test-host", loadRuntimeProfiles(), emptyEnv);
     const compose = loadComposeFile("docker-compose.test.yml", import.meta.url);

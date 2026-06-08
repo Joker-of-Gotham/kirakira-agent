@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { ensureMcpConfig } from "../../../scripts/kirakira-common.mjs";
 import { buildWorkbenchPlan, profileFromOptions } from "../../../scripts/kirakira-workbench.mjs";
 import {
+  expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderRuntimeEnv,
   resolveRuntimeProfile,
@@ -12,8 +13,10 @@ import {
 
 describe("workbench launcher plan", () => {
   it("plans infra, daemon, and web from the workbench profile", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("workbench-host", config, {});
     const plan = buildWorkbenchPlan(profile, "web");
+    const expectedInfraServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
 
     expect(plan.profile).toBe("workbench-host");
     expect(plan.steps.map((step) => step.name)).toEqual(["infra", "daemon", "web"]);
@@ -28,12 +31,7 @@ describe("workbench launcher plan", () => {
         "up",
         "-d",
         "--wait",
-        "postgres",
-        "redis",
-        "qdrant",
-        "neo4j",
-        "minio",
-        "kirakirad",
+        ...expectedInfraServices,
       ],
     });
     expect(plan.steps[1]).toMatchObject({

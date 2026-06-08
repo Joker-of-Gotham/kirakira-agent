@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderComposeArgs,
   renderMcpConfig,
@@ -14,6 +15,47 @@ describe("runtime profile rendering", () => {
     expect(profile.name).toBe("container");
     expect(profile.workspaceRoot).toBe("/workspace");
     expect(renderComposeArgs(profile)).toEqual(["-f", "docker-compose.yml", "--profile", "cli"]);
+  });
+
+  it("expands service catalog groups into container and workbench runtime surfaces", () => {
+    const config = loadRuntimeProfiles();
+
+    expect(expandRuntimeServiceRefs(["@runtime-stack"], config)).toEqual([
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad",
+    ]);
+    expect(expandRuntimeServiceRefs(["@memory-stack"], config)).toEqual([
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+    ]);
+
+    const container = resolveRuntimeProfile("container", config, {});
+    const workbench = resolveRuntimeProfile("workbench-host", config, {});
+
+    expect(Object.keys(container.services ?? {})).toEqual([
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad",
+    ]);
+    expect(container.containerStartup.runtimeServices).toEqual([
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad",
+    ]);
+    expect(workbench.workbench.infraServices).toEqual(container.containerStartup.runtimeServices);
   });
 
   it("renders env and MCP roots from the selected profile", () => {
@@ -81,6 +123,18 @@ describe("runtime profile rendering", () => {
     expect(env.QDRANT_URL).toBe("http://qdrant:6333");
     expect(env.NEO4J_URI).toBe("bolt://neo4j:7687");
     expect(env.S3_ENDPOINT).toBe("http://minio:9000");
+  });
+
+  it("resolves host service URLs from catalog-published port metadata", () => {
+    const profile = resolveRuntimeProfile("host", loadRuntimeProfiles(), {
+      KIRAKIRA_POSTGRES_PORT: "15432",
+      KIRAKIRA_KIRAKIRAD_PDP_PORT: "17778",
+    });
+    const env = renderRuntimeEnv(profile);
+
+    expect(env.DATABASE_URL).toBe("postgres://kirakira:kirakira@127.0.0.1:15432/kirakira");
+    expect(env.KIRAKIRA_PDP_ENDPOINT).toBe("tcp://127.0.0.1:17778");
+    expect(env.REDIS_URL).toBe("redis://127.0.0.1:6379");
   });
 
   it("renders workbench presentation and gateway URLs from endpoint port overrides", () => {

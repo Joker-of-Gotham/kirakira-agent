@@ -5,12 +5,18 @@ import {
   resolveContainerStartup,
   selectContainerProfile,
 } from "../../../scripts/kirakira.mjs";
-import { loadRuntimeProfiles, resolveRuntimeProfile } from "../../../scripts/runtime-profile.mjs";
+import {
+  expandRuntimeServiceRefs,
+  loadRuntimeProfiles,
+  resolveRuntimeProfile,
+} from "../../../scripts/runtime-profile.mjs";
 
 describe("container launcher plan", () => {
   it("plans build, runtime services, and CLI run from the container profile", () => {
-    const profile = resolveRuntimeProfile("container", loadRuntimeProfiles(), {});
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("container", config, {});
     const startup = resolveContainerStartup(profile);
+    const expectedRuntimeServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
     const plan = buildContainerStartupPlan(profile, [], {
       startup,
       sourceHash: "test-source",
@@ -42,12 +48,7 @@ describe("container launcher plan", () => {
       "-d",
       "--wait",
       "--no-build",
-      "postgres",
-      "redis",
-      "qdrant",
-      "neo4j",
-      "minio",
-      "kirakirad",
+      ...expectedRuntimeServices,
     ]);
     expect(plan.run.args).toEqual([
       "compose",
