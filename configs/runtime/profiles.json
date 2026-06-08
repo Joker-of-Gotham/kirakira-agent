@@ -42,6 +42,51 @@
         "appRoot": "."
       }
     },
+    "workbench-host": {
+      "mode": "hybrid",
+      "workspaceRoot": ".",
+      "appRoot": ".",
+      "composeFiles": ["docker-compose.yml", "docker-compose.ports.yml"],
+      "composeProfiles": [],
+      "envFiles": [".env"],
+      "services": {
+        "kirakirad": "tcp://127.0.0.1:17777",
+        "postgres": "postgres://kirakira:kirakira@127.0.0.1:5432/kirakira",
+        "redis": "redis://127.0.0.1:6379",
+        "qdrant": "http://127.0.0.1:6333",
+        "neo4j": "bolt://127.0.0.1:7687",
+        "minio": "http://127.0.0.1:9000"
+      },
+      "daemon": {
+        "socketPath": ".kirakira/runtime/daemon.sock",
+        "eventStorePath": ".kirakira/runtime/events.sqlite",
+        "browserGateway": {
+          "enabled": true,
+          "host": "127.0.0.1",
+          "port": 17373,
+          "path": "/runtime",
+          "allowedOrigins": ["http://127.0.0.1:5183", "http://127.0.0.1:5174"]
+        }
+      },
+      "presentation": {
+        "web": {
+          "url": "http://127.0.0.1:5183"
+        },
+        "desktop": {
+          "rendererUrl": "http://127.0.0.1:5174"
+        }
+      },
+      "workbench": {
+        "infraServices": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"],
+        "daemonPackage": "@kirakira/runtime-daemon",
+        "webPackage": "@kirakira/web",
+        "desktopPackage": "@kirakira/desktop"
+      },
+      "mcp": {
+        "workspaceRoot": ".",
+        "appRoot": "."
+      }
+    },
     "test-host": {
       "mode": "host",
       "workspaceRoot": ".",

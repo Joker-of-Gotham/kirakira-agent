@@ -7,7 +7,7 @@
   "main": "./dist/main/main.js",
   "scripts": {
     "build": "vite build --config vite.renderer.config.ts && tsc -p tsconfig.main.json",
-    "dev:renderer": "vite --config vite.renderer.config.ts --host 127.0.0.1 --port 5174 --strictPort",
+    "dev:renderer": "vite --config vite.renderer.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json"
   },
   "dependencies": {

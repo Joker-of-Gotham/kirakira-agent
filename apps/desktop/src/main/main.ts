@@ -32,7 +32,8 @@ const isLocalDevUrl = (value: string | undefined): value is string => {
 };
 
 const rendererUrl = () => {
-  const devUrl = process.env.KIRAKIRA_DESKTOP_DEV_URL;
+  const devUrl =
+    process.env.KIRAKIRA_DESKTOP_RENDERER_URL ?? process.env.KIRAKIRA_DESKTOP_DEV_URL;
   return isLocalDevUrl(devUrl) ? devUrl : null;
 };
 

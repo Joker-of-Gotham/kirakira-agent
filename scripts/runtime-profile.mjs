@@ -16,6 +16,25 @@ const SERVICE_ENV = {
   minio: "S3_ENDPOINT",
 };
 
+function browserGatewayEndpoint(gateway) {
+  if (!gateway || gateway.enabled === false) return undefined;
+  if (typeof gateway.endpoint === "string" && gateway.endpoint.length > 0) {
+    return gateway.endpoint;
+  }
+  const protocol = gateway.protocol ?? "ws";
+  if (
+    typeof gateway.host !== "string" ||
+    gateway.port === undefined ||
+    typeof gateway.path !== "string"
+  ) {
+    throw new Error("Browser gateway profile requires host, port, and path");
+  }
+  const host = gateway.host;
+  const port = gateway.port;
+  const path = gateway.path;
+  return `${protocol}://${host}:${port}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export function loadRuntimeProfiles(configPath = defaultProfilesPath) {
   if (!existsSync(configPath)) {
     throw new Error(`Runtime profile config not found: ${configPath}`);
@@ -70,6 +89,39 @@ export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {
     if (envName && typeof url === "string") {
       env[envName] = url;
     }
+  }
+  const daemon = profile.daemon ?? {};
+  if (typeof daemon.socketPath === "string") {
+    env.KIRAKIRA_DAEMON_SOCKET = daemon.socketPath;
+  }
+  if (typeof daemon.eventStorePath === "string") {
+    env.KIRAKIRA_EVENT_STORE_PATH = daemon.eventStorePath;
+  }
+  const gateway = daemon.browserGateway;
+  if (gateway) {
+    env.KIRAKIRA_BROWSER_GATEWAY_ENABLED = gateway.enabled === false ? "0" : "1";
+    if (typeof gateway.host === "string") env.KIRAKIRA_BROWSER_GATEWAY_HOST = gateway.host;
+    if (gateway.port !== undefined) env.KIRAKIRA_BROWSER_GATEWAY_PORT = String(gateway.port);
+    if (typeof gateway.path === "string") env.KIRAKIRA_BROWSER_GATEWAY_PATH = gateway.path;
+    if (typeof gateway.token === "string") {
+      env.KIRAKIRA_BROWSER_GATEWAY_TOKEN = gateway.token;
+      env.VITE_KIRAKIRA_GATEWAY_TOKEN = gateway.token;
+    }
+    if (Array.isArray(gateway.allowedOrigins)) {
+      env.KIRAKIRA_BROWSER_GATEWAY_ALLOWED_ORIGINS = gateway.allowedOrigins.join(",");
+    }
+    const endpoint = browserGatewayEndpoint(gateway);
+    if (endpoint) {
+      env.VITE_KIRAKIRA_RUNTIME_MODE = "gateway";
+      env.VITE_KIRAKIRA_GATEWAY_URL = endpoint;
+    }
+  }
+  if (typeof profile.presentation?.web?.url === "string") {
+    env.KIRAKIRA_WEB_URL = profile.presentation.web.url;
+  }
+  if (typeof profile.presentation?.desktop?.rendererUrl === "string") {
+    env.KIRAKIRA_DESKTOP_RENDERER_URL = profile.presentation.desktop.rendererUrl;
+    env.KIRAKIRA_DESKTOP_DEV_URL = profile.presentation.desktop.rendererUrl;
   }
   return env;
 }

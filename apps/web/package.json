@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite --host 127.0.0.1 --port 5183 --strictPort",
+    "dev": "vite",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
