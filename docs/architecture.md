@@ -38,12 +38,20 @@ It is responsible for:
 
 1. ensuring `.env` exists
 2. ensuring `.mcp.json` exists
-3. hashing runtime-relevant files
-4. rebuilding `kirakira-agent-runtime:local` only when the source hash changes
-5. starting the runtime services with `docker compose up -d --wait`
-6. launching the CLI container with `docker compose run --rm`
+3. resolving `container` startup topology from `configs/runtime/profiles.json`
+4. hashing runtime-relevant files declared by that profile
+5. rebuilding the profile-declared runtime image only when the source hash changes
+6. starting the profile-declared runtime services with `docker compose up -d --wait`
+7. launching the profile-declared CLI container with `docker compose run --rm`
 
 This is deliberately opinionated. The point is to remove branchy startup behavior from day-to-day use.
+
+Workbench startup uses [`scripts/kirakira-workbench.mjs`](../scripts/kirakira-workbench.mjs)
+and the `workbench-host` profile. `pnpm start:web` starts Docker-published infra,
+the host daemon, and the web workbench at `http://127.0.0.1:5183`.
+`pnpm start:desktop` uses the same daemon and the desktop renderer at
+`http://127.0.0.1:5174`. The browser runtime gateway is
+`ws://127.0.0.1:17373/runtime`.
 
 ## Runtime services
 
@@ -68,6 +76,8 @@ This is deliberately opinionated. The point is to remove branchy startup behavio
 | `packages/mcp-adapter` | MCP client, gateway, stdio transport handling |
 | `packages/policy-engine` | PDP transport selection, fallback behavior, decision interface |
 | `packages/frontend-core` | browser-safe transport contract and run-event projection for future web/desktop surfaces |
+| `apps/web` | browser workbench shell for the runtime gateway |
+| `apps/desktop` | desktop renderer shell for the same runtime gateway |
 | `policies/` | Rego policy and bundled data |
 
 ## Provider model
@@ -144,6 +154,7 @@ The profile contract is deliberately separate from a single Docker compose file:
 
 - `container` keeps the canonical Docker workspace path (`/workspace`) and app path (`/app`)
 - `host` resolves services through localhost and renders host-oriented MCP roots
+- `workbench-host` starts Docker infra with published ports, then runs the host daemon and web/desktop surfaces against the runtime gateway
 - `test-host` matches the published ports in `docker-compose.test.yml`
 - `ci` provides a non-interactive profile for future automation
 
@@ -154,18 +165,15 @@ renderer instead of owning separate hardcoded `/workspace` and `/app` constants.
 
 ## Presentation baseline
 
-Kirakira still does not ship a full web or Electron UI. The first current
-presentation package is [`packages/frontend-core`](../packages/frontend-core),
-which defines a browser-safe runtime transport interface and projects
-`RunEvent` streams into a dashboard model. This keeps the future web and
-desktop shells aligned to the daemon/event-store boundary instead of duplicating
-CLI-only chat state.
+Kirakira now has a shared presentation contract plus early host-run shells:
 
-The visual design direction is intentionally not finalized in code yet. The
-local design skills under `.agents/skills` require a confirmed design brief
-before a major visual system is created; until then, presentation work should
-stay on contracts, projections, security boundaries, and neutral diagnostic
-surfaces.
+- [`packages/frontend-core`](../packages/frontend-core) defines the browser-safe runtime transport interface and projects `RunEvent` streams into a dashboard model.
+- [`apps/web`](../apps/web) is the Vite browser workbench, served by `pnpm start:web` on `http://127.0.0.1:5183`.
+- [`apps/desktop`](../apps/desktop) is the desktop renderer shell, served by `pnpm start:desktop` on `http://127.0.0.1:5174`.
+
+Both presentation shells use the `workbench-host` profile and the browser runtime
+gateway rather than duplicating CLI-only chat state. A Vite server on `5173` is
+not the Kirakira workbench default.
 
 ## Policy transport
 

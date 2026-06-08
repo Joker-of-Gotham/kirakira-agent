@@ -8,21 +8,60 @@ importers:
 
   .:
     devDependencies:
+      '@kirakira/agent-runtime':
+        specifier: workspace:*
+        version: link:packages/agent-runtime
+      '@kirakira/audit-ledger':
+        specifier: workspace:*
+        version: link:packages/audit-ledger
       '@kirakira/cli':
         specifier: workspace:*
         version: link:packages/cli
+      '@kirakira/compat':
+        specifier: workspace:*
+        version: link:packages/compat
+      '@kirakira/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@kirakira/desktop':
+        specifier: workspace:*
+        version: link:apps/desktop
       '@kirakira/event-store':
         specifier: workspace:*
         version: link:packages/event-store
+      '@kirakira/mcp-adapter':
+        specifier: workspace:*
+        version: link:packages/mcp-adapter
       '@kirakira/memory-core':
         specifier: workspace:*
         version: link:packages/memory-core
       '@kirakira/memory-store':
         specifier: workspace:*
         version: link:packages/memory-store
+      '@kirakira/memory-vector':
+        specifier: workspace:*
+        version: link:packages/memory-vector
+      '@kirakira/orchestrator-kernel':
+        specifier: workspace:*
+        version: link:packages/orchestrator-kernel
+      '@kirakira/policy-engine':
+        specifier: workspace:*
+        version: link:packages/policy-engine
+      '@kirakira/runtime-daemon':
+        specifier: workspace:*
+        version: link:packages/runtime-daemon
+      '@kirakira/skill-runtime':
+        specifier: workspace:*
+        version: link:packages/skill-runtime
+      '@kirakira/web':
+        specifier: workspace:*
+        version: link:apps/web
       '@types/node':
         specifier: 22.15.0
         version: 22.15.0
+      blake3:
+        specifier: ^2.1.7
+        version: 2.1.7
       postgres:
         specifier: ^3.4.0
         version: 3.4.9
@@ -125,8 +164,8 @@ importers:
         specifier: workspace:*
         version: link:../skill-runtime
       better-sqlite3:
-        specifier: ^11.8.1
-        version: 11.10.0
+        specifier: ^12.10.0
+        version: 12.10.0
       p-queue:
         specifier: ^8.0.1
         version: 8.1.1
@@ -153,8 +192,8 @@ importers:
         specifier: ^2.2.3
         version: 2.3.0
       better-sqlite3:
-        specifier: ^11.8.1
-        version: 11.10.0
+        specifier: ^12.10.0
+        version: 12.10.0
       blake3:
         specifier: ^2.1.7
         version: 2.1.7
@@ -366,8 +405,8 @@ importers:
         specifier: workspace:*
         version: link:../runtime-contracts
       better-sqlite3:
-        specifier: ^11.8.1
-        version: 11.10.0
+        specifier: ^12.10.0
+        version: 12.10.0
       ulid:
         specifier: ^2.3.0
         version: 2.4.0
@@ -1794,8 +1833,9 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  better-sqlite3@11.10.0:
-    resolution: {integrity: sha512-EwhOpyXiOEL/lKzHz9AW1msWFNzGc/z+LzeB3/jnFJpxu+th2yqvzsSWas1v9jgs9+xiXJcD5A8CJxAG2TaghQ==}
+  better-sqlite3@12.10.0:
+    resolution: {integrity: sha512-CyzaZRQKyHkB2ZInfTTl2nvT33EbDpjkLEbE8/Zck3Ll6O0qqvuGdrJ45HgtH+HykRg88ITY3AdreBGN70aBSQ==}
+    engines: {node: 20.x || 22.x || 23.x || 24.x || 25.x || 26.x}
 
   bindings@1.5.0:
     resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
@@ -4727,7 +4767,7 @@ snapshots:
 
   baseline-browser-mapping@2.10.34: {}
 
-  better-sqlite3@11.10.0:
+  better-sqlite3@12.10.0:
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3

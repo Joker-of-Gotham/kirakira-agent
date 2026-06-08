@@ -30,8 +30,8 @@ function unquoteEnvValue(value) {
   return value;
 }
 
-function defaultMcpServers() {
-  return renderMcpServers(resolveRuntimeProfile());
+function defaultMcpServers(profile = resolveRuntimeProfile()) {
+  return renderMcpServers(profile);
 }
 
 const OBSOLETE_MCP_SERVERS = new Set([
@@ -53,10 +53,10 @@ export function ensureEnvFile(workspaceRoot) {
   return { changed: true, path: envPath };
 }
 
-export function ensureMcpConfig(workspaceRoot) {
+export function ensureMcpConfig(workspaceRoot, profile = undefined) {
   const configPath = join(workspaceRoot, ".mcp.json");
   loadEnvFileIntoProcess(workspaceRoot);
-  const defaultServers = defaultMcpServers();
+  const defaultServers = defaultMcpServers(profile ?? resolveRuntimeProfile());
   let existing = { mcpServers: {} };
 
   if (existsSync(configPath)) {

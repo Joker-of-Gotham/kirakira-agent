@@ -61,11 +61,11 @@ function normalizeArgs(argv) {
   return options;
 }
 
-function profileFromOptions(options, env = process.env) {
+export function profileFromOptions(options, env = process.env) {
   const config = loadRuntimeProfiles();
   const profileName =
     options.profileName ?? env.KIRAKIRA_WORKBENCH_PROFILE ?? DEFAULT_WORKBENCH_PROFILE;
-  return resolveRuntimeProfile(profileName, config, env);
+  return resolveRuntimeProfile(profileName, config, {});
 }
 
 function pnpmStep(name, packageName, script, env, mode = "foreground") {
@@ -190,7 +190,7 @@ function main(argv) {
 
   process.env.KIRAKIRA_RUNTIME_PROFILE = profile.name;
   ensureEnvFile(repoRoot);
-  ensureMcpConfig(repoRoot);
+  ensureMcpConfig(repoRoot, profile);
 
   const children = [];
   process.on("exit", () => stopChildren(children));

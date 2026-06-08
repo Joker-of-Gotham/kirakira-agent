@@ -70,6 +70,44 @@
       "mcp": {
         "workspaceRoot": "/workspace",
         "appRoot": "/app"
+      },
+      "containerStartup": {
+        "runtimeImage": "kirakira-agent-runtime:local",
+        "sourceHashLabel": "org.kirakira.source-hash",
+        "sourceHashCachePath": ".kirakira/runtime-image.hash",
+        "workspaceBuildCachePath": ".kirakira/workspace-build.hash",
+        "buildService": "kirakira-agent",
+        "runService": "kirakira-agent",
+        "runtimeServices": ["postgres", "redis", "qdrant", "neo4j", "minio", "kirakirad"],
+        "defaultCommand": ["chat"],
+        "interactiveCommands": ["chat"],
+        "runOptions": ["--rm", "--no-deps", "--pull", "never"],
+        "hashRoots": [
+          ".dockerignore",
+          "Dockerfile",
+          "configs/runtime/profiles.json",
+          "package.json",
+          "pnpm-lock.yaml",
+          "pnpm-workspace.yaml",
+          "turbo.json",
+          "tsconfig.base.json",
+          "vitest.config.ts",
+          "pytest.ini",
+          "packages",
+          "scripts"
+        ],
+        "ignoredHashDirs": [".git", ".turbo", "coverage", "dist", "node_modules"],
+        "ignoredHashFiles": ["scripts/kirakira.mjs"],
+        "workspaceBuild": {
+          "distEntry": "packages/cli/dist/index.js",
+          "filter": "@kirakira/cli..."
+        },
+        "overlay": {
+          "packagesRoot": "packages",
+          "containerPackagesRoot": "/app/packages",
+          "scripts": ["kirakira-container.mjs", "kirakira-common.mjs", "runtime-profile.mjs"],
+          "containerScriptsRoot": "/app/scripts"
+        }
       }
     },
     "host": {

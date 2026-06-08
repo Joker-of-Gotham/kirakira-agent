@@ -2,65 +2,134 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
+import {
+  loadRuntimeProfiles,
+  renderComposeArgs,
+  renderRuntimeEnv,
+  resolveRuntimeProfile,
+} from "./runtime-profile.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const rawArgs = process.argv.slice(2);
-const args = rawArgs[0] === "--" ? rawArgs.slice(1) : rawArgs;
-const truthyEnv = (name) => ["1", "true", "yes", "on"].includes(String(process.env[name] ?? "").toLowerCase());
-const forceRuntimeBuild = truthyEnv("KIRAKIRA_REBUILD") || truthyEnv("KIRAKIRA_FORCE_BUILD");
-const strictRuntimeHash = truthyEnv("KIRAKIRA_STRICT_IMAGE_HASH");
-const skipRuntimeBuild = truthyEnv("KIRAKIRA_SKIP_BUILD");
-const verboseStartup = truthyEnv("KIRAKIRA_VERBOSE_STARTUP");
-const runtimeImage = "kirakira-agent-runtime:local";
-const sourceHashLabel = "org.kirakira.source-hash";
-const hashCachePath = join(repoRoot, ".kirakira", "runtime-image.hash");
-const workspaceBuildCachePath = join(repoRoot, ".kirakira", "workspace-build.hash");
-const skipWorkspaceBuild = truthyEnv("KIRAKIRA_SKIP_WORKSPACE_BUILD");
-const forceWorkspaceBuild = truthyEnv("KIRAKIRA_FORCE_WORKSPACE_BUILD");
-const hashRoots = [
-  ".dockerignore",
-  "Dockerfile",
-  "docker-compose.yml",
-  "package.json",
-  "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
-  "turbo.json",
-  "tsconfig.base.json",
-  "vitest.config.ts",
-  "pytest.ini",
-  "packages",
-  "scripts",
-];
-const ignoredHashDirs = new Set([
-  ".git",
-  ".turbo",
-  "coverage",
-  "dist",
-  "node_modules",
-]);
-const ignoredHashFiles = new Set([
-  "scripts/kirakira.mjs",
-]);
-const runtimeServices = [
-  "postgres",
-  "redis",
-  "qdrant",
-  "neo4j",
-  "minio",
-  "kirakirad",
-];
+const DEFAULT_CONTAINER_PROFILE = "container";
 
-function run(command, commandArgs, options = {}) {
+function truthyEnv(name, env = process.env) {
+  return ["1", "true", "yes", "on"].includes(String(env[name] ?? "").toLowerCase());
+}
+
+function runtimeFlags(env = process.env) {
+  return {
+    forceRuntimeBuild: truthyEnv("KIRAKIRA_REBUILD", env) || truthyEnv("KIRAKIRA_FORCE_BUILD", env),
+    strictRuntimeHash: truthyEnv("KIRAKIRA_STRICT_IMAGE_HASH", env),
+    skipRuntimeBuild: truthyEnv("KIRAKIRA_SKIP_BUILD", env),
+    verboseStartup: truthyEnv("KIRAKIRA_VERBOSE_STARTUP", env),
+    skipWorkspaceBuild: truthyEnv("KIRAKIRA_SKIP_WORKSPACE_BUILD", env),
+    forceWorkspaceBuild: truthyEnv("KIRAKIRA_FORCE_WORKSPACE_BUILD", env),
+  };
+}
+
+function normalizeArgs(argv) {
+  return argv[0] === "--" ? argv.slice(1) : argv;
+}
+
+function stringValue(value, label) {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`Container startup profile requires ${label}`);
+  }
+  return value;
+}
+
+function stringArray(value, label) {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length === 0)) {
+    throw new Error(`Container startup profile requires ${label} as a string array`);
+  }
+  return [...value];
+}
+
+function optionalStringArray(value, label, fallback) {
+  if (value === undefined) return [...fallback];
+  return stringArray(value, label);
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function resolveRepoPath(path, label) {
+  const value = stringValue(path, label);
+  const absolutePath = resolve(repoRoot, value);
+  const rel = relative(repoRoot, absolutePath);
+  if (isAbsolute(rel) || rel.startsWith("..")) {
+    throw new Error(`Container startup ${label} escapes the repository: ${value}`);
+  }
+  return absolutePath;
+}
+
+export function selectContainerProfile(env = process.env, config = loadRuntimeProfiles()) {
+  const profileName =
+    env.KIRAKIRA_CONTAINER_PROFILE ?? env.KIRAKIRA_START_PROFILE ?? DEFAULT_CONTAINER_PROFILE;
+  return resolveRuntimeProfile(profileName, config, {});
+}
+
+export function resolveContainerStartup(profile) {
+  const startup = profile.containerStartup;
+  if (!startup || typeof startup !== "object" || Array.isArray(startup)) {
+    throw new Error(`Runtime profile "${profile.name}" does not define containerStartup`);
+  }
+
+  const hashRoots = uniqueStrings([
+    ...optionalStringArray(startup.hashRoots, "hashRoots", []),
+    ...(profile.composeFiles ?? []),
+  ]);
+
+  return {
+    runtimeImage: stringValue(startup.runtimeImage, "runtimeImage"),
+    sourceHashLabel: stringValue(startup.sourceHashLabel, "sourceHashLabel"),
+    sourceHashCachePath: stringValue(startup.sourceHashCachePath, "sourceHashCachePath"),
+    workspaceBuildCachePath: stringValue(startup.workspaceBuildCachePath, "workspaceBuildCachePath"),
+    buildService: stringValue(startup.buildService, "buildService"),
+    runService: stringValue(startup.runService, "runService"),
+    runtimeServices: stringArray(startup.runtimeServices, "runtimeServices"),
+    defaultCommand: optionalStringArray(startup.defaultCommand, "defaultCommand", ["chat"]),
+    interactiveCommands: new Set(optionalStringArray(startup.interactiveCommands, "interactiveCommands", ["chat"])),
+    runOptions: optionalStringArray(startup.runOptions, "runOptions", ["--rm", "--no-deps", "--pull", "never"]),
+    hashRoots,
+    ignoredHashDirs: new Set(optionalStringArray(startup.ignoredHashDirs, "ignoredHashDirs", [])),
+    ignoredHashFiles: new Set(optionalStringArray(startup.ignoredHashFiles, "ignoredHashFiles", [])),
+    workspaceBuild: {
+      distEntry: stringValue(startup.workspaceBuild?.distEntry, "workspaceBuild.distEntry"),
+      filter: stringValue(startup.workspaceBuild?.filter, "workspaceBuild.filter"),
+    },
+    overlay: {
+      packagesRoot: stringValue(startup.overlay?.packagesRoot, "overlay.packagesRoot"),
+      containerPackagesRoot: stringValue(
+        startup.overlay?.containerPackagesRoot,
+        "overlay.containerPackagesRoot",
+      ),
+      scripts: optionalStringArray(startup.overlay?.scripts, "overlay.scripts", []),
+      containerScriptsRoot: stringValue(
+        startup.overlay?.containerScriptsRoot,
+        "overlay.containerScriptsRoot",
+      ),
+    },
+  };
+}
+
+function runtimeCommandEnv(profile) {
+  return {
+    ...process.env,
+    ...renderRuntimeEnv(profile),
+    COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
+  };
+}
+
+function run(command, commandArgs, profile, options = {}) {
   const result = spawnSync(command, commandArgs, {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     stdio: "inherit",
     shell: process.platform === "win32",
     ...options,
@@ -74,14 +143,11 @@ function run(command, commandArgs, options = {}) {
   return process.exitCode;
 }
 
-function runChecked(command, commandArgs, label) {
+function runChecked(command, commandArgs, label, profile) {
   const result = spawnSync(command, commandArgs, {
     cwd: repoRoot,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     shell: process.platform === "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -94,13 +160,10 @@ function runChecked(command, commandArgs, label) {
   }
 }
 
-function ensureDockerAvailable() {
+function ensureDockerAvailable(profile) {
   const result = spawnSync("docker", ["compose", "version"], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     stdio: "ignore",
     shell: process.platform === "win32",
   });
@@ -110,60 +173,54 @@ function ensureDockerAvailable() {
   }
 }
 
-function hashPath(hash, absolutePath) {
+function hashPath(hash, absolutePath, startup) {
   const stat = statSync(absolutePath);
-  const rel = relative(repoRoot, absolutePath).replace(/\\/g, "/");
+  const rel = relative(repoRoot, absolutePath).replace(/\\/gu, "/");
 
   if (stat.isDirectory()) {
-    const baseName = absolutePath.split(/[\\/]/).pop();
-    if (baseName && ignoredHashDirs.has(baseName)) return;
+    const baseName = absolutePath.split(/[\\/]/u).pop();
+    if (baseName && startup.ignoredHashDirs.has(baseName)) return;
     const entries = readdirSync(absolutePath).sort((a, b) => a.localeCompare(b));
     for (const entry of entries) {
-      hashPath(hash, join(absolutePath, entry));
+      hashPath(hash, join(absolutePath, entry), startup);
     }
     return;
   }
 
   if (!stat.isFile()) return;
-  if (ignoredHashFiles.has(rel)) return;
+  if (startup.ignoredHashFiles.has(rel)) return;
   hash.update(rel);
   hash.update("\0");
   hash.update(readFileSync(absolutePath));
   hash.update("\0");
 }
 
-function computeSourceHash() {
+function computeSourceHash(startup) {
   const hash = createHash("sha256");
-  for (const root of hashRoots) {
+  for (const root of startup.hashRoots) {
     const absolutePath = join(repoRoot, root);
     if (existsSync(absolutePath)) {
-      hashPath(hash, absolutePath);
+      hashPath(hash, absolutePath, startup);
     }
   }
   return hash.digest("hex");
 }
 
-function runtimeImageExists() {
+function runtimeImageExists(profile, runtimeImage) {
   const result = spawnSync("docker", ["image", "inspect", runtimeImage], {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     stdio: "ignore",
     shell: process.platform === "win32",
   });
   return result.status === 0;
 }
 
-function currentImageSourceHash() {
-  const result = spawnSync("docker", ["image", "inspect", runtimeImage], {
+function currentImageSourceHash(profile, startup) {
+  const result = spawnSync("docker", ["image", "inspect", startup.runtimeImage], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     shell: process.platform === "win32",
     stdio: ["ignore", "pipe", "ignore"],
   });
@@ -172,147 +229,166 @@ function currentImageSourceHash() {
 
   try {
     const [image] = JSON.parse(result.stdout);
-    return image?.Config?.Labels?.[sourceHashLabel];
+    return image?.Config?.Labels?.[startup.sourceHashLabel];
   } catch {
     return undefined;
   }
 }
 
-function cachedSourceHash() {
+function cachedSourceHash(startup) {
   try {
-    return readFileSync(hashCachePath, "utf8").trim() || undefined;
+    return readFileSync(resolveRepoPath(startup.sourceHashCachePath, "sourceHashCachePath"), "utf8").trim()
+      || undefined;
   } catch {
     return undefined;
   }
 }
 
-function writeCachedSourceHash(sourceHash) {
-  mkdirSync(join(repoRoot, ".kirakira"), { recursive: true });
+function writeCachedSourceHash(startup, sourceHash) {
+  const hashCachePath = resolveRepoPath(startup.sourceHashCachePath, "sourceHashCachePath");
+  mkdirSync(dirname(hashCachePath), { recursive: true });
   writeFileSync(hashCachePath, `${sourceHash}\n`, "utf8");
 }
 
-function cachedWorkspaceBuildHash() {
+function cachedWorkspaceBuildHash(startup) {
   try {
-    return readFileSync(workspaceBuildCachePath, "utf8").trim() || undefined;
+    return readFileSync(
+      resolveRepoPath(startup.workspaceBuildCachePath, "workspaceBuildCachePath"),
+      "utf8",
+    ).trim() || undefined;
   } catch {
     return undefined;
   }
 }
 
-function writeCachedWorkspaceBuildHash(sourceHash) {
-  mkdirSync(join(repoRoot, ".kirakira"), { recursive: true });
-  writeFileSync(workspaceBuildCachePath, `${sourceHash}\n`, "utf8");
+function writeCachedWorkspaceBuildHash(startup, sourceHash) {
+  const cachePath = resolveRepoPath(startup.workspaceBuildCachePath, "workspaceBuildCachePath");
+  mkdirSync(dirname(cachePath), { recursive: true });
+  writeFileSync(cachePath, `${sourceHash}\n`, "utf8");
 }
 
-function ensureRuntimeImage() {
-  const sourceHash = computeSourceHash();
-  const imageExists = runtimeImageExists();
-  const cacheHash = cachedSourceHash();
-  const imageHash = imageExists ? currentImageSourceHash() : undefined;
+export function buildRuntimeImageArgs(profile, startup, sourceHash) {
+  return [
+    "compose",
+    ...renderComposeArgs(profile),
+    "--progress",
+    "plain",
+    "build",
+    "--build-arg",
+    `KIRAKIRA_SOURCE_HASH=${sourceHash}`,
+    startup.buildService,
+  ];
+}
+
+function ensureRuntimeImage(profile, startup, flags) {
+  const sourceHash = computeSourceHash(startup);
+  const imageExists = runtimeImageExists(profile, startup.runtimeImage);
+  const cacheHash = cachedSourceHash(startup);
+  const imageHash = imageExists ? currentImageSourceHash(profile, startup) : undefined;
   const imageMatchesSource = cacheHash === sourceHash || imageHash === sourceHash;
-  const wantsBuild = forceRuntimeBuild
+  const wantsBuild = flags.forceRuntimeBuild
     || !imageExists
-    || (strictRuntimeHash && !imageMatchesSource);
-  const shouldBuild = wantsBuild && !skipRuntimeBuild;
+    || (flags.strictRuntimeHash && !imageMatchesSource);
+  const shouldBuild = wantsBuild && !flags.skipRuntimeBuild;
 
   if (imageExists && !shouldBuild) {
     if (imageHash === sourceHash && cacheHash !== sourceHash) {
-      writeCachedSourceHash(sourceHash);
+      writeCachedSourceHash(startup, sourceHash);
     }
-    if (!imageMatchesSource && verboseStartup) {
+    if (!imageMatchesSource && flags.verboseStartup) {
       console.log("Using existing Kirakira runtime base image; current workspace build will be mounted at launch.");
       console.log("Rebuild the image only after dependency/base-image changes: `$env:KIRAKIRA_REBUILD='1'; pnpm.cmd start`.");
     }
     return;
   }
 
-  if (!imageExists && skipRuntimeBuild) {
-    console.error(`Runtime image ${runtimeImage} is missing and KIRAKIRA_SKIP_BUILD is enabled.`);
-    console.error("Build once with: docker compose build kirakira-agent");
+  if (!imageExists && flags.skipRuntimeBuild) {
+    console.error(`Runtime image ${startup.runtimeImage} is missing and KIRAKIRA_SKIP_BUILD is enabled.`);
+    console.error(`Build once with: docker compose ${renderComposeArgs(profile).join(" ")} build ${startup.buildService}`.trim());
     process.exit(1);
   }
 
-  if (imageExists && strictRuntimeHash && !imageMatchesSource && !forceRuntimeBuild) {
+  if (imageExists && flags.strictRuntimeHash && !imageMatchesSource && !flags.forceRuntimeBuild) {
     console.warn("KIRAKIRA_STRICT_IMAGE_HASH is enabled and the runtime image is stale.");
   }
 
   console.log(`${imageExists ? "Rebuilding" : "Building"} Kirakira runtime image...`);
-  const buildStatus = run("docker", [
-    "compose",
-    "--progress",
-    "plain",
-    "build",
-    "--build-arg",
-    `KIRAKIRA_SOURCE_HASH=${sourceHash}`,
-    "kirakira-agent",
-  ]);
+  const buildStatus = run("docker", buildRuntimeImageArgs(profile, startup, sourceHash), profile);
   if (buildStatus !== 0) {
     process.exit(buildStatus);
   }
 
-  const builtImageHash = currentImageSourceHash();
+  const builtImageHash = currentImageSourceHash(profile, startup);
   if (builtImageHash !== sourceHash) {
     console.warn("Runtime image built, but source hash label could not be verified.");
   }
-  writeCachedSourceHash(sourceHash);
+  writeCachedSourceHash(startup, sourceHash);
 }
 
 function pnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }
 
-function ensureCurrentWorkspaceBuild() {
-  if (skipWorkspaceBuild) return;
+function ensureCurrentWorkspaceBuild(profile, startup, flags) {
+  if (flags.skipWorkspaceBuild) return;
 
-  const sourceHash = computeSourceHash();
-  const cliDistEntry = join(repoRoot, "packages", "cli", "dist", "index.js");
-  if (!forceWorkspaceBuild && existsSync(cliDistEntry) && cachedWorkspaceBuildHash() === sourceHash) {
+  const sourceHash = computeSourceHash(startup);
+  const cliDistEntry = resolveRepoPath(startup.workspaceBuild.distEntry, "workspaceBuild.distEntry");
+  if (
+    !flags.forceWorkspaceBuild
+    && existsSync(cliDistEntry)
+    && cachedWorkspaceBuildHash(startup) === sourceHash
+  ) {
     return;
   }
 
   console.log("Building current Kirakira workspace...");
   runChecked(
     pnpmCommand(),
-    ["exec", "turbo", "build", "--filter=@kirakira/cli..."],
+    ["exec", "turbo", "build", `--filter=${startup.workspaceBuild.filter}`],
     "Building current Kirakira workspace",
+    profile,
   );
-  writeCachedWorkspaceBuildHash(sourceHash);
+  writeCachedWorkspaceBuildHash(startup, sourceHash);
 }
 
-function dockerComposeUpSupportsNoBuild() {
-  const result = spawnSync("docker", ["compose", "up", "--help"], {
+function dockerComposeUpSupportsNoBuild(profile) {
+  const result = spawnSync("docker", ["compose", ...renderComposeArgs(profile), "up", "--help"], {
     cwd: repoRoot,
     encoding: "utf8",
-    env: {
-      ...process.env,
-      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
-    },
+    env: runtimeCommandEnv(profile),
     shell: process.platform === "win32",
     stdio: ["ignore", "pipe", "pipe"],
   });
   return `${result.stdout ?? ""}\n${result.stderr ?? ""}`.includes("--no-build");
 }
 
-function ensureRuntimeServices() {
-  const upArgs = ["compose", "up", "-d", "--wait"];
-  if (dockerComposeUpSupportsNoBuild()) {
+export function buildRuntimeServicesArgs(profile, startup, options = {}) {
+  const upArgs = ["compose", ...renderComposeArgs(profile), "up", "-d", "--wait"];
+  if (options.noBuildSupported) {
     upArgs.push("--no-build");
   }
-  upArgs.push(...runtimeServices);
+  upArgs.push(...startup.runtimeServices);
+  return upArgs;
+}
 
+function ensureRuntimeServices(profile, startup) {
   runChecked(
     "docker",
-    upArgs,
+    buildRuntimeServicesArgs(profile, startup, {
+      noBuildSupported: dockerComposeUpSupportsNoBuild(profile),
+    }),
     "Starting Kirakira runtime services",
+    profile,
   );
 }
 
 function dockerHostPath(absolutePath) {
-  return resolve(absolutePath).replace(/\\/g, "/");
+  return resolve(absolutePath).replace(/\\/gu, "/");
 }
 
-function packageOverlayVolumeArgs() {
-  const packageRoot = join(repoRoot, "packages");
+export function packageOverlayVolumeArgs(startup) {
+  const packageRoot = resolveRepoPath(startup.overlay.packagesRoot, "overlay.packagesRoot");
   const args = [];
   if (!existsSync(packageRoot)) return args;
 
@@ -324,53 +400,102 @@ function packageOverlayVolumeArgs() {
   for (const packageDir of packageDirs) {
     const distPath = join(packageRoot, packageDir, "dist");
     if (existsSync(distPath)) {
-      args.push("--volume", `${dockerHostPath(distPath)}:/app/packages/${packageDir}/dist:ro`);
+      args.push(
+        "--volume",
+        `${dockerHostPath(distPath)}:${posix.join(startup.overlay.containerPackagesRoot, packageDir, "dist")}:ro`,
+      );
     }
 
     const packageJsonPath = join(packageRoot, packageDir, "package.json");
     if (existsSync(packageJsonPath)) {
-      args.push("--volume", `${dockerHostPath(packageJsonPath)}:/app/packages/${packageDir}/package.json:ro`);
+      args.push(
+        "--volume",
+        `${dockerHostPath(packageJsonPath)}:${posix.join(
+          startup.overlay.containerPackagesRoot,
+          packageDir,
+          "package.json",
+        )}:ro`,
+      );
     }
   }
 
-  for (const scriptName of ["kirakira-container.mjs", "kirakira-common.mjs"]) {
+  for (const scriptName of startup.overlay.scripts) {
     const scriptPath = join(repoRoot, "scripts", scriptName);
     if (existsSync(scriptPath)) {
-      args.push("--volume", `${dockerHostPath(scriptPath)}:/app/scripts/${scriptName}:ro`);
+      args.push(
+        "--volume",
+        `${dockerHostPath(scriptPath)}:${posix.join(startup.overlay.containerScriptsRoot, scriptName)}:ro`,
+      );
     }
   }
 
   return args;
 }
 
-function composeArgs(userArgs) {
-  const cliArgs = userArgs.length > 0 ? userArgs : ["chat"];
-  const interactive = cliArgs[0] === "chat";
+export function buildComposeRunArgs(profile, startup, userArgs, options = {}) {
+  const cliArgs = userArgs.length > 0 ? userArgs : startup.defaultCommand;
+  const interactive = startup.interactiveCommands.has(cliArgs[0]);
+  const overlayArgs = options.overlayArgs ?? packageOverlayVolumeArgs(startup);
   return [
     "compose",
+    ...renderComposeArgs(profile),
     "run",
-    "--rm",
-    "--no-deps",
-    "--pull",
-    "never",
+    ...startup.runOptions,
     ...(interactive ? [] : ["-T"]),
-    ...packageOverlayVolumeArgs(),
-    "kirakira-agent",
+    ...overlayArgs,
+    startup.runService,
     ...cliArgs,
   ];
 }
 
-ensureDockerAvailable();
-ensureEnvFile(repoRoot);
-ensureMcpConfig(repoRoot);
-ensureRuntimeImage();
-ensureCurrentWorkspaceBuild();
-ensureRuntimeServices();
-
-const status = run("docker", composeArgs(args));
-
-if (args[0] === "mcp") {
-  ensureMcpConfig(repoRoot);
+export function buildContainerStartupPlan(profile, userArgs, options = {}) {
+  const startup = options.startup ?? resolveContainerStartup(profile);
+  const sourceHash = options.sourceHash ?? "<source-hash>";
+  return {
+    profile: profile.name,
+    env: renderRuntimeEnv(profile),
+    runtimeImage: startup.runtimeImage,
+    build: {
+      command: "docker",
+      args: buildRuntimeImageArgs(profile, startup, sourceHash),
+    },
+    services: {
+      command: "docker",
+      args: buildRuntimeServicesArgs(profile, startup, {
+        noBuildSupported: options.noBuildSupported ?? true,
+      }),
+    },
+    run: {
+      command: "docker",
+      args: buildComposeRunArgs(profile, startup, userArgs, {
+        overlayArgs: options.overlayArgs ?? [],
+      }),
+    },
+  };
 }
 
-process.exit(status);
+export function main(argv, env = process.env) {
+  const args = normalizeArgs(argv);
+  const profile = selectContainerProfile(env);
+  const startup = resolveContainerStartup(profile);
+  const flags = runtimeFlags(env);
+
+  ensureDockerAvailable(profile);
+  ensureEnvFile(repoRoot);
+  ensureMcpConfig(repoRoot, profile);
+  ensureRuntimeImage(profile, startup, flags);
+  ensureCurrentWorkspaceBuild(profile, startup, flags);
+  ensureRuntimeServices(profile, startup);
+
+  const status = run("docker", buildComposeRunArgs(profile, startup, args), profile);
+
+  if (args[0] === "mcp") {
+    ensureMcpConfig(repoRoot, profile);
+  }
+
+  return status;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.exit(main(process.argv.slice(2)));
+}

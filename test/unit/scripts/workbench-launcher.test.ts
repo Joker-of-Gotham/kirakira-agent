@@ -1,10 +1,14 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { buildWorkbenchPlan } from "../../../scripts/kirakira-workbench.mjs";
+import { ensureMcpConfig } from "../../../scripts/kirakira-common.mjs";
+import { buildWorkbenchPlan, profileFromOptions } from "../../../scripts/kirakira-workbench.mjs";
 import { loadRuntimeProfiles, resolveRuntimeProfile } from "../../../scripts/runtime-profile.mjs";
 
 describe("workbench launcher plan", () => {
   it("plans infra, daemon, and web from the workbench profile", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const plan = buildWorkbenchPlan(profile, "web");
 
     expect(plan.profile).toBe("workbench-host");
@@ -43,7 +47,7 @@ describe("workbench launcher plan", () => {
   });
 
   it("can plan a daemon-only startup without UI or implicit infra", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const plan = buildWorkbenchPlan(profile, "daemon", { skipInfra: true });
 
     expect(plan.steps).toHaveLength(1);
@@ -55,7 +59,7 @@ describe("workbench launcher plan", () => {
   });
 
   it("plans new workbench surfaces from profile configuration", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const configurableProfile = {
       ...profile,
       workbench: {
@@ -94,15 +98,80 @@ describe("workbench launcher plan", () => {
   });
 
   it("uses the profile default surface when no surface is requested", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const plan = buildWorkbenchPlan(profile, undefined, { skipInfra: true, skipDaemon: true });
 
     expect(plan.surface).toBe("web");
     expect(plan.steps.map((step) => step.name)).toEqual(["web"]);
   });
 
+  it("does not let generic root env override the selected workbench profile", () => {
+    const profile = profileFromOptions(
+      {},
+      {
+        KIRAKIRA_WORKBENCH_PROFILE: "workbench-host",
+        KIRAKIRA_RUNTIME_PROFILE: "container",
+        KIRAKIRA_WORKSPACE_ROOT: "/workspace",
+        KIRAKIRA_APP_ROOT: "/app",
+        KIRAKIRA_MCP_WORKSPACE_ROOT: "/workspace",
+        KIRAKIRA_MCP_APP_ROOT: "/app",
+      },
+    );
+
+    expect(profile.name).toBe("workbench-host");
+    expect(profile.workspaceRoot).toBe(".");
+    expect(profile.appRoot).toBe(".");
+    expect(profile.mcp.workspaceRoot).toBe(".");
+    expect(profile.mcp.appRoot).toBe(".");
+  });
+
+  it("renders MCP roots from the resolved workbench profile despite container .env defaults", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "kirakira-mcp-"));
+    const envKeys = [
+      "KIRAKIRA_RUNTIME_PROFILE",
+      "KIRAKIRA_WORKSPACE_ROOT",
+      "KIRAKIRA_APP_ROOT",
+      "KIRAKIRA_MCP_WORKSPACE_ROOT",
+      "KIRAKIRA_MCP_APP_ROOT",
+    ];
+    const previousEnv = new Map(envKeys.map((key) => [key, process.env[key]]));
+
+    try {
+      for (const key of envKeys) delete process.env[key];
+      writeFileSync(
+        join(tempRoot, ".env"),
+        [
+          "KIRAKIRA_RUNTIME_PROFILE=container",
+          "KIRAKIRA_WORKSPACE_ROOT=/workspace",
+          "KIRAKIRA_APP_ROOT=/app",
+          "KIRAKIRA_MCP_WORKSPACE_ROOT=/workspace",
+          "KIRAKIRA_MCP_APP_ROOT=/app",
+          "",
+        ].join("\n"),
+        "utf8",
+      );
+
+      const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+      ensureMcpConfig(tempRoot, profile);
+      const mcp = JSON.parse(readFileSync(join(tempRoot, ".mcp.json"), "utf8"));
+
+      expect(mcp.mcpServers["filesystem-core"].args.at(-1)).toBe(".");
+      expect(mcp.mcpServers["filesystem-patch"].args.at(-1)).toBe(".");
+      expect(mcp.mcpServers["filesystem-artifact"].args.at(-1)).toBe(".");
+    } finally {
+      for (const [key, value] of previousEnv) {
+        if (value === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = value;
+        }
+      }
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
   it("fails loudly for unknown surfaces and package references", () => {
-    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
 
     expect(() => buildWorkbenchPlan(profile, "unknown", { skipInfra: true })).toThrow(
       /Unknown workbench surface "unknown"/u,

@@ -18,7 +18,7 @@
     "@kirakira/core": "workspace:*",
     "blake3": "^2.1.7",
     "@noble/ed25519": "^2.2.3",
-    "better-sqlite3": "^11.8.1"
+    "better-sqlite3": "^12.10.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

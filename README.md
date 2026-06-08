@@ -88,12 +88,28 @@ pnpm start
 
 1. ensures `.env` exists
 2. ensures `.mcp.json` exists
-3. hashes the runtime-relevant sources
-4. rebuilds the runtime image only when the hash changes
-5. starts `postgres`, `redis`, `qdrant`, `neo4j`, `minio`, and `kirakirad`
-6. enters the interactive `kirakira-agent` CLI container
+3. resolves the `container` runtime profile from `configs/runtime/profiles.json`
+4. hashes the runtime-relevant sources declared by that profile
+5. rebuilds the runtime image only when the hash changes
+6. starts the profile-declared runtime services: `postgres`, `redis`, `qdrant`, `neo4j`, `minio`, and `kirakirad`
+7. enters the interactive `kirakira-agent` CLI container
 
 That is the intended operating model: one command, one runtime path, one place to debug.
+
+## Startup Matrix
+
+| Command | Purpose | Runtime profile |
+| --- | --- | --- |
+| `pnpm start` | Docker-backed interactive CLI, defaulting to `chat` | `container` |
+| `pnpm start -- mcp list` | Run another CLI command through the same Docker runtime | `container` |
+| `pnpm start:daemon` | Host daemon against Docker-published infra | `workbench-host` |
+| `pnpm start:web` | Host daemon plus web workbench at `http://127.0.0.1:5183` | `workbench-host` |
+| `pnpm start:desktop` | Host daemon plus desktop renderer at `http://127.0.0.1:5174` | `workbench-host` |
+| `pnpm runtime:profile env workbench-host` | Print the workbench env contract, including gateway `ws://127.0.0.1:17373/runtime` | `workbench-host` |
+| `pnpm dev:web` | UI-only Vite shortcut; does not start infra or daemon | none |
+| `pnpm dev:desktop` | Desktop renderer-only shortcut; does not start infra or daemon | none |
+
+The Kirakira web workbench default is port `5183`. A Vite server on `5173` is not this repo's default startup target.
 
 ## Common Flows
 
@@ -127,6 +143,8 @@ flowchart LR
 The repo is still a work-in-progress monorepo, but the current architectural direction is stable:
 
 - `packages/cli`: commands, TUI, provider setup, MCP interaction
+- `apps/web`: browser workbench shell for the daemon runtime gateway
+- `apps/desktop`: desktop renderer shell aligned to the same runtime gateway
 - `packages/kirakirad`: policy transport and runtime-side control server
 - `packages/mcp-adapter`: MCP client and transport layer
 - `packages/policy-engine`: local and remote PDP wiring
