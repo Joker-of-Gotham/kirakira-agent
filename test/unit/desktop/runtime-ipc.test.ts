@@ -74,13 +74,13 @@ describe("desktop runtime IPC controller", () => {
       subscriptionId: "local-sub-1",
       options: {
         afterSeq: 7,
-        filter: { kinds: ["research.progress"] },
+        filter: { kinds: ["research.started"] },
       },
     });
 
     expect(fake.client.subscribeToRun).toHaveBeenCalledWith("run-1", {
       afterSeq: 7,
-      filter: { kinds: ["research.progress"] },
+      filter: { kinds: ["research.started"] },
       messageId: "subscribe-msg-1",
     });
 
@@ -95,7 +95,7 @@ describe("desktop runtime IPC controller", () => {
         id: "event-1",
         runId: "run-1",
         timestamp: "2026-06-09T00:00:00.000Z",
-        kind: "research.progress",
+        kind: "research.started",
         checkpointSeq: 8,
         payload: {},
       },
@@ -140,6 +140,46 @@ describe("desktop runtime IPC controller", () => {
 
     expect(fake.client.unsubscribe).toHaveBeenCalledWith("daemon-sub-late");
     expect(controller.subscriptionCount()).toBe(0);
+  });
+
+  it("cleans up and reports correlated subscribe errors from the daemon", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const send = vi.fn();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      idFactory: () => "subscribe-msg-error",
+      isTrustedSender: () => true,
+      webContentsFromId: () => ({
+        send,
+        isDestroyed: () => false,
+      }),
+    });
+    controller.register(ipcMain);
+
+    await ipcMain.invoke(ipcMainChannel("subscribe"), eventFor(12), {
+      runId: "run-1",
+      subscriptionId: "local-sub-error",
+      options: { filter: { kinds: ["run.started"] } },
+    });
+
+    fake.emit({
+      type: "error",
+      code: "invalid_filter",
+      message: "Bad filter",
+      messageId: "subscribe-msg-error",
+    });
+
+    expect(send).toHaveBeenCalledWith("runtime:event:local-sub-error", {
+      type: "error",
+      message: "Bad filter",
+      detail: expect.objectContaining({
+        code: "invalid_filter",
+        messageId: "subscribe-msg-error",
+      }),
+    });
+    expect(controller.subscriptionCount()).toBe(0);
+    expect(fake.client.unsubscribe).not.toHaveBeenCalled();
   });
 
   it("rejects unsubscribe attempts from a renderer that does not own the subscription", async () => {
@@ -188,6 +228,15 @@ describe("desktop runtime IPC controller", () => {
         subscriptionId: "missing-run",
       }),
     ).rejects.toThrow("subscribeRun requires runId");
+    expect(fake.client.subscribeToRun).not.toHaveBeenCalled();
+
+    await expect(
+      ipcMain.invoke(ipcMainChannel("subscribe"), eventFor(30, "file:///trusted/index.html"), {
+        runId: "run-1",
+        subscriptionId: "bad-filter",
+        options: { filter: { kinds: ["research.progress"] } },
+      }),
+    ).rejects.toThrow("subscribe filter is malformed");
     expect(fake.client.subscribeToRun).not.toHaveBeenCalled();
   });
 });

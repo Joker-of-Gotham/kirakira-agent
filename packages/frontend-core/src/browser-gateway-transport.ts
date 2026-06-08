@@ -137,6 +137,22 @@ export function createBrowserGatewayTransport(
       }
       return;
     }
+    if (message.type === "error" && message.messageId) {
+      const localId = pendingSubscribeMessages.get(message.messageId);
+      if (localId) {
+        const subscription = subscriptions.get(localId);
+        if (subscription && !subscription.cancelled) {
+          subscription.listener({
+            type: "error",
+            message: message.message,
+            detail: message,
+          });
+        }
+        subscriptions.delete(localId);
+        pendingSubscribeMessages.delete(message.messageId);
+        return;
+      }
+    }
     if (message.type === "ack" || message.type === "pong") {
       pending.handleServerMessage(message);
       return;

@@ -1,5 +1,9 @@
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import type { DaemonClient, ServerMessage } from "@kirakira/runtime-daemon";
+import {
+  parseRuntimeClientMessage,
+  type RuntimeClientMessage,
+} from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
   RuntimeTransportEvent,
@@ -48,6 +52,24 @@ const optionalString = (value: unknown): string | undefined =>
 const optionalNumber = (value: unknown): number | undefined =>
   typeof value === "number" && Number.isFinite(value) ? value : undefined;
 
+function validateRuntimeClientMessage(raw: RuntimeClientMessage): RuntimeClientMessage {
+  const result = parseRuntimeClientMessage(raw);
+  if (!result.ok) {
+    throw new Error(result.error.message);
+  }
+  return result.message;
+}
+
+function validateControlMessage(
+  message: RuntimeClientMessage & { type: "control" },
+): Extract<RuntimeClientMessage, { type: "control" }> {
+  const validated = validateRuntimeClientMessage(message);
+  if (validated.type !== "control") {
+    throw new Error("control message is malformed or unsupported");
+  }
+  return validated;
+}
+
 function assertTrustedSender(
   event: IpcMainInvokeEvent,
   isTrustedSender?: (event: IpcMainInvokeEvent) => boolean,
@@ -73,6 +95,13 @@ function parseSubmitPromptRequest(value: unknown): SubmitPromptRequest {
     if (!isRecord(value.options)) throw new Error("submitPrompt options must be an object");
     request.options = value.options;
   }
+  validateControlMessage({
+    type: "control",
+    message:
+      request.options !== undefined
+        ? { type: "submit", prompt: request.prompt, mode: request.mode ?? "interactive", options: request.options }
+        : { type: "submit", prompt: request.prompt, mode: request.mode ?? "interactive" },
+  });
   return request;
 }
 
@@ -87,6 +116,7 @@ function parseSubscriptionId(value: unknown): string {
   if (!isRecord(value) || typeof value.subscriptionId !== "string" || value.subscriptionId.length === 0) {
     throw new Error("runtime subscriptionId is required");
   }
+  validateRuntimeClientMessage({ type: "unsubscribe", subscriptionId: value.subscriptionId });
   return value.subscriptionId;
 }
 
@@ -114,9 +144,25 @@ function parseSubscribeRequest(value: unknown): {
   subscriptionId: string;
 } {
   if (!isRecord(value)) throw new Error("subscribeRun requires a request object");
+  const runId = parseRunId(value.runId, "subscribeRun");
+  const options = parseSubscribeOptions(value.options);
+  const validated = validateRuntimeClientMessage({
+    type: "subscribe",
+    runId,
+    filter: options?.filter,
+    afterSeq: options?.afterSeq,
+  });
+  if (validated.type !== "subscribe") {
+    throw new Error("subscribe message is malformed");
+  }
   return {
-    runId: parseRunId(value.runId, "subscribeRun"),
-    options: parseSubscribeOptions(value.options),
+    runId,
+    options: validated.filter !== undefined || validated.afterSeq !== undefined
+      ? {
+          ...(validated.filter !== undefined ? { filter: validated.filter } : {}),
+          ...(validated.afterSeq !== undefined ? { afterSeq: validated.afterSeq } : {}),
+        }
+      : undefined,
     subscriptionId: parseSubscriptionId(value),
   };
 }
@@ -137,6 +183,24 @@ function parseApprovalDecision(value: unknown): ApprovalDecision {
   };
   const reason = optionalString(value.reason);
   if (reason !== undefined) decision.reason = reason;
+  validateControlMessage({
+    type: "control",
+    message:
+      reason !== undefined
+        ? {
+            type: "approve",
+            runId: decision.runId,
+            ticketId: decision.ticketId,
+            decision: decision.decision,
+            reason,
+          }
+        : {
+            type: "approve",
+            runId: decision.runId,
+            ticketId: decision.ticketId,
+            decision: decision.decision,
+          },
+  });
   return decision;
 }
 
@@ -144,6 +208,10 @@ function parseCancelRequest(value: unknown): { runId: string; reason?: string } 
   if (!isRecord(value)) throw new Error("cancel requires a request object");
   const runId = parseRunId(value.runId, "cancel");
   const reason = optionalString(value.reason);
+  validateControlMessage({
+    type: "control",
+    message: reason === undefined ? { type: "cancel", runId } : { type: "cancel", runId, reason },
+  });
   return reason === undefined ? { runId } : { runId, reason };
 }
 
@@ -182,6 +250,22 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
     return null;
   };
 
+  const sendSubscriptionError = (
+    subscriptionId: string,
+    subscription: DesktopSubscription,
+    message: Extract<ServerMessage, { type: "error" }>,
+  ) => {
+    if (subscription.disposed) return;
+    const target = options.webContentsFromId(subscription.webContentsId);
+    if (!target || target.isDestroyed()) return;
+    const payload: RuntimeTransportEvent = {
+      type: "error",
+      message: message.message,
+      detail: message,
+    };
+    target.send(`runtime:event:${subscriptionId}`, payload);
+  };
+
   const disposeSubscription = (subscriptionId: string, senderId?: number) => {
     const subscription = subscriptions.get(subscriptionId);
     if (!subscription) return;
@@ -204,6 +288,14 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
   };
 
   const removeMessageHandler = options.client.onMessage((message) => {
+    if (message.type === "error" && message.messageId) {
+      const matched = findSubscriptionBySubscribeMessageId(message.messageId);
+      if (matched) {
+        sendSubscriptionError(matched.subscriptionId, matched.subscription, message);
+        subscriptions.delete(matched.subscriptionId);
+        return;
+      }
+    }
     if (message.type === "subscribed" && message.messageId) {
       const matched = findSubscriptionBySubscribeMessageId(message.messageId);
       if (matched) {
@@ -263,6 +355,11 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
       ipcMain.handle("runtime:getState", async (event, rawRunId: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const runId = parseRunId(rawRunId, "getState");
+        validateRuntimeClientMessage({
+          type: "get_state",
+          runId,
+          messageId: (options.idFactory ?? defaultIdFactory)(),
+        });
         await ensureConnected();
         return { runId, state: await options.client.getState(runId) };
       });
@@ -311,6 +408,7 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
 
       ipcMain.handle("runtime:drain", async (event) => {
         assertTrustedSender(event, options.isTrustedSender);
+        validateControlMessage({ type: "control", message: { type: "drain" } });
         await ensureConnected();
         await options.client.drain();
       });

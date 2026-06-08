@@ -191,6 +191,53 @@ describe("browser gateway runtime transport", () => {
     await expect(drain).resolves.toBeUndefined();
   });
 
+  it("cleans up the matching subscription when subscribe returns a correlated error", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const seen: string[] = [];
+    const errors: string[] = [];
+    const unsubscribe = transport.subscribeRun("run-1", (event) => {
+      if (event.type === "event") seen.push(event.event.kind);
+      if (event.type === "error") errors.push(event.message);
+    });
+    const subscribeFrame = JSON.parse(socket?.sent[0] ?? "{}") as { messageId: string };
+
+    socket?.message({
+      type: "error",
+      code: "invalid_filter",
+      message: "Bad subscribe",
+      messageId: subscribeFrame.messageId,
+    });
+    socket?.message({
+      type: "event",
+      event: {
+        id: "event-after-error",
+        runId: "run-1",
+        timestamp: "2026-06-09T00:00:00.000Z",
+        kind: "run.started",
+        payload: {},
+      },
+    });
+    unsubscribe();
+
+    expect(errors).toEqual(["Bad subscribe"]);
+    expect(seen).toEqual([]);
+    expect(socket?.sent).toHaveLength(1);
+  });
+
   it("sends daemon unsubscribe when a local unsubscribe happens before subscribe ack", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;
