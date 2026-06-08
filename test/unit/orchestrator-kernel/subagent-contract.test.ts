@@ -225,6 +225,7 @@ describe("orchestrator subagent contract", () => {
       parentWorkerId: "worker-parent",
       parentTaskId: "step-a",
       runId: "run-1",
+      traceId: "trace-1",
       workspaceRoot: "C:/workspace",
       policyCeiling: { network: "restricted" },
       inputArtifactRefs: ["artifact-source"],
@@ -234,6 +235,8 @@ describe("orchestrator subagent contract", () => {
       expect(request).toMatchObject({
         parentTaskId: "step-a",
         parentWorkerId: "worker-parent",
+        lane: "delegated",
+        traceId: "trace-1",
         task: "Inspect repo architecture",
         capabilities: [{ kind: "tool", name: "repo.read" }],
         modelPreference: "openai:gpt-5.4",

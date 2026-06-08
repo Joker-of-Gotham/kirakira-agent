@@ -26,7 +26,8 @@ export class AgentRuntime {
 
   registerWorker(state: DaemonWorkerState): void {
     this.workers.set(state.id, { ...state });
-    emit(this.sink, state.runId, "subagent.spawned", {
+    emit(this.sink, state.runId, "task.started", {
+      taskId: state.id,
       workerId: state.id,
       workloadType: state.workloadType,
       status: state.status,
@@ -41,6 +42,7 @@ export class AgentRuntime {
     const next = { ...cur, ...partial, id: cur.id };
     this.workers.set(workerId, next);
     emit(this.sink, next.runId, "task.started", {
+      taskId: next.id,
       workerId: next.id,
       workloadType: next.workloadType,
       status: next.status,
@@ -74,6 +76,7 @@ export class AgentRuntime {
     if (!w) return;
     this.workers.delete(workerId);
     emit(this.sink, w.runId, "task.completed", {
+      taskId: w.id,
       workerId: w.id,
       status: "terminated",
       workloadType: w.workloadType,

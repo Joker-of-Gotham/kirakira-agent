@@ -1,4 +1,10 @@
-import type { RunEvent, RunEventKind } from "@kirakira/event-store";
+import type {
+  RunEvent,
+  RunEventKind,
+  SubagentContractRecord,
+  SubagentResultRecord,
+  SubagentScopeRecord,
+} from "@kirakira/event-store";
 
 export type RunDashboardStatus =
   | "idle"
@@ -28,6 +34,21 @@ export interface RuntimeEventSummary {
   detail?: string;
 }
 
+export interface RunDashboardSubagent {
+  id: string;
+  phase: EntityPhase;
+  parentTaskId?: string;
+  parentWorkerId?: string;
+  workerId?: string;
+  lane?: string;
+  traceId?: string;
+  scope?: SubagentScopeRecord;
+  contract?: SubagentContractRecord;
+  result?: SubagentResultRecord;
+  error?: string;
+  updatedAt: string;
+}
+
 export interface RunDashboardEntityMaps {
   tasks: Record<string, EntityPhase>;
   subagents: Record<string, EntityPhase>;
@@ -46,6 +67,7 @@ export interface RunDashboardProjection {
   errorMessage?: string;
   latestEvents: RuntimeEventSummary[];
   entities: RunDashboardEntityMaps;
+  subagentDetails: Record<string, RunDashboardSubagent>;
   pendingApprovalIds: string[];
   updatedAt?: string;
 }
@@ -138,6 +160,7 @@ export function createEmptyRunDashboard(runId?: string): RunDashboardProjection 
       approvals: {},
       artifacts: {},
     },
+    subagentDetails: {},
     pendingApprovalIds: [],
   };
 }
@@ -242,12 +265,29 @@ function applySubagent(
     event.kind === "subagent.completed" && event.payload.status === "failed"
       ? "failed"
       : SUBAGENT_PHASE_BY_EVENT[event.kind];
-  return setEntityPhase(
+  const next = setEntityPhase(
     state,
     "subagents",
     event,
     phase,
   );
+  if (!phase) return next;
+  const id = entityId(event);
+  if (!id) return next;
+  const previous = next.subagentDetails[id];
+  return {
+    ...next,
+    subagentDetails: {
+      ...next.subagentDetails,
+      [id]: {
+        ...previous,
+        id,
+        phase,
+        ...subagentDetail(event),
+        updatedAt: event.timestamp,
+      },
+    },
+  };
 }
 
 function applyTool(
@@ -359,4 +399,104 @@ function firstString(
     }
   }
   return undefined;
+}
+
+function subagentDetail(event: RunEvent): Partial<RunDashboardSubagent> {
+  const capabilities = objectArray(event.payload.capabilities);
+  const scope = capabilities
+    ? {
+        capabilities,
+        ...(namesForCapabilities(capabilities, "tool") !== undefined
+          ? { toolNames: namesForCapabilities(capabilities, "tool") }
+          : {}),
+        ...(namesForCapabilities(capabilities, "skill") !== undefined
+          ? { skillNames: namesForCapabilities(capabilities, "skill") }
+          : {}),
+        ...(namesForCapabilities(capabilities, "mcp") !== undefined
+          ? { mcpServers: namesForCapabilities(capabilities, "mcp") }
+          : {}),
+      }
+    : undefined;
+  const contract = {
+    ...(firstString(event.payload, ["taskPreview"]) !== undefined
+      ? { taskPreview: firstString(event.payload, ["taskPreview"]) }
+      : {}),
+    ...(firstString(event.payload, ["modelPreference"]) !== undefined
+      ? { modelPreference: firstString(event.payload, ["modelPreference"]) }
+      : {}),
+    ...(objectValue(event.payload.runtimePolicy) !== undefined
+      ? { runtimePolicy: objectValue(event.payload.runtimePolicy) }
+      : {}),
+    ...(objectValue(event.payload.policyCeiling) !== undefined
+      ? { policyCeiling: objectValue(event.payload.policyCeiling) }
+      : {}),
+    ...(stringArray(event.payload.inputArtifactRefs) !== undefined
+      ? { inputArtifactRefs: stringArray(event.payload.inputArtifactRefs) }
+      : {}),
+    ...(objectValue(event.payload.outputSchema) !== undefined
+      ? { outputSchema: objectValue(event.payload.outputSchema) }
+      : {}),
+  };
+  const result = {
+    ...(firstString(event.payload, ["preview"]) !== undefined
+      ? { preview: firstString(event.payload, ["preview"]) }
+      : {}),
+    ...(stringArray(event.payload.artifactRefs) !== undefined
+      ? { artifactRefs: stringArray(event.payload.artifactRefs) }
+      : {}),
+  };
+  return {
+    ...(firstString(event.payload, ["parentTaskId"]) !== undefined
+      ? { parentTaskId: firstString(event.payload, ["parentTaskId"]) }
+      : {}),
+    ...(firstString(event.payload, ["parentWorkerId"]) !== undefined
+      ? { parentWorkerId: firstString(event.payload, ["parentWorkerId"]) }
+      : {}),
+    ...(firstString(event.payload, ["workerId"]) !== undefined
+      ? { workerId: firstString(event.payload, ["workerId"]) }
+      : {}),
+    ...(firstString(event.payload, ["lane"]) !== undefined
+      ? { lane: firstString(event.payload, ["lane"]) }
+      : {}),
+    ...(firstString(event.payload, ["traceId"]) !== undefined
+      ? { traceId: firstString(event.payload, ["traceId"]) }
+      : {}),
+    ...(scope !== undefined ? { scope } : {}),
+    ...(Object.keys(contract).length > 0 ? { contract } : {}),
+    ...(Object.keys(result).length > 0 ? { result } : {}),
+    ...(firstString(event.payload, ["error"]) !== undefined
+      ? { error: firstString(event.payload, ["error"]) }
+      : {}),
+  };
+}
+
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is string => typeof item === "string");
+  return out.length > 0 ? out : undefined;
+}
+
+function objectValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function objectArray(value: unknown): Array<Record<string, unknown>> | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
+  return out.length > 0 ? out : undefined;
+}
+
+function namesForCapabilities(
+  capabilities: Array<Record<string, unknown>>,
+  kind: string,
+): string[] | undefined {
+  const names = capabilities
+    .filter((cap) => cap.kind === kind && typeof cap.name === "string")
+    .map((cap) => cap.name as string);
+  return names.length > 0 ? names : undefined;
 }

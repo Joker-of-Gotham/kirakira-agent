@@ -64,4 +64,102 @@ describe("frontend-core run dashboard projection", () => {
 
     expect(projection.entities.subagents["agent-a"]).toBe("failed");
   });
+
+  it("projects subagent topology details without replacing phase maps", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "subagent.spawned",
+        {
+          subagentId: "agent-a",
+          parentTaskId: "task-parent",
+          parentWorkerId: "worker-parent",
+          lane: "delegated",
+          traceId: "trace-1",
+          taskPreview: "Inspect repo",
+          capabilities: [
+            { kind: "tool", name: "repo.read" },
+            { kind: "skill", name: "research" },
+            { kind: "mcp", name: "filesystem" },
+          ],
+          modelPreference: "openai:gpt-5.4",
+          runtimePolicy: { maxTurns: 8 },
+          policyCeiling: { network: "restricted" },
+          inputArtifactRefs: ["artifact-source"],
+          outputSchema: { type: "object" },
+        },
+        1,
+      ),
+      event(
+        "subagent.completed",
+        {
+          subagentId: "agent-a",
+          workerId: "worker-child",
+          status: "completed",
+          preview: "child output",
+          artifactRefs: ["artifact-child"],
+        },
+        2,
+      ),
+    ]);
+
+    expect(projection.entities.subagents["agent-a"]).toBe("completed");
+    expect(projection.subagentDetails["agent-a"]).toMatchObject({
+      id: "agent-a",
+      phase: "completed",
+      parentTaskId: "task-parent",
+      parentWorkerId: "worker-parent",
+      workerId: "worker-child",
+      lane: "delegated",
+      traceId: "trace-1",
+      scope: {
+        capabilities: [
+          { kind: "tool", name: "repo.read" },
+          { kind: "skill", name: "research" },
+          { kind: "mcp", name: "filesystem" },
+        ],
+        toolNames: ["repo.read"],
+        skillNames: ["research"],
+        mcpServers: ["filesystem"],
+      },
+      contract: {
+        taskPreview: "Inspect repo",
+        modelPreference: "openai:gpt-5.4",
+        runtimePolicy: { maxTurns: 8 },
+        policyCeiling: { network: "restricted" },
+        inputArtifactRefs: ["artifact-source"],
+        outputSchema: { type: "object" },
+      },
+      result: {
+        preview: "child output",
+        artifactRefs: ["artifact-child"],
+      },
+    });
+  });
+
+  it("projects completion-only subagent details for replay gaps", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "subagent.completed",
+        {
+          subagentId: "agent-a",
+          parentWorkerId: "worker-parent",
+          workerId: "worker-child",
+          status: "failed",
+          error: "child failed",
+          artifactRefs: ["artifact-child"],
+        },
+        1,
+      ),
+    ]);
+
+    expect(projection.entities.subagents["agent-a"]).toBe("failed");
+    expect(projection.subagentDetails["agent-a"]).toMatchObject({
+      id: "agent-a",
+      phase: "failed",
+      parentWorkerId: "worker-parent",
+      workerId: "worker-child",
+      error: "child failed",
+      result: { artifactRefs: ["artifact-child"] },
+    });
+  });
 });

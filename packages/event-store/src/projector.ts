@@ -2,6 +2,7 @@ import type {
   RunEvent,
   RunEventKind,
   RunState,
+  SubagentRecord,
   TaskNode,
   SkillRecord,
   ToolInvocationRecord,
@@ -31,6 +32,102 @@ export function createEmptyRunState(runId: string): RunState {
 function readString(p: Record<string, unknown>, key: string): string | undefined {
   const v = p[key];
   return typeof v === "string" ? v : undefined;
+}
+
+function readStringArray(p: Record<string, unknown>, key: string): string[] | undefined {
+  const value = p[key];
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter((item): item is string => typeof item === "string");
+  return out.length > 0 ? out : undefined;
+}
+
+function readObject(p: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
+  const value = p[key];
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function readObjectArray(
+  p: Record<string, unknown>,
+  key: string,
+): Array<Record<string, unknown>> | undefined {
+  const value = p[key];
+  if (!Array.isArray(value)) return undefined;
+  const out = value.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item),
+  );
+  return out.length > 0 ? out : undefined;
+}
+
+function namesForCapabilities(
+  capabilities: Array<Record<string, unknown>> | undefined,
+  kind: string,
+): string[] | undefined {
+  if (!capabilities) return undefined;
+  const names = capabilities
+    .filter((cap) => cap.kind === kind && typeof cap.name === "string")
+    .map((cap) => cap.name as string);
+  return names.length > 0 ? names : undefined;
+}
+
+function subagentMetadata(p: Record<string, unknown>): Partial<SubagentRecord> {
+  const capabilities = readObjectArray(p, "capabilities");
+  const scope = capabilities
+    ? {
+        capabilities,
+        ...(namesForCapabilities(capabilities, "tool") !== undefined
+          ? { toolNames: namesForCapabilities(capabilities, "tool") }
+          : {}),
+        ...(namesForCapabilities(capabilities, "skill") !== undefined
+          ? { skillNames: namesForCapabilities(capabilities, "skill") }
+          : {}),
+        ...(namesForCapabilities(capabilities, "mcp") !== undefined
+          ? { mcpServers: namesForCapabilities(capabilities, "mcp") }
+          : {}),
+      }
+    : undefined;
+  const contract = {
+    ...(readString(p, "taskPreview") !== undefined
+      ? { taskPreview: readString(p, "taskPreview") }
+      : {}),
+    ...(readString(p, "modelPreference") !== undefined
+      ? { modelPreference: readString(p, "modelPreference") }
+      : {}),
+    ...(readObject(p, "runtimePolicy") !== undefined
+      ? { runtimePolicy: readObject(p, "runtimePolicy") }
+      : {}),
+    ...(readObject(p, "policyCeiling") !== undefined
+      ? { policyCeiling: readObject(p, "policyCeiling") }
+      : {}),
+    ...(readStringArray(p, "inputArtifactRefs") !== undefined
+      ? { inputArtifactRefs: readStringArray(p, "inputArtifactRefs") }
+      : {}),
+    ...(readObject(p, "outputSchema") !== undefined
+      ? { outputSchema: readObject(p, "outputSchema") }
+      : {}),
+  };
+  const result = {
+    ...(readString(p, "preview") !== undefined ? { preview: readString(p, "preview") } : {}),
+    ...(readStringArray(p, "artifactRefs") !== undefined
+      ? { artifactRefs: readStringArray(p, "artifactRefs") }
+      : {}),
+  };
+  return {
+    ...(readString(p, "parentTaskId") !== undefined
+      ? { parentTaskId: readString(p, "parentTaskId") }
+      : {}),
+    ...(readString(p, "parentWorkerId") !== undefined
+      ? { parentWorkerId: readString(p, "parentWorkerId") }
+      : {}),
+    ...(readString(p, "workerId") !== undefined ? { workerId: readString(p, "workerId") } : {}),
+    ...(readString(p, "lane") !== undefined ? { lane: readString(p, "lane") } : {}),
+    ...(readString(p, "traceId") !== undefined ? { traceId: readString(p, "traceId") } : {}),
+    ...(scope !== undefined ? { scope } : {}),
+    ...(Object.keys(contract).length > 0 ? { contract } : {}),
+    ...(Object.keys(result).length > 0 ? { result } : {}),
+  };
 }
 
 export class RunStateProjector {
@@ -118,8 +215,9 @@ export class RunStateProjector {
         const id = readString(p, "subagentId") ?? readString(p, "id");
         if (!id) break;
         next.subagents[id] = {
+          ...next.subagents[id],
           id,
-          parentTaskId: readString(p, "parentTaskId"),
+          ...subagentMetadata(p),
           status: "spawned",
           spawnedAt: event.timestamp,
         };
@@ -133,6 +231,7 @@ export class RunStateProjector {
         next.subagents[id] = {
           ...existing,
           id,
+          ...subagentMetadata(p),
           status: failed ? "failed" : "completed",
           spawnedAt: existing?.spawnedAt ?? event.timestamp,
           completedAt: event.timestamp,

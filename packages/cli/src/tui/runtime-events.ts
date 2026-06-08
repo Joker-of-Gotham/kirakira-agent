@@ -35,13 +35,42 @@ export interface TaskVm {
   updatedAt: string;
 }
 
+export interface SubagentScopeVm {
+  capabilities?: Array<Record<string, unknown>>;
+  toolNames?: string[];
+  skillNames?: string[];
+  mcpServers?: string[];
+}
+
+export interface SubagentContractVm {
+  taskPreview?: string;
+  modelPreference?: string;
+  runtimePolicy?: Record<string, unknown>;
+  policyCeiling?: Record<string, unknown>;
+  inputArtifactRefs?: string[];
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface SubagentResultVm {
+  preview?: string;
+  artifactRefs?: string[];
+}
+
 export interface SubagentVm {
   id: string;
   role: string;
   taskId?: string;
+  parentWorkerId?: string;
+  workerId?: string;
+  lane?: string;
+  traceId?: string;
+  scope?: SubagentScopeVm;
+  contract?: SubagentContractVm;
+  result?: SubagentResultVm;
   model?: string;
   status: "running" | "idle" | "completed" | "failed" | "stopped";
   contextUsage?: number;
+  error?: string;
   updatedAt: string;
 }
 

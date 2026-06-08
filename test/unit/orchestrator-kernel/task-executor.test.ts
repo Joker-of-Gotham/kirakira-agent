@@ -293,6 +293,12 @@ describe("orchestrator task executor", () => {
     }
 
     expect(bridgeRequests).toHaveLength(1);
+    expect(events).toContainEqual({
+      kind: "task_started",
+      nodeId: "step-a",
+      lane: "delegated",
+      workerId: expect.any(String),
+    });
     expect(bridgeRequests[0]).toMatchObject({
       runId: "run-1",
       parentTaskId: "step-a",

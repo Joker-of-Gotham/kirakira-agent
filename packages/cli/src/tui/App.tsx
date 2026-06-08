@@ -643,7 +643,12 @@ export function App({
         ...t,
         progress: t.progress ? { ...t.progress } : undefined,
       })),
-      subagents: s.subagents.map((x) => ({ ...x })),
+      subagents: s.subagents.map((x) => ({
+        ...x,
+        scope: x.scope ? structuredClone(x.scope) : undefined,
+        contract: x.contract ? structuredClone(x.contract) : undefined,
+        result: x.result ? structuredClone(x.result) : undefined,
+      })),
       tools: s.tools.map((x) => ({ ...x })),
       memoryHits: s.memoryHits.map((x) => ({
         ...x,

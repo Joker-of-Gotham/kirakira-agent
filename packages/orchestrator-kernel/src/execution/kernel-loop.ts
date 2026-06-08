@@ -160,7 +160,7 @@ export class KernelLoop {
       });
       scheduler.lanes[chosen].active += 1;
       this.deps.superstep.notifyStarted();
-      yield { kind: "task_started", nodeId: id, lane: chosen };
+      yield { kind: "task_started", nodeId: id, lane: chosen, workerId };
       try {
         const result = await this.deps.executor.execute(node, chosen);
         graph = this.deps.resolver.markCompleted(graph, id, result);

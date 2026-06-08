@@ -51,6 +51,10 @@ function upsertMemory(hits: MemoryHitVm[], next: MemoryHitVm): MemoryHitVm[] {
   return copy;
 }
 
+function cloneStructured<T>(value: T | undefined): T | undefined {
+  return value === undefined ? undefined : structuredClone(value);
+}
+
 function reducer(state: RuntimeStoreState, action: RuntimeAction): RuntimeStoreState {
   if (action.type === "reset") {
     const next = initialRuntimeStoreState();
@@ -103,7 +107,15 @@ function reducer(state: RuntimeStoreState, action: RuntimeAction): RuntimeStoreS
         status: payload.status,
         model: payload.model ?? prev?.model,
         taskId: payload.taskId ?? prev?.taskId,
+        parentWorkerId: payload.parentWorkerId ?? prev?.parentWorkerId,
+        workerId: payload.workerId ?? prev?.workerId,
+        lane: payload.lane ?? prev?.lane,
+        traceId: payload.traceId ?? prev?.traceId,
+        scope: cloneStructured(payload.scope ?? prev?.scope),
+        contract: cloneStructured(payload.contract ?? prev?.contract),
+        result: cloneStructured(payload.result ?? prev?.result),
         contextUsage: payload.contextUsage ?? prev?.contextUsage,
+        error: payload.error ?? prev?.error,
         updatedAt: ts,
       };
       return {
@@ -235,7 +247,12 @@ export function useRuntimeStore(): {
         ...nextState,
         events: nextState.events.map((e) => ({ ...e })),
         tasks: nextState.tasks.map((t) => ({ ...t })),
-        subagents: nextState.subagents.map((s) => ({ ...s })),
+        subagents: nextState.subagents.map((s) => ({
+          ...s,
+          scope: cloneStructured(s.scope),
+          contract: cloneStructured(s.contract),
+          result: cloneStructured(s.result),
+        })),
         tools: nextState.tools.map((t) => ({ ...t })),
         memoryHits: nextState.memoryHits.map((m) => ({ ...m })),
       },

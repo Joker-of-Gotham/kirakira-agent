@@ -49,6 +49,65 @@ export function defaultAgentToml(): Required<AgentToml> {
       default_source: undefined as unknown as string,
       install_scope: "workspace",
     },
+    orchestration: {
+      handoff_mode: "tool",
+      max_concurrency: 4,
+      default_subagent_turns: 32,
+      subagent_system_preamble:
+        "Operate as a bounded specialist subagent. Stay within the delegated scope, use only granted tools and skills, and return concise evidence-backed results.",
+      subagent_context: "filtered",
+      trace_handoffs: true,
+    },
+    deep_research: {
+      enabled: false,
+      max_depth: 3,
+      max_breadth: 4,
+      max_tool_calls: 24,
+      require_citations: true,
+      source_policy: "hybrid",
+      workspace_dir: ".kirakira/research",
+    },
+    runtime: {
+      default_profile: "container",
+      profiles: [
+        {
+          name: "container",
+          mode: "container",
+          compose_profiles: ["cli"],
+          env_files: [".env"],
+          workspace_root_env: "KIRAKIRA_WORKSPACE_ROOT",
+          services: [
+            { name: "postgres", url_env: "DATABASE_URL", required: true },
+            { name: "redis", url_env: "REDIS_URL", required: true },
+            { name: "qdrant", url_env: "QDRANT_URL", required: true },
+            { name: "neo4j", url_env: "NEO4J_URI", required: true },
+            { name: "minio", url_env: "S3_ENDPOINT", required: true },
+            { name: "kirakirad", url_env: "KIRAKIRA_PDP_ENDPOINT", required: true },
+          ],
+        },
+        {
+          name: "host",
+          mode: "host",
+          env_files: [".env"],
+          workspace_root_env: "KIRAKIRA_WORKSPACE_ROOT",
+          services: [
+            { name: "kirakirad", url_env: "KIRAKIRA_PDP_ENDPOINT", required: false },
+          ],
+        },
+      ],
+    },
+    presentation: {
+      web: {
+        enabled: false,
+        dev_url_env: "KIRAKIRA_WEB_URL",
+        api_base_url_env: "KIRAKIRA_API_BASE_URL",
+      },
+      desktop: {
+        enabled: false,
+        web_url_env: "KIRAKIRA_WEB_URL",
+        preload_contract: "strict-ipc",
+      },
+    },
     features: {
       tool_search: true,
       lazy_schema_injection: true,

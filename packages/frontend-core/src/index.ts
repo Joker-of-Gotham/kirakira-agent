@@ -21,6 +21,7 @@ export type {
   ProjectionOptions,
   RunDashboardEntityMaps,
   RunDashboardProjection,
+  RunDashboardSubagent,
   RunDashboardStatus,
   RuntimeEventSummary,
 } from "./projection.js";

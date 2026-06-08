@@ -85,9 +85,37 @@ export interface ArtifactRecord {
   metadata?: Record<string, unknown>;
 }
 
+export interface SubagentScopeRecord {
+  capabilities?: Array<Record<string, unknown>>;
+  toolNames?: string[];
+  skillNames?: string[];
+  mcpServers?: string[];
+}
+
+export interface SubagentContractRecord {
+  taskPreview?: string;
+  modelPreference?: string;
+  runtimePolicy?: Record<string, unknown>;
+  policyCeiling?: Record<string, unknown>;
+  inputArtifactRefs?: string[];
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface SubagentResultRecord {
+  preview?: string;
+  artifactRefs?: string[];
+}
+
 export interface SubagentRecord {
   id: string;
   parentTaskId?: string;
+  parentWorkerId?: string;
+  workerId?: string;
+  lane?: string;
+  traceId?: string;
+  scope?: SubagentScopeRecord;
+  contract?: SubagentContractRecord;
+  result?: SubagentResultRecord;
   status: "spawned" | "completed" | "failed";
   spawnedAt: string;
   completedAt?: string;

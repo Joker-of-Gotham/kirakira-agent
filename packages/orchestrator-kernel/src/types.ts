@@ -283,7 +283,7 @@ export interface CheckpointContext {
 export type RunEvent =
   | { kind: "graph_normalized"; graph: TaskGraph }
   | { kind: "task_ready"; nodeId: string }
-  | { kind: "task_started"; nodeId: string; lane: string }
+  | { kind: "task_started"; nodeId: string; lane: string; workerId: string }
   | { kind: "task_completed"; nodeId: string; result: TaskResult }
   | { kind: "task_failed"; nodeId: string; error: string }
   | { kind: "checkpoint_saved"; checkpointId: string }

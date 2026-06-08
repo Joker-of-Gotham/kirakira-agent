@@ -45,6 +45,8 @@ export interface DelegateRequest {
   subagentId: string;
   parentWorkerId: string;
   parentTaskId?: string;
+  lane?: string;
+  traceId?: string;
   parentConfig: ReactWorkerState["config"];
   runId: string;
   task: string;
@@ -403,10 +405,26 @@ ${execRes.stderr}`;
       const subagentId = ulid();
       const capabilities = delegateCapabilities(delegateAction);
       const modelPreference = stringArg(delegateAction, "modelPreference", "model");
+      const parentTaskId = stringArg(delegateAction, "parentTaskId", "taskId");
+      const lane = stringArg(delegateAction, "lane");
+      const traceId = stringArg(delegateAction, "traceId");
       const runtimePolicy = objectArg<SubagentRuntimePolicy>(delegateAction, "runtimePolicy");
       const policyCeiling = objectArg<SandboxPolicyCeiling>(delegateAction, "policyCeiling");
       const inputArtifactRefs = stringArrayArg(delegateAction, "inputArtifactRefs");
       const outputSchema = objectArg<Record<string, unknown>>(delegateAction, "outputSchema");
+      const subagentPayload = {
+        subagentId,
+        parentWorkerId: state.config.id,
+        ...(parentTaskId !== undefined ? { parentTaskId } : {}),
+        ...(lane !== undefined ? { lane } : {}),
+        ...(traceId !== undefined ? { traceId } : {}),
+        ...(capabilities !== undefined ? { capabilities } : {}),
+        ...(modelPreference !== undefined ? { modelPreference } : {}),
+        ...(runtimePolicy !== undefined ? { runtimePolicy } : {}),
+        ...(policyCeiling !== undefined ? { policyCeiling } : {}),
+        ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
+        ...(outputSchema !== undefined ? { outputSchema } : {}),
+      };
       if (!task) {
         consecutiveErrors += 1;
         turnManager.completeTurn(
@@ -420,8 +438,7 @@ ${execRes.stderr}`;
           runId: state.config.runId,
           kind: "subagent.completed",
           payload: {
-            subagentId,
-            parentWorkerId: state.config.id,
+            ...subagentPayload,
             status: "failed",
             error: "delegate missing task",
           },
@@ -432,15 +449,8 @@ ${execRes.stderr}`;
         runId: state.config.runId,
         kind: "subagent.spawned",
         payload: {
-          subagentId,
-          parentWorkerId: state.config.id,
+          ...subagentPayload,
           taskPreview: task.slice(0, 2000),
-          ...(capabilities !== undefined ? { capabilities } : {}),
-          ...(modelPreference !== undefined ? { modelPreference } : {}),
-          ...(runtimePolicy !== undefined ? { runtimePolicy } : {}),
-          ...(policyCeiling !== undefined ? { policyCeiling } : {}),
-          ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
-          ...(outputSchema !== undefined ? { outputSchema } : {}),
         },
       });
       if (!deps.delegateRunner) {
@@ -456,8 +466,7 @@ ${execRes.stderr}`;
           runId: state.config.runId,
           kind: "subagent.completed",
           payload: {
-            subagentId,
-            parentWorkerId: state.config.id,
+            ...subagentPayload,
             status: "failed",
             error: "delegate runner unavailable",
           },
@@ -469,6 +478,9 @@ ${execRes.stderr}`;
         result = await deps.delegateRunner({
           subagentId,
           parentWorkerId: state.config.id,
+          ...(parentTaskId !== undefined ? { parentTaskId } : {}),
+          ...(lane !== undefined ? { lane } : {}),
+          ...(traceId !== undefined ? { traceId } : {}),
           parentConfig: state.config,
           runId: state.config.runId,
           task,
@@ -510,9 +522,8 @@ ${execRes.stderr}`;
           runId: state.config.runId,
           kind: "subagent.completed",
           payload: {
-            subagentId,
+            ...subagentPayload,
             workerId: result.workerId,
-            parentWorkerId: state.config.id,
             status: "failed",
             error: result.error,
             ...(result.artifactRefs && result.artifactRefs.length > 0
@@ -546,9 +557,8 @@ ${execRes.stderr}`;
         runId: state.config.runId,
         kind: "subagent.completed",
         payload: {
-          subagentId,
+          ...subagentPayload,
           workerId: result.workerId,
-          parentWorkerId: state.config.id,
           status: "completed",
           preview: finalText.slice(0, 2000),
           ...(result.artifactRefs && result.artifactRefs.length > 0

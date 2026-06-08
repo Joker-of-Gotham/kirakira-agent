@@ -141,6 +141,57 @@ describe("reactLoop delegate handling", () => {
     expect(secondState?.artifacts).toEqual(["artifact-child"]);
   });
 
+  it("includes parent task and lane metadata in delegate lifecycle events", async () => {
+    const emitted: RunEvent[] = [];
+    const deps = runtimeDeps(
+      [
+        {
+          kind: "delegate",
+          args: {
+            task: "inspect subsystem",
+            parentTaskId: "task-parent",
+            lane: "delegated",
+            traceId: "trace-1",
+            capabilities: [{ kind: "tool", name: "repo.read" }],
+          },
+        },
+        { kind: "final_output", output: "parent done" },
+      ],
+      emitted,
+    );
+    deps.delegateRunner = async (request) => {
+      expect(request.parentTaskId).toBe("task-parent");
+      expect(request.lane).toBe("delegated");
+      expect(request.traceId).toBe("trace-1");
+      return {
+        success: true,
+        workerId: "worker-child",
+        finalText: "child finding",
+      };
+    };
+
+    for await (const _event of reactLoop(initialState(), deps)) {
+      // exhaust generator
+    }
+
+    expect(emitted.find((event) => event.kind === "subagent.spawned")?.payload)
+      .toMatchObject({
+        parentTaskId: "task-parent",
+        parentWorkerId: "worker-parent",
+        lane: "delegated",
+        traceId: "trace-1",
+        capabilities: [{ kind: "tool", name: "repo.read" }],
+      });
+    expect(emitted.find((event) => event.kind === "subagent.completed")?.payload)
+      .toMatchObject({
+        parentTaskId: "task-parent",
+        parentWorkerId: "worker-parent",
+        lane: "delegated",
+        traceId: "trace-1",
+        workerId: "worker-child",
+      });
+  });
+
   it("emits a failed subagent completion when delegateRunner is not configured", async () => {
     const emitted: RunEvent[] = [];
     const deps = runtimeDeps(
