@@ -3,6 +3,10 @@ import type {
   RuntimeRunMode,
   RuntimeServerMessage,
 } from "@kirakira/runtime-contracts";
+import {
+  RuntimeRequestTracker,
+  parseRuntimeServerMessage,
+} from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
   RuntimeTransport,
@@ -22,18 +26,13 @@ export interface BrowserGatewayTransportOptions {
   socketFactory?: (url: string) => WebSocket;
 }
 
-interface PendingRequest {
-  resolve(value: unknown): void;
-  reject(error: Error): void;
-  timeout: ReturnType<typeof setTimeout>;
-}
-
 interface ActiveSubscription {
   runId: string;
   options?: SubscribeRunOptions;
   listener: (event: RuntimeTransportEvent) => void;
   serverSubscriptionId?: string;
   subscribeMessageId: string;
+  cancelled?: boolean;
 }
 
 const defaultIdFactory = () =>
@@ -46,23 +45,11 @@ const appendToken = (endpoint: string, token: string | undefined): string => {
   return url.toString();
 };
 
-const isServerMessage = (value: unknown): value is RuntimeServerMessage => {
-  if (!value || typeof value !== "object") return false;
-  const type = (value as { type?: unknown }).type;
-  return (
-    type === "event" ||
-    type === "state_snapshot" ||
-    type === "error" ||
-    type === "ack" ||
-    type === "pong" ||
-    type === "subscribed"
-  );
-};
-
 const eventMatches = (
   event: Extract<RuntimeServerMessage, { type: "event" }>["event"],
   subscription: ActiveSubscription,
 ): boolean => {
+  if (subscription.cancelled) return false;
   if (event.runId !== subscription.runId) return false;
   if (
     subscription.options?.afterSeq !== undefined &&
@@ -81,18 +68,13 @@ export function createBrowserGatewayTransport(
   const requestTimeoutMs = options.requestTimeoutMs ?? 30_000;
   const connectTimeoutMs = options.connectTimeoutMs ?? 10_000;
   const socketFactory = options.socketFactory ?? ((url) => new WebSocket(url));
-  const pending = new Map<string, PendingRequest>();
+  const pending = new RuntimeRequestTracker({
+    timeoutMs: requestTimeoutMs,
+    timeoutMessage: (label) => `Runtime gateway request timed out: ${label}`,
+  });
   const subscriptions = new Map<string, ActiveSubscription>();
   const pendingSubscribeMessages = new Map<string, string>();
   let socket: WebSocket | null = null;
-
-  const rejectAll = (error: Error) => {
-    for (const [messageId, request] of pending) {
-      clearTimeout(request.timeout);
-      request.reject(error);
-      pending.delete(messageId);
-    }
-  };
 
   const notifySubscriptions = (event: RuntimeTransportEvent) => {
     for (const subscription of subscriptions.values()) {
@@ -113,20 +95,16 @@ export function createBrowserGatewayTransport(
         ? message.messageId
         : idFactory();
     const body = { ...message, messageId } as RuntimeClientMessage;
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        pending.delete(messageId);
-        reject(new Error(`Runtime gateway request timed out: ${message.type}`));
-      }, requestTimeoutMs);
-      pending.set(messageId, { resolve, reject, timeout });
-      try {
-        send(body);
-      } catch (err) {
-        clearTimeout(timeout);
-        pending.delete(messageId);
-        reject(err instanceof Error ? err : new Error(String(err)));
-      }
-    });
+    const result = pending.track(messageId, message.type, requestTimeoutMs);
+    try {
+      send(body);
+    } catch (err) {
+      pending.reject(
+        messageId,
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+    return result;
   };
 
   const handleIncoming = (message: RuntimeServerMessage) => {
@@ -143,33 +121,28 @@ export function createBrowserGatewayTransport(
         const localId = pendingSubscribeMessages.get(message.messageId);
         if (localId) {
           const subscription = subscriptions.get(localId);
-          if (subscription) subscription.serverSubscriptionId = message.subscriptionId;
+          if (subscription) {
+            subscription.serverSubscriptionId = message.subscriptionId;
+            if (subscription.cancelled) {
+              send({
+                type: "unsubscribe",
+                subscriptionId: message.subscriptionId,
+                messageId: idFactory(),
+              });
+              subscriptions.delete(localId);
+            }
+          }
           pendingSubscribeMessages.delete(message.messageId);
         }
       }
       return;
     }
     if (message.type === "ack" || message.type === "pong") {
-      const messageId = message.messageId;
-      if (!messageId) return;
-      const current = pending.get(messageId);
-      if (!current) return;
-      clearTimeout(current.timeout);
-      pending.delete(messageId);
-      current.resolve(message.type === "ack" ? message.result : undefined);
+      pending.handleServerMessage(message);
       return;
     }
     if (message.type === "error") {
-      const error = new Error(message.message);
-      if (message.messageId) {
-        const current = pending.get(message.messageId);
-        if (current) {
-          clearTimeout(current.timeout);
-          pending.delete(message.messageId);
-          current.reject(error);
-          return;
-        }
-      }
+      if (pending.handleServerMessage(message)) return;
       notifySubscriptions({ type: "error", message: message.message, detail: message });
     }
   };
@@ -206,7 +179,8 @@ export function createBrowserGatewayTransport(
           });
           return;
         }
-        if (!isServerMessage(raw)) {
+        const message = parseRuntimeServerMessage(raw);
+        if (!message) {
           notifySubscriptions({
             type: "error",
             message: "Runtime gateway sent an unknown message",
@@ -214,15 +188,15 @@ export function createBrowserGatewayTransport(
           });
           return;
         }
-        handleIncoming(raw);
+        handleIncoming(message);
       });
       ws.addEventListener("close", () => {
-        rejectAll(new Error("Runtime gateway connection closed"));
+        pending.rejectAll(new Error("Runtime gateway connection closed"));
         notifySubscriptions({ type: "connection", state: "disconnected" });
       });
     },
     disconnect() {
-      rejectAll(new Error("Runtime gateway disconnected"));
+      pending.rejectAll(new Error("Runtime gateway disconnected"));
       socket?.close(1000, "client disconnect");
       socket = null;
       subscriptions.clear();
@@ -274,14 +248,16 @@ export function createBrowserGatewayTransport(
       });
       return () => {
         const subscription = subscriptions.get(localId);
-        subscriptions.delete(localId);
         if (subscription?.serverSubscriptionId) {
           send({
             type: "unsubscribe",
             subscriptionId: subscription.serverSubscriptionId,
             messageId: idFactory(),
           });
+          subscriptions.delete(localId);
+          return;
         }
+        if (subscription) subscription.cancelled = true;
       };
     },
     async approve(decision: ApprovalDecision) {

@@ -1,7 +1,11 @@
 import { ulid } from "ulid";
 import WebSocket, { type RawData, type WebSocketServer } from "ws";
 import type { ClientMessage, ServerMessage } from "./protocol.js";
-import { parseClientMessage, safeJsonStringify } from "./protocol.js";
+import {
+  makeRuntimeProtocolError,
+  safeJsonStringify,
+  validateClientMessage,
+} from "./protocol.js";
 
 interface RuntimeClientSocket extends WebSocket {
   clientId: string;
@@ -82,16 +86,15 @@ export class RuntimeSocketHub {
       });
       return;
     }
-    const msg = parseClientMessage(raw);
-    if (!msg) {
+    const result = validateClientMessage(raw);
+    if (!result.ok) {
       this.sendTo(conn.clientId, {
-        type: "error",
-        code: "invalid_message",
-        message: "Unknown or malformed client message",
-        details: raw,
+        ...makeRuntimeProtocolError(result.error),
+        details: result.error.details ?? raw,
       });
       return;
     }
+    const msg = result.message;
     try {
       await this.opts.onMessage(conn.clientId, msg);
     } catch (e) {
@@ -100,6 +103,7 @@ export class RuntimeSocketHub {
         type: "error",
         code: "handler_error",
         message,
+        messageId: "messageId" in msg ? msg.messageId : undefined,
       });
     }
   }

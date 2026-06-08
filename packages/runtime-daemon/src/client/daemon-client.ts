@@ -2,10 +2,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   ControlMessage,
+  EventFilter,
   RunStateSnapshot,
+  RuntimeRequestTracker,
   RuntimeRunMode,
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
+import { RuntimeRequestTracker as RuntimeRequestTrackerImpl } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
 import { parseServerMessage } from "../server/protocol.js";
@@ -15,10 +18,14 @@ type RunMode = RuntimeRunMode;
 
 const defaultSocketPath = () => join(homedir(), ".kirakira-agent", "daemon.sock");
 
-interface Pending {
-  resolve: (v: unknown) => void;
-  reject: (e: Error) => void;
-  timeout: ReturnType<typeof setTimeout>;
+export interface SubscribeToRunOptions {
+  afterSeq?: number;
+  filter?: EventFilter;
+  messageId?: string;
+}
+
+export interface UnsubscribeOptions {
+  messageId?: string;
 }
 
 /** Construct a typed ControlMessage from inline object literal for concise message building. */
@@ -28,7 +35,10 @@ function ctl(m: Record<string, unknown>): ControlMessage {
 
 export class DaemonClient {
   private ws: WebSocket | null = null;
-  private readonly pending = new Map<string, Pending>();
+  private readonly pending: RuntimeRequestTracker = new RuntimeRequestTrackerImpl({
+    timeoutMs: 60_000,
+    timeoutMessage: () => "Request timeout",
+  });
   private reconnectAttempts = 0;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private manualClose = false;
@@ -53,8 +63,8 @@ export class DaemonClient {
    */
   subscribeToRun(
     runId: string,
-    options?: { afterSeq?: number; messageId?: string },
-  ): void {
+    options?: SubscribeToRunOptions,
+  ): string {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket not connected");
@@ -64,10 +74,28 @@ export class DaemonClient {
       JSON.stringify({
         type: "subscribe",
         runId,
+        filter: options?.filter,
         afterSeq: options?.afterSeq,
         messageId,
       }),
     );
+    return messageId;
+  }
+
+  unsubscribe(subscriptionId: string, options?: UnsubscribeOptions): string {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw new Error("WebSocket not connected");
+    }
+    const messageId = options?.messageId ?? ulid();
+    ws.send(
+      JSON.stringify({
+        type: "unsubscribe",
+        subscriptionId,
+        messageId,
+      }),
+    );
+    return messageId;
   }
 
   private async openOnce(socketPath: string): Promise<void> {
@@ -116,22 +144,7 @@ export class DaemonClient {
         /* ignore handler errors */
       }
     }
-    if (msg.type === "ack") {
-      const p = this.pending.get(msg.messageId);
-      if (p) {
-        clearTimeout(p.timeout);
-        this.pending.delete(msg.messageId);
-        p.resolve(msg.result);
-      }
-      return;
-    }
-    if (msg.type === "error") {
-      for (const [, p] of this.pending) {
-        clearTimeout(p.timeout);
-        p.reject(new Error(msg.message));
-      }
-      this.pending.clear();
-    }
+    this.pending.handleServerMessage(msg);
   }
 
   disconnect(): void {
@@ -142,11 +155,7 @@ export class DaemonClient {
     }
     this.ws?.close();
     this.ws = null;
-    for (const [, p] of this.pending) {
-      clearTimeout(p.timeout);
-      p.reject(new Error("disconnected"));
-    }
-    this.pending.clear();
+    this.pending.rejectAll(new Error("disconnected"));
   }
 
   private rpcResult(body: Record<string, unknown>, timeoutMs = 60_000): Promise<unknown> {
@@ -156,19 +165,16 @@ export class DaemonClient {
     }
     const messageId = ulid();
     const msgWithId = { ...body, messageId };
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        this.pending.delete(messageId);
-        reject(new Error("Request timeout"));
-      }, timeoutMs);
-      timeout.unref?.();
-      this.pending.set(messageId, {
-        resolve: (v) => resolve(v),
-        reject,
-        timeout,
-      });
+    const request = this.pending.track(messageId, String(body.type ?? "request"), timeoutMs);
+    try {
       ws.send(JSON.stringify(msgWithId));
-    });
+    } catch (err) {
+      this.pending.reject(
+        messageId,
+        err instanceof Error ? err : new Error(String(err)),
+      );
+    }
+    return request;
   }
 
   async submitPrompt(

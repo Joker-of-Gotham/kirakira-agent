@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import {
   BrowserGatewayServer,
@@ -88,6 +88,42 @@ describe("BrowserGatewayServer", () => {
         ws.once("error", reject);
       });
       expect(status).toBe(403);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("returns correlated errors for malformed control frames without invoking handlers", async () => {
+    const onMessage = vi.fn();
+    const server = new BrowserGatewayServer({
+      async onMessage(clientId, message) {
+        onMessage(clientId, message);
+      },
+    });
+    const info = await server.start({
+      port: 0,
+      allowedOrigins: ["http://127.0.0.1:5179"],
+    });
+
+    try {
+      const ws = new WebSocket(info.url, {
+        headers: { Origin: "http://127.0.0.1:5179" },
+      });
+      await waitOpen(ws);
+      ws.send(
+        JSON.stringify({
+          type: "control",
+          messageId: "bad-control-1",
+          message: { type: "inspect" },
+        }),
+      );
+      await expect(waitMessage(ws)).resolves.toMatchObject({
+        type: "error",
+        code: "invalid_control",
+        messageId: "bad-control-1",
+      });
+      expect(onMessage).not.toHaveBeenCalled();
+      ws.close();
     } finally {
       await server.stop();
     }

@@ -157,6 +157,7 @@ export class DaemonLifecycle {
             type: "error",
             code: "kernel_unavailable",
             message: "Kernel not ready",
+            messageId: msg.messageId,
           });
           return;
         }
@@ -166,6 +167,7 @@ export class DaemonLifecycle {
             type: "error",
             code: "unknown_run",
             message: `Run not found: ${msg.runId}`,
+            messageId: msg.messageId,
           });
           return;
         }
@@ -220,6 +222,16 @@ export class DaemonLifecycle {
         break;
       }
       case "unsubscribe": {
+        const subscription = this.subs.get(msg.subscriptionId);
+        if (!subscription || subscription.clientId !== clientId) {
+          this.sendToClient(clientId, {
+            type: "error",
+            code: "unknown_subscription",
+            message: `Subscription not found: ${msg.subscriptionId}`,
+            messageId: msg.messageId,
+          });
+          break;
+        }
         this.subs.delete(msg.subscriptionId);
         session.subscriptions = session.subscriptions.filter((s) => s.id !== msg.subscriptionId);
         this.sendToClient(clientId, {
@@ -237,16 +249,17 @@ export class DaemonLifecycle {
     message: ControlMessage,
     messageId?: string,
   ): Promise<void> {
+    const mid = messageId ?? ulid();
     const kb = this.kernelBridge;
     if (!kb) {
       this.sendToClient(clientId, {
         type: "error",
         code: "kernel_unavailable",
         message: "Kernel not ready",
+        messageId: mid,
       });
       return;
     }
-    const mid = messageId ?? ulid();
     if (message.type === "submit") {
       const runId = await kb.submitRun(message.prompt, message.mode, message.options);
       if (!session.runIds.includes(runId)) session.runIds.push(runId);
@@ -266,6 +279,7 @@ export class DaemonLifecycle {
           type: "error",
           code: "invalid_control",
           message: "inspect requires runId",
+          messageId: mid,
         });
         return;
       }
@@ -276,6 +290,7 @@ export class DaemonLifecycle {
           type: "error",
           code: "unknown_run",
           message: `Run not found: ${runId}`,
+          messageId: mid,
         });
         return;
       }

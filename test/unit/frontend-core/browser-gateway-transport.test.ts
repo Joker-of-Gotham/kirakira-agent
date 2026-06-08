@@ -157,4 +157,72 @@ describe("browser gateway runtime transport", () => {
     socket?.close();
     await expect(pending).rejects.toThrow("closed");
   });
+
+  it("rejects only the matching request for correlated errors", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const submit = transport.submitPrompt({ prompt: "one", mode: "headless" });
+    const drain = transport.drain();
+    const submitFrame = JSON.parse(socket?.sent[0] ?? "{}") as { messageId: string };
+    const drainFrame = JSON.parse(socket?.sent[1] ?? "{}") as { messageId: string };
+
+    socket?.message({
+      type: "error",
+      code: "invalid_control",
+      message: "Bad submit",
+      messageId: submitFrame.messageId,
+    });
+    socket?.message({ type: "ack", messageId: drainFrame.messageId });
+
+    await expect(submit).rejects.toThrow("Bad submit");
+    await expect(drain).resolves.toBeUndefined();
+  });
+
+  it("sends daemon unsubscribe when a local unsubscribe happens before subscribe ack", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const unsubscribe = transport.subscribeRun("run-1", () => {});
+    const subscribeFrame = JSON.parse(socket?.sent[0] ?? "{}") as { messageId: string };
+    unsubscribe();
+    expect(socket?.sent).toHaveLength(1);
+
+    socket?.message({
+      type: "subscribed",
+      subscriptionId: "server-sub-late",
+      messageId: subscribeFrame.messageId,
+    });
+    const unsubscribeFrame = JSON.parse(socket?.sent.at(-1) ?? "{}") as {
+      subscriptionId: string;
+    };
+    expect(unsubscribeFrame).toMatchObject({
+      type: "unsubscribe",
+      subscriptionId: "server-sub-late",
+    });
+  });
 });

@@ -15,8 +15,18 @@ let connected = false;
 
 const subscriptions = new Map<
   string,
-  { runId: string; webContentsId: number; options?: SubscribeRunOptions }
+  {
+    runId: string;
+    webContentsId: number;
+    options?: SubscribeRunOptions;
+    subscribeMessageId: string;
+    daemonSubscriptionId?: string;
+    disposed?: boolean;
+  }
 >();
+
+const nextRuntimeMessageId = () =>
+  `desktop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const isLocalDevUrl = (value: string | undefined): value is string => {
   if (!value) return false;
@@ -59,12 +69,47 @@ const eventMatches = (
   return true;
 };
 
-client.onMessage((message) => {
+const findSubscriptionBySubscribeMessageId = (messageId: string) => {
   for (const [subscriptionId, subscription] of subscriptions) {
+    if (subscription.subscribeMessageId === messageId) {
+      return { subscriptionId, subscription };
+    }
+  }
+  return null;
+};
+
+const disposeDesktopSubscription = (subscriptionId: string, senderId?: number) => {
+  const subscription = subscriptions.get(subscriptionId);
+  if (!subscription) return;
+  if (senderId !== undefined && subscription.webContentsId !== senderId) {
+    throw new Error("Renderer does not own runtime subscription");
+  }
+  if (subscription.daemonSubscriptionId) {
+    client.unsubscribe(subscription.daemonSubscriptionId);
+    subscriptions.delete(subscriptionId);
+    return;
+  }
+  subscription.disposed = true;
+};
+
+client.onMessage((message) => {
+  if (message.type === "subscribed" && message.messageId) {
+    const matched = findSubscriptionBySubscribeMessageId(message.messageId);
+    if (matched) {
+      matched.subscription.daemonSubscriptionId = message.subscriptionId;
+      if (matched.subscription.disposed) {
+        client.unsubscribe(message.subscriptionId);
+        subscriptions.delete(matched.subscriptionId);
+      }
+    }
+    return;
+  }
+  for (const [subscriptionId, subscription] of subscriptions) {
+    if (subscription.disposed) continue;
     if (!eventMatches(message, subscription.runId, subscription.options)) continue;
     const target = webContents.fromId(subscription.webContentsId);
     if (!target || target.isDestroyed()) {
-      subscriptions.delete(subscriptionId);
+      disposeDesktopSubscription(subscriptionId);
       continue;
     }
     const payload: RuntimeTransportEvent = { type: "event", event: message.event };
@@ -135,21 +180,25 @@ ipcMain.handle(
     },
   ) => {
     await ensureConnected();
+    const subscribeMessageId = nextRuntimeMessageId();
     subscriptions.set(request.subscriptionId, {
       runId: request.runId,
       webContentsId: event.sender.id,
       options: request.options,
+      subscribeMessageId,
     });
     client.subscribeToRun(request.runId, {
       afterSeq: request.options?.afterSeq,
+      filter: request.options?.filter,
+      messageId: subscribeMessageId,
     });
   },
 );
 
 ipcMain.handle(
   "runtime:unsubscribeRun",
-  (_event, request: { subscriptionId: string }) => {
-    subscriptions.delete(request.subscriptionId);
+  (event, request: { subscriptionId: string }) => {
+    disposeDesktopSubscription(request.subscriptionId, event.sender.id);
   },
 );
 

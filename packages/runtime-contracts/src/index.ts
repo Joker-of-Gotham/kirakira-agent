@@ -33,8 +33,19 @@ export type {
 } from "./events.js";
 export { stableStringify } from "./events.js";
 export type {
+  RuntimeClientMessageParseResult,
+  RuntimeProtocolError,
+  RuntimeRequestTrackerOptions,
   RuntimeClientMessage,
   RuntimeServerMessage,
+} from "./protocol.js";
+export {
+  RuntimeRequestTracker,
+  isRuntimeServerMessage,
+  makeRuntimeProtocolError,
+  parseRuntimeClientMessage,
+  parseRuntimeServerMessage,
+  stringifyRuntimeServerMessage,
 } from "./protocol.js";
 export type {
   ApprovalSummary,

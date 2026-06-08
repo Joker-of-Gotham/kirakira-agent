@@ -1,54 +1,57 @@
-export type RunEventKind =
-  | "run.created"
-  | "run.started"
-  | "run.completed"
-  | "run.failed"
-  | "run.drained"
-  | "plan.compiled"
-  | "graph.normalized"
-  | "task.ready"
-  | "task.started"
-  | "task.completed"
-  | "task.failed"
-  | "subagent.spawned"
-  | "subagent.completed"
-  | "research.started"
-  | "research.plan.created"
-  | "research.task.started"
-  | "research.task.completed"
-  | "research.task.failed"
-  | "research.source.started"
-  | "research.source.completed"
-  | "research.source.failed"
-  | "research.evidence.collected"
-  | "research.citation.added"
-  | "research.limit.reached"
-  | "research.completed"
-  | "research.failed"
-  | "tool.search.requested"
-  | "tool.selected"
-  | "tool.call.started"
-  | "tool.call.completed"
-  | "tool.call.failed"
-  | "skill.advertised"
-  | "skill.loaded"
-  | "skill.materialized"
-  | "model.request"
-  | "model.response"
-  | "sandbox.opened"
-  | "sandbox.closed"
-  | "artifact.created"
-  | "artifact.updated"
-  | "approval.requested"
-  | "approval.resolved"
-  | "interrupt.raised"
-  | "interrupt.resumed"
-  | "checkpoint.saved"
-  | "checkpoint.restored"
-  | "merge.proposed"
-  | "merge.applied"
-  | "steer.received"
-  | "drain.requested";
+export const RUN_EVENT_KINDS = [
+  "run.created",
+  "run.started",
+  "run.completed",
+  "run.failed",
+  "run.drained",
+  "plan.compiled",
+  "graph.normalized",
+  "task.ready",
+  "task.started",
+  "task.completed",
+  "task.failed",
+  "subagent.spawned",
+  "subagent.completed",
+  "research.started",
+  "research.plan.created",
+  "research.task.started",
+  "research.task.completed",
+  "research.task.failed",
+  "research.source.started",
+  "research.source.completed",
+  "research.source.failed",
+  "research.evidence.collected",
+  "research.citation.added",
+  "research.limit.reached",
+  "research.completed",
+  "research.failed",
+  "tool.search.requested",
+  "tool.selected",
+  "tool.call.started",
+  "tool.call.completed",
+  "tool.call.failed",
+  "skill.advertised",
+  "skill.loaded",
+  "skill.materialized",
+  "model.request",
+  "model.response",
+  "sandbox.opened",
+  "sandbox.closed",
+  "artifact.created",
+  "artifact.updated",
+  "approval.requested",
+  "approval.resolved",
+  "interrupt.raised",
+  "interrupt.resumed",
+  "checkpoint.saved",
+  "checkpoint.restored",
+  "merge.proposed",
+  "merge.applied",
+  "steer.received",
+  "drain.requested",
+] as const;
+
+export type RunEventKind = (typeof RUN_EVENT_KINDS)[number];
 
 export interface RunEvent {
   id: string;
