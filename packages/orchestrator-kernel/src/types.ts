@@ -1,4 +1,9 @@
-import type { SubagentCapability, WorkerConfig } from "@kirakira/agent-runtime";
+import type {
+  ReactWorkerConfig,
+  SubagentCapability,
+  SubagentRuntimePolicy,
+  WorkerConfig,
+} from "@kirakira/agent-runtime";
 
 export type TaskNodeKind =
   | "plan"
@@ -29,12 +34,14 @@ export interface TaskSpec {
   model?: string;
   toolScope?: string[];
   skillScope?: string[];
+  mcpServers?: string[];
   timeout?: number;
   retryPolicy?: RetryPolicy;
   inputArtifactRefs?: string[];
   approvalRequired?: boolean;
   approvalCleared?: boolean;
   estimatedTokens?: number;
+  subagent?: SubagentTaskContract;
   [key: string]: unknown;
 }
 
@@ -90,8 +97,19 @@ export interface PlanContext {
   workspace: string;
   availableTools: string[];
   availableSkills: string[];
+  availableMcpServers?: string[];
   previousArtifacts?: string[];
   constraints?: string[];
+}
+
+export interface SubagentTaskContract {
+  taskBrief: string;
+  capabilities: SubagentCapability[];
+  modelPreference?: string;
+  runtimePolicy?: SubagentRuntimePolicy;
+  policyCeiling?: WorkerConfig["policyCeiling"];
+  inputArtifactRefs?: string[];
+  outputSchema?: Record<string, unknown>;
 }
 
 export interface PlanStep {
@@ -100,8 +118,14 @@ export interface PlanStep {
   kind: TaskNodeKind;
   dependsOn: string[];
   canParallelize: boolean;
+  model?: string;
+  toolScope?: string[];
+  skillScope?: string[];
+  mcpServers?: string[];
+  inputArtifactRefs?: string[];
   estimatedTokens?: number;
   approvalRequired?: boolean;
+  subagent?: Partial<SubagentTaskContract>;
 }
 
 export interface RunPlan {
@@ -304,11 +328,29 @@ export interface SubagentSpec {
   taskBrief: string;
   capabilities: SubagentCapability[];
   modelPreference?: string;
+  runtimePolicy?: SubagentRuntimePolicy;
   parentWorkerId: string;
+  parentTaskId?: string;
   runId: string;
   traceId?: string;
   workspaceRoot: string;
   policyCeiling?: WorkerConfig["policyCeiling"];
+  inputArtifactRefs?: string[];
+  outputSchema?: Record<string, unknown>;
+}
+
+export interface RuntimeSubagentBridgeRequest {
+  runId: string;
+  parentTaskId: string;
+  parentWorkerId: string;
+  parentConfig: ReactWorkerConfig;
+  workspaceRoot: string;
+  spec: SubagentSpec;
+  lane: LaneType;
+}
+
+export interface RuntimeSubagentBridge {
+  run(request: RuntimeSubagentBridgeRequest): Promise<TaskResult>;
 }
 
 export interface LineageTree {

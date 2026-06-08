@@ -1,6 +1,7 @@
 import type { ModelPlannerClient } from "@kirakira/agent-runtime";
 import { ulid } from "ulid";
 import { OrchestratorKernelError } from "../errors.js";
+import { parseStringArray, parseSubagentTaskContract } from "../subagent/contract.js";
 import type { PlanContext, PlanStep, RunPlan, TaskNodeKind } from "../types.js";
 
 const PLAN_VERSION = "kirakira.runplan.v1";
@@ -22,8 +23,19 @@ export class GoalCompiler {
       `    "kind": "plan" | "subagent" | "tool" | "skill-load" | "approval" | "merge" | "synthesize",`,
       `    "dependsOn": string[],`,
       `    "canParallelize": boolean,`,
+      `    "model"?: string,`,
+      `    "toolScope"?: string[],`,
+      `    "skillScope"?: string[],`,
+      `    "mcpServers"?: string[],`,
+      `    "inputArtifactRefs"?: string[],`,
       `    "estimatedTokens"?: number,`,
-      `    "approvalRequired"?: boolean`,
+      `    "approvalRequired"?: boolean,`,
+      `    "subagent"?: {`,
+      `      "taskBrief"?: string,`,
+      `      "capabilities"?: Array<{ "kind": "tool" | "skill" | "mcp", "name": string }>,`,
+      `      "modelPreference"?: string,`,
+      `      "outputSchema"?: object`,
+      `    }`,
       `  }>,`,
       `  "estimatedComplexity": "simple" | "moderate" | "complex",`,
       `  "requiresSubagents": boolean`,
@@ -32,8 +44,10 @@ export class GoalCompiler {
       "- steps[].id must be unique.",
       "- dependsOn must reference earlier step ids only (DAG).",
       '- Use kind "subagent" when work should be delegated.',
+      "- For subagent steps, prefer least-privilege toolScope/skillScope/mcpServers or explicit subagent.capabilities.",
       '- Use kind "approval" when user confirmation is needed.',
       `- Prefer tools/skills from context: tools=[${context.availableTools.join(", ")}], skills=[${context.availableSkills.join(", ")}].`,
+      `- Available MCP servers: [${(context.availableMcpServers ?? []).join(", ")}].`,
     ].join("\n");
 
     const user = JSON.stringify(
@@ -102,17 +116,29 @@ export class GoalCompiler {
         ? s.dependsOn.filter((x): x is string => typeof x === "string")
         : [];
       const canParallelize = Boolean(s.canParallelize);
+      const model = typeof s.model === "string" ? s.model : undefined;
+      const toolScope = parseStringArray(s.toolScope);
+      const skillScope = parseStringArray(s.skillScope);
+      const mcpServers = parseStringArray(s.mcpServers);
+      const inputArtifactRefs = parseStringArray(s.inputArtifactRefs);
       const estimatedTokens = typeof s.estimatedTokens === "number" ? s.estimatedTokens : undefined;
       const approvalRequired =
         typeof s.approvalRequired === "boolean" ? s.approvalRequired : undefined;
+      const subagent = parseSubagentTaskContract(s.subagent);
       steps.push({
         id,
         description,
         kind,
         dependsOn,
         canParallelize,
+        ...(model !== undefined ? { model } : {}),
+        ...(toolScope !== undefined ? { toolScope } : {}),
+        ...(skillScope !== undefined ? { skillScope } : {}),
+        ...(mcpServers !== undefined ? { mcpServers } : {}),
+        ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
         ...(estimatedTokens !== undefined ? { estimatedTokens } : {}),
         ...(approvalRequired !== undefined ? { approvalRequired } : {}),
+        ...(subagent !== undefined ? { subagent } : {}),
       });
     }
     const estimatedComplexity = GoalCompiler.normalizeComplexity(obj.estimatedComplexity);

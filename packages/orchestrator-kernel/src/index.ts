@@ -14,6 +14,8 @@ export * from "./execution/merge-engine.js";
 export * from "./subagent/factory.js";
 export * from "./subagent/inheritance.js";
 export * from "./subagent/lineage.js";
+export * from "./subagent/contract.js";
+export * from "./subagent/runtime-bridge.js";
 export * from "./interrupt/interrupt-token.js";
 export * from "./interrupt/resume-handler.js";
 export * from "./interrupt/approval-bridge.js";

@@ -1,5 +1,6 @@
 import { ulid } from "ulid";
 import { GraphCycleError, GraphValidationError } from "../errors.js";
+import { normalizeSubagentTaskContract } from "../subagent/contract.js";
 import type { PlanStep, RunPlan, TaskEdge, TaskGraph, TaskNode } from "../types.js";
 
 interface JoinNode {
@@ -34,13 +35,22 @@ export class PlanNormalizer {
       });
     }
     for (const step of planSteps) {
+      const subagent = normalizeSubagentTaskContract(step, plan.context);
       nodes.set(step.id, {
         id: step.id,
         kind: step.kind,
         spec: {
           description: step.description,
+          ...(step.model !== undefined ? { model: step.model } : {}),
+          ...(step.toolScope !== undefined ? { toolScope: [...step.toolScope] } : {}),
+          ...(step.skillScope !== undefined ? { skillScope: [...step.skillScope] } : {}),
+          ...(step.mcpServers !== undefined ? { mcpServers: [...step.mcpServers] } : {}),
+          ...(step.inputArtifactRefs !== undefined
+            ? { inputArtifactRefs: [...step.inputArtifactRefs] }
+            : {}),
           ...(step.estimatedTokens !== undefined ? { estimatedTokens: step.estimatedTokens } : {}),
           ...(step.approvalRequired !== undefined ? { approvalRequired: step.approvalRequired } : {}),
+          ...(subagent !== undefined ? { subagent } : {}),
         },
         status: "pending",
       });

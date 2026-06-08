@@ -83,4 +83,27 @@ export function assertWithinParentPolicy(
   if (cNet && pNet && rankNet(cNet) > rankNet(pNet)) {
     throw new OrchestratorKernelError("POLICY_CEILING", "Child network policy exceeds parent ceiling");
   }
+  const rankFs = (f: string | undefined): number => {
+    if (f === "deny") return 0;
+    if (f === "ask") return 1;
+    return 2;
+  };
+  const cFs = childCeiling.filesystemWrite;
+  const pFs = parentCeiling.filesystemWrite;
+  if (cFs && pFs && rankFs(cFs) > rankFs(pFs)) {
+    throw new OrchestratorKernelError(
+      "POLICY_CEILING",
+      "Child filesystem write policy exceeds parent ceiling",
+    );
+  }
+  const rankShell = (s: string | undefined): number => {
+    if (s === "deny") return 0;
+    if (s === "ask") return 1;
+    return 2;
+  };
+  const cShell = childCeiling.shell;
+  const pShell = parentCeiling.shell;
+  if (cShell && pShell && rankShell(cShell) > rankShell(pShell)) {
+    throw new OrchestratorKernelError("POLICY_CEILING", "Child shell policy exceeds parent ceiling");
+  }
 }

@@ -6,7 +6,13 @@ import { isExitCondition } from "./exit-conditions.js";
 import { TurnManager } from "./turn-manager.js";
 import { InterruptHandler } from "../interrupt/interrupt-handler.js";
 import { handleToolResult } from "../tools/tool-result-handler.js";
-import type { Action, ReactWorkerState } from "../types.js";
+import type {
+  Action,
+  SandboxPolicyCeiling,
+  SubagentCapability,
+  SubagentRuntimePolicy,
+  ReactWorkerState,
+} from "../types.js";
 import type { ModelClient } from "../model/model-client.js";
 import type { ToolExecutor } from "../tools/tool-executor.js";
 import type { SkillInjector } from "../context/skill-injector.js";
@@ -33,9 +39,16 @@ export interface RuntimeDeps {
 export interface DelegateRequest {
   subagentId: string;
   parentWorkerId: string;
+  parentTaskId?: string;
   parentConfig: ReactWorkerState["config"];
   runId: string;
   task: string;
+  capabilities?: SubagentCapability[];
+  modelPreference?: string;
+  policyCeiling?: SandboxPolicyCeiling;
+  runtimePolicy?: SubagentRuntimePolicy;
+  inputArtifactRefs?: string[];
+  outputSchema?: Record<string, unknown>;
   action: Action & { kind: "delegate" };
 }
 
