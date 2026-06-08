@@ -8,6 +8,7 @@ export * from "./scheduler/resource-budget.js";
 export * from "./scheduler/lane-router.js";
 export * from "./scheduler/backpressure.js";
 export * from "./execution/kernel-loop.js";
+export * from "./execution/subagent-task-executor.js";
 export * from "./execution/superstep.js";
 export * from "./execution/drain.js";
 export * from "./execution/merge-engine.js";
