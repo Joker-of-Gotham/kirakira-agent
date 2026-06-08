@@ -241,4 +241,76 @@ describe("frontend-core run dashboard projection", () => {
       unknowns: ["one open question"],
     });
   });
+
+  it("projects graph topology, task deltas, and checkpoints", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "graph.normalized",
+        {
+          graphId: "graph-1",
+          rootNodeId: "root",
+          totalNodes: 3,
+          completedNodes: 0,
+          runningNodes: 0,
+          failedNodes: 0,
+          nodes: [
+            { id: "root", kind: "synthesize", status: "pending", description: "Root" },
+            { id: "research", kind: "subagent", status: "pending", description: "Research" },
+            { id: "write", kind: "synthesize", status: "pending", description: "Write" },
+          ],
+          edges: [
+            { id: "root-research", from: "root", to: "research", kind: "depends_on" },
+            { id: "research-write", from: "research", to: "write", kind: "depends_on" },
+          ],
+        },
+        1,
+      ),
+      event(
+        "task.started",
+        {
+          taskId: "research",
+          nodeId: "research",
+          kind: "subagent",
+          description: "Research",
+          workerId: "worker-1",
+        },
+        2,
+      ),
+      event(
+        "task.completed",
+        {
+          taskId: "research",
+          nodeId: "research",
+          kind: "subagent",
+          description: "Research",
+        },
+        3,
+      ),
+      event("checkpoint.saved", { checkpointId: "checkpoint-1", checkpointSeq: 3 }, 4),
+      event("graph.normalized", { superstepBoundary: true }, 5),
+    ]);
+
+    expect(projection.graph).toMatchObject({
+      graphId: "graph-1",
+      rootNodeId: "root",
+      nodeCount: 3,
+      completedNodeCount: 1,
+      runningNodeCount: 0,
+      failedNodeCount: 0,
+      edgeCount: 2,
+      superstepCount: 1,
+      lastCheckpointId: "checkpoint-1",
+      lastCheckpointSeq: 3,
+    });
+    expect(projection.graph.nodes.research).toMatchObject({
+      id: "research",
+      phase: "completed",
+      kind: "subagent",
+      description: "Research",
+      workerId: "worker-1",
+    });
+    expect(projection.entities.tasks.research).toBe("completed");
+    expect(projection.graph.edges).toHaveLength(2);
+    expect(projection.latestEvents[0]?.title).toBe("Graph normalized");
+  });
 });

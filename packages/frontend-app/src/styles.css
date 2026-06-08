@@ -186,7 +186,8 @@ a:focus-visible {
 }
 
 .kk-dot-running,
-.kk-dot-pending {
+.kk-dot-pending,
+.kk-dot-ready {
   background: var(--kk-cyan);
 }
 
@@ -465,6 +466,8 @@ a:focus-visible {
 
 .kk-pill-running,
 .kk-pill-requested,
+.kk-pill-pending,
+.kk-pill-ready,
 .kk-pill-created {
   color: var(--kk-cyan);
   background: #e7f5f8;
@@ -544,6 +547,118 @@ a:focus-visible {
 
 .kk-rail-section {
   box-shadow: none;
+}
+
+.kk-graph {
+  display: grid;
+  gap: 10px;
+}
+
+.kk-graph-summary,
+.kk-graph-metrics,
+.kk-graph-node {
+  display: flex;
+  align-items: center;
+}
+
+.kk-graph-summary {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kk-graph-summary strong {
+  color: var(--kk-ink);
+  font-size: 1.35rem;
+}
+
+.kk-graph-summary span,
+.kk-graph-checkpoint {
+  color: var(--kk-text-muted);
+  font-size: 0.82rem;
+}
+
+.kk-graph-meter {
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: var(--kk-surface-muted);
+}
+
+.kk-graph-meter::-webkit-progress-bar {
+  background: var(--kk-surface-muted);
+}
+
+.kk-graph-meter::-webkit-progress-value {
+  border-radius: 999px;
+  background: var(--kk-cyan);
+}
+
+.kk-graph-meter::-moz-progress-bar {
+  border-radius: 999px;
+  background: var(--kk-cyan);
+}
+
+.kk-graph-metrics {
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0;
+}
+
+.kk-graph-metrics div {
+  min-width: 0;
+  flex: 1 1 0;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-graph-metrics dt,
+.kk-graph-metrics dd {
+  margin: 0;
+}
+
+.kk-graph-metrics dt,
+.kk-graph-node small {
+  color: var(--kk-text-muted);
+  font-size: 0.75rem;
+}
+
+.kk-graph-metrics dd {
+  color: var(--kk-ink);
+  font-weight: 700;
+}
+
+.kk-graph-nodes {
+  display: grid;
+  gap: 6px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.kk-graph-node {
+  min-width: 0;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-graph-node > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.kk-graph-node strong,
+.kk-graph-node small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kk-research,

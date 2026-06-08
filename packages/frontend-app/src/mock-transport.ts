@@ -82,7 +82,66 @@ export function createMockRuntimeTransport(): RuntimeTransport {
       [
         240,
         "graph.normalized",
-        { totalNodes: 4, completedNodes: 1, runningNodes: 2, failedNodes: 0 },
+        {
+          graphId: `${runId}-graph`,
+          rootNodeId: "workspace-scan",
+          totalNodes: 4,
+          completedNodes: 0,
+          runningNodes: 0,
+          failedNodes: 0,
+          nodes: [
+            {
+              id: "workspace-scan",
+              kind: "synthesize",
+              status: "pending",
+              description: "Map runtime contracts and UI surface gaps",
+            },
+            {
+              id: "delegated-research",
+              kind: "subagent",
+              status: "pending",
+              description: "Delegate source-backed research",
+            },
+            {
+              id: "approval-gate",
+              kind: "approval",
+              status: "pending",
+              description: "Review workspace-safe runtime change",
+            },
+            {
+              id: "finalize",
+              kind: "synthesize",
+              status: "pending",
+              description: "Summarize and persist artifacts",
+            },
+          ],
+          edges: [
+            { id: "scan-research", from: "workspace-scan", to: "delegated-research" },
+            { id: "research-approval", from: "delegated-research", to: "approval-gate" },
+            { id: "approval-finalize", from: "approval-gate", to: "finalize" },
+          ],
+        },
+      ],
+      [
+        330,
+        "task.started",
+        {
+          taskId: "workspace-scan",
+          nodeId: "workspace-scan",
+          kind: "synthesize",
+          description: "Map runtime contracts and UI surface gaps",
+          workerId: `${runId}-supervisor`,
+        },
+      ],
+      [
+        390,
+        "task.completed",
+        {
+          taskId: "workspace-scan",
+          nodeId: "workspace-scan",
+          kind: "synthesize",
+          description: "Map runtime contracts and UI surface gaps",
+        },
       ],
       [
         420,
@@ -98,6 +157,17 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           ],
           modelPreference: "runtime-default",
           traceId: `${runId}-trace`,
+        },
+      ],
+      [
+        500,
+        "task.started",
+        {
+          taskId: "delegated-research",
+          nodeId: "delegated-research",
+          kind: "subagent",
+          description: "Delegate source-backed research",
+          workerId: subagentId,
         },
       ],
       [
@@ -134,6 +204,16 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         { callId, summary: "Boundary checks completed" },
       ],
       [
+        1580,
+        "task.completed",
+        {
+          taskId: "delegated-research",
+          nodeId: "delegated-research",
+          kind: "subagent",
+          description: "Delegate source-backed research",
+        },
+      ],
+      [
         1760,
         "approval.requested",
         {
@@ -151,6 +231,11 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           citationCount: 1,
           unknowns: [],
         },
+      ],
+      [
+        2300,
+        "checkpoint.saved",
+        { checkpointId: `${runId}-checkpoint-1`, checkpointSeq: 12 },
       ],
       [
         2460,
@@ -215,10 +300,32 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           reason: decision.reason,
         }),
       );
+      if (decision.decision === "approve") {
+        emit(
+          makeEvent(decision.runId, "task.completed", {
+            taskId: "approval-gate",
+            nodeId: "approval-gate",
+            kind: "approval",
+            description: "Review workspace-safe runtime change",
+          }),
+        );
+        emit(
+          makeEvent(decision.runId, "task.completed", {
+            taskId: "finalize",
+            nodeId: "finalize",
+            kind: "synthesize",
+            description: "Summarize and persist artifacts",
+          }),
+        );
+      }
       emit(
-        makeEvent(decision.runId, "run.completed", {
-          summary: "Run completed after approval",
-        }),
+        makeEvent(
+          decision.runId,
+          decision.decision === "approve" ? "run.completed" : "run.failed",
+          decision.decision === "approve"
+            ? { summary: "Run completed after approval" }
+            : { error: decision.reason ?? "Approval rejected" },
+        ),
       );
     },
     async cancel(runId, reason) {

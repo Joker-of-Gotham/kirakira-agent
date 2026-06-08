@@ -80,6 +80,40 @@ export interface RunDashboardResearchRun {
   updatedAt: string;
 }
 
+export interface RunDashboardGraphNode {
+  id: string;
+  phase: EntityPhase;
+  kind?: string;
+  description?: string;
+  workerId?: string;
+  error?: string;
+  updatedAt?: string;
+}
+
+export interface RunDashboardGraphEdge {
+  id: string;
+  from: string;
+  to: string;
+  kind?: string;
+  status?: string;
+}
+
+export interface RunDashboardGraph {
+  graphId?: string;
+  rootNodeId?: string;
+  nodeCount: number;
+  completedNodeCount: number;
+  runningNodeCount: number;
+  failedNodeCount: number;
+  edgeCount: number;
+  nodes: Record<string, RunDashboardGraphNode>;
+  edges: RunDashboardGraphEdge[];
+  superstepCount: number;
+  lastCheckpointId?: string;
+  lastCheckpointSeq?: number;
+  updatedAt?: string;
+}
+
 export interface RunDashboardEntityMaps {
   tasks: Record<string, EntityPhase>;
   subagents: Record<string, EntityPhase>;
@@ -101,6 +135,7 @@ export interface RunDashboardProjection {
   entities: RunDashboardEntityMaps;
   subagentDetails: Record<string, RunDashboardSubagent>;
   researchRuns: Record<string, RunDashboardResearchRun>;
+  graph: RunDashboardGraph;
   pendingApprovalIds: string[];
   updatedAt?: string;
 }
@@ -176,6 +211,12 @@ const EVENT_TITLES: Partial<Record<RunEventKind, string>> = {
   "run.completed": "Run completed",
   "run.failed": "Run failed",
   "run.drained": "Run drained",
+  "plan.compiled": "Plan compiled",
+  "graph.normalized": "Graph normalized",
+  "task.ready": "Task ready",
+  "task.started": "Task started",
+  "task.completed": "Task completed",
+  "task.failed": "Task failed",
   "subagent.spawned": "Subagent spawned",
   "subagent.completed": "Subagent completed",
   "research.started": "Research started",
@@ -196,6 +237,7 @@ const EVENT_TITLES: Partial<Record<RunEventKind, string>> = {
   "tool.call.started": "Tool call started",
   "tool.call.completed": "Tool call completed",
   "tool.call.failed": "Tool call failed",
+  "checkpoint.saved": "Checkpoint saved",
 };
 
 const ENTITY_ID_KEYS = [
@@ -229,7 +271,21 @@ export function createEmptyRunDashboard(runId?: string): RunDashboardProjection 
     },
     subagentDetails: {},
     researchRuns: {},
+    graph: createEmptyGraphDashboard(),
     pendingApprovalIds: [],
+  };
+}
+
+function createEmptyGraphDashboard(): RunDashboardGraph {
+  return {
+    nodeCount: 0,
+    completedNodeCount: 0,
+    runningNodeCount: 0,
+    failedNodeCount: 0,
+    edgeCount: 0,
+    nodes: {},
+    edges: [],
+    superstepCount: 0,
   };
 }
 
@@ -270,6 +326,8 @@ const HANDLERS: Partial<Record<RunEventKind, ProjectionHandler>> = {
   "run.completed": applyRunLifecycle,
   "run.failed": applyRunLifecycle,
   "run.drained": applyRunLifecycle,
+  "plan.compiled": applyPlan,
+  "graph.normalized": applyGraph,
   "task.ready": applyTask,
   "task.started": applyTask,
   "task.completed": applyTask,
@@ -298,6 +356,7 @@ const HANDLERS: Partial<Record<RunEventKind, ProjectionHandler>> = {
   "approval.resolved": applyApproval,
   "artifact.created": applyArtifact,
   "artifact.updated": applyArtifact,
+  "checkpoint.saved": applyCheckpoint,
 };
 
 function projectOne(
@@ -335,7 +394,90 @@ function applyTask(
   state: RunDashboardProjection,
   event: RunEvent,
 ): RunDashboardProjection {
-  return setEntityPhase(state, "tasks", event, TASK_PHASE_BY_EVENT[event.kind]);
+  const next = setEntityPhase(state, "tasks", event, TASK_PHASE_BY_EVENT[event.kind]);
+  return applyTaskToGraph(next, event);
+}
+
+function applyPlan(
+  state: RunDashboardProjection,
+  event: RunEvent,
+): RunDashboardProjection {
+  return applyGeneric(state, event);
+}
+
+function applyGraph(
+  state: RunDashboardProjection,
+  event: RunEvent,
+): RunDashboardProjection {
+  const incomingNodes = graphNodes(event);
+  const nodes = incomingNodes
+    ? mergeGraphNodes(state.graph.nodes, incomingNodes, event.timestamp)
+    : state.graph.nodes;
+  const edges = graphEdges(event) ?? state.graph.edges;
+  const derived = graphCountsFromNodes(nodes);
+  const graph: RunDashboardGraph = {
+    ...state.graph,
+    ...(firstString(event.payload, ["graphId"]) !== undefined
+      ? { graphId: firstString(event.payload, ["graphId"]) }
+      : {}),
+    ...(firstString(event.payload, ["rootNodeId"]) !== undefined
+      ? { rootNodeId: firstString(event.payload, ["rootNodeId"]) }
+      : {}),
+    nodeCount: numberValue(event.payload.totalNodes) ?? derived.nodeCount,
+    completedNodeCount:
+      numberValue(event.payload.completedNodes) ?? derived.completedNodeCount,
+    runningNodeCount:
+      numberValue(event.payload.runningNodes) ?? derived.runningNodeCount,
+    failedNodeCount: numberValue(event.payload.failedNodes) ?? derived.failedNodeCount,
+    edgeCount: edges.length,
+    nodes,
+    edges,
+    superstepCount:
+      event.payload.superstepBoundary === true
+        ? state.graph.superstepCount + 1
+        : state.graph.superstepCount,
+    updatedAt: event.timestamp,
+  };
+  return {
+    ...state,
+    runId: state.runId ?? event.runId,
+    parentRunId: event.parentRunId ?? state.parentRunId,
+    ...(incomingNodes
+      ? {
+          entities: {
+            ...state.entities,
+            tasks: {
+              ...state.entities.tasks,
+              ...taskEntityPhases(nodes),
+            },
+          },
+        }
+      : {}),
+    graph,
+    updatedAt: event.timestamp,
+  };
+}
+
+function applyCheckpoint(
+  state: RunDashboardProjection,
+  event: RunEvent,
+): RunDashboardProjection {
+  return {
+    ...state,
+    runId: state.runId ?? event.runId,
+    parentRunId: event.parentRunId ?? state.parentRunId,
+    graph: {
+      ...state.graph,
+      ...(firstString(event.payload, ["checkpointId"]) !== undefined
+        ? { lastCheckpointId: firstString(event.payload, ["checkpointId"]) }
+        : {}),
+      ...(numberValue(event.payload.checkpointSeq) !== undefined
+        ? { lastCheckpointSeq: numberValue(event.payload.checkpointSeq) }
+        : {}),
+      updatedAt: event.timestamp,
+    },
+    updatedAt: event.timestamp,
+  };
 }
 
 function applySubagent(
@@ -679,6 +821,150 @@ function researchCitation(
     sourceRecordId: citation.sourceRecordId,
     artifactPointer: citation.artifactPointer,
   };
+}
+
+function applyTaskToGraph(
+  state: RunDashboardProjection,
+  event: RunEvent,
+): RunDashboardProjection {
+  const id = firstString(event.payload, ["nodeId", "taskId", "id"]);
+  const phase = TASK_PHASE_BY_EVENT[event.kind];
+  if (!id || !phase) return state;
+  const previous = state.graph.nodes[id];
+  const node: RunDashboardGraphNode = {
+    ...previous,
+    id,
+    phase,
+    ...(firstString(event.payload, ["kind"]) !== undefined
+      ? { kind: firstString(event.payload, ["kind"]) }
+      : {}),
+    ...(firstString(event.payload, ["description"]) !== undefined
+      ? { description: firstString(event.payload, ["description"]) }
+      : {}),
+    ...(firstString(event.payload, ["workerId"]) !== undefined
+      ? { workerId: firstString(event.payload, ["workerId"]) }
+      : {}),
+    ...(firstString(event.payload, ["error", "message"]) !== undefined
+      ? { error: firstString(event.payload, ["error", "message"]) }
+      : phase === "failed"
+        ? { error: previous?.error }
+        : {}),
+    updatedAt: event.timestamp,
+  };
+  const nodes = { ...state.graph.nodes, [id]: node };
+  const counts = graphCountsFromNodes(nodes);
+  return {
+    ...state,
+    graph: {
+      ...state.graph,
+      nodes,
+      nodeCount: Math.max(state.graph.nodeCount, counts.nodeCount),
+      completedNodeCount: counts.completedNodeCount,
+      runningNodeCount: counts.runningNodeCount,
+      failedNodeCount: counts.failedNodeCount,
+      updatedAt: event.timestamp,
+    },
+    updatedAt: event.timestamp,
+  };
+}
+
+function graphNodes(event: RunEvent): RunDashboardGraphNode[] | undefined {
+  const rawNodes = objectArray(event.payload.nodes);
+  if (!rawNodes) return undefined;
+  const nodes = rawNodes
+    .map((raw): RunDashboardGraphNode | undefined => {
+      const id = firstString(raw, ["id", "nodeId", "taskId"]);
+      if (!id) return undefined;
+      return {
+        id,
+        phase: graphPhase(raw.status),
+        ...(firstString(raw, ["kind"]) !== undefined ? { kind: firstString(raw, ["kind"]) } : {}),
+        ...(firstString(raw, ["description"]) !== undefined
+          ? { description: firstString(raw, ["description"]) }
+          : {}),
+        ...(firstString(raw, ["workerId"]) !== undefined
+          ? { workerId: firstString(raw, ["workerId"]) }
+          : {}),
+        ...(firstString(raw, ["error", "message"]) !== undefined
+          ? { error: firstString(raw, ["error", "message"]) }
+          : {}),
+        updatedAt: event.timestamp,
+      };
+    })
+    .filter((node): node is RunDashboardGraphNode => node !== undefined);
+  return nodes.length > 0 ? nodes : undefined;
+}
+
+function graphEdges(event: RunEvent): RunDashboardGraphEdge[] | undefined {
+  const rawEdges = objectArray(event.payload.edges);
+  if (!rawEdges) return undefined;
+  const edges = rawEdges
+    .map((raw, index): RunDashboardGraphEdge | undefined => {
+      const from = firstString(raw, ["from", "source"]);
+      const to = firstString(raw, ["to", "target"]);
+      if (!from || !to) return undefined;
+      return {
+        id: firstString(raw, ["id"]) ?? `${from}:${to}:${index}`,
+        from,
+        to,
+        ...(firstString(raw, ["kind"]) !== undefined ? { kind: firstString(raw, ["kind"]) } : {}),
+        ...(firstString(raw, ["status"]) !== undefined
+          ? { status: firstString(raw, ["status"]) }
+          : {}),
+      };
+    })
+    .filter((edge): edge is RunDashboardGraphEdge => edge !== undefined);
+  return edges;
+}
+
+function mergeGraphNodes(
+  previous: Record<string, RunDashboardGraphNode>,
+  incoming: RunDashboardGraphNode[],
+  updatedAt: string,
+): Record<string, RunDashboardGraphNode> {
+  const next = { ...previous };
+  for (const node of incoming) {
+    next[node.id] = {
+      ...next[node.id],
+      ...node,
+      updatedAt,
+    };
+  }
+  return next;
+}
+
+function graphCountsFromNodes(nodes: Record<string, RunDashboardGraphNode>): Pick<
+  RunDashboardGraph,
+  "nodeCount" | "completedNodeCount" | "runningNodeCount" | "failedNodeCount"
+> {
+  const values = Object.values(nodes);
+  return {
+    nodeCount: values.length,
+    completedNodeCount: values.filter((node) => node.phase === "completed").length,
+    runningNodeCount: values.filter((node) => node.phase === "running").length,
+    failedNodeCount: values.filter((node) => node.phase === "failed").length,
+  };
+}
+
+function taskEntityPhases(
+  nodes: Record<string, RunDashboardGraphNode>,
+): Record<string, EntityPhase> {
+  return Object.fromEntries(
+    Object.values(nodes).map((node) => [node.id, node.phase]),
+  );
+}
+
+function graphPhase(value: unknown): EntityPhase {
+  if (
+    value === "pending" ||
+    value === "ready" ||
+    value === "running" ||
+    value === "completed" ||
+    value === "failed"
+  ) {
+    return value;
+  }
+  return "pending";
 }
 
 function appendUnique(values: string[], next: string | undefined): string[] {

@@ -193,6 +193,15 @@ export function KirakiraWorkbench({
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
   const pendingApproval = projection.pendingApprovalIds[0];
+  const graph = projection.graph;
+  const graphNodes = Object.values(graph.nodes).sort((a, b) => {
+    if (a.id === graph.rootNodeId) return -1;
+    if (b.id === graph.rootNodeId) return 1;
+    return a.id.localeCompare(b.id);
+  });
+  const graphProgress = graph.nodeCount > 0
+    ? Math.round((graph.completedNodeCount / graph.nodeCount) * 100)
+    : 0;
 
   return (
     <main className="kk-shell">
@@ -355,6 +364,65 @@ export function KirakiraWorkbench({
       </section>
 
       <aside className="kk-right-rail" aria-label="Run intelligence">
+        <section className="kk-rail-section" aria-label="Execution graph">
+          <div className="kk-pane-header">
+            <div>
+              <p className="kk-kicker">Graph</p>
+              <h2>Execution</h2>
+            </div>
+            <GitBranch size={18} />
+          </div>
+          {graph.nodeCount === 0 ? (
+            <div className="kk-empty">No graph compiled</div>
+          ) : (
+            <div className="kk-graph">
+              <div className="kk-graph-summary">
+                <strong>
+                  {graph.completedNodeCount}/{graph.nodeCount}
+                </strong>
+                <span>{graphProgress}% complete</span>
+              </div>
+              <progress
+                className="kk-graph-meter"
+                aria-label={`Execution graph ${graphProgress}% complete`}
+                value={graphProgress}
+                max={100}
+              />
+              <dl className="kk-graph-metrics">
+                <div>
+                  <dt>Running</dt>
+                  <dd>{graph.runningNodeCount}</dd>
+                </div>
+                <div>
+                  <dt>Failed</dt>
+                  <dd>{graph.failedNodeCount}</dd>
+                </div>
+                <div>
+                  <dt>Edges</dt>
+                  <dd>{graph.edgeCount}</dd>
+                </div>
+              </dl>
+              <ol className="kk-graph-nodes">
+                {graphNodes.slice(0, 6).map((node) => (
+                  <li key={node.id} className="kk-graph-node">
+                    <span className={`kk-dot kk-dot-${node.phase}`} />
+                    <div>
+                      <strong>{node.description ?? node.id}</strong>
+                      <small>{node.kind ?? node.id}</small>
+                    </div>
+                    <span className={`kk-pill kk-pill-${node.phase}`}>{node.phase}</span>
+                  </li>
+                ))}
+              </ol>
+              {graph.lastCheckpointId ? (
+                <small className="kk-graph-checkpoint">
+                  Checkpoint {graph.lastCheckpointId}
+                </small>
+              ) : null}
+            </div>
+          )}
+        </section>
+
         <section className="kk-rail-section">
           <div className="kk-pane-header">
             <div>
