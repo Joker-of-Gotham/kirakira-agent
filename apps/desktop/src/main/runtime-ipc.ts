@@ -1,0 +1,319 @@
+import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
+import type { DaemonClient, ServerMessage } from "@kirakira/runtime-daemon";
+import type {
+  ApprovalDecision,
+  RuntimeTransportEvent,
+  SubmitPromptRequest,
+  SubscribeRunOptions,
+} from "@kirakira/frontend-core";
+
+export interface RuntimeIpcControllerOptions {
+  client: Pick<
+    DaemonClient,
+    | "connect"
+    | "disconnect"
+    | "submitPrompt"
+    | "getState"
+    | "subscribeToRun"
+    | "unsubscribe"
+    | "approve"
+    | "cancel"
+    | "drain"
+    | "onMessage"
+  >;
+  webContentsFromId(id: number): Pick<WebContents, "send" | "isDestroyed"> | undefined;
+  socketPath?: string;
+  isTrustedSender?(event: IpcMainInvokeEvent): boolean;
+  idFactory?: () => string;
+}
+
+interface DesktopSubscription {
+  runId: string;
+  webContentsId: number;
+  options?: SubscribeRunOptions;
+  subscribeMessageId: string;
+  daemonSubscriptionId?: string;
+  disposed?: boolean;
+}
+
+const defaultIdFactory = () =>
+  `desktop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const optionalString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
+
+const optionalNumber = (value: unknown): number | undefined =>
+  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+
+function assertTrustedSender(
+  event: IpcMainInvokeEvent,
+  isTrustedSender?: (event: IpcMainInvokeEvent) => boolean,
+): void {
+  if (isTrustedSender && !isTrustedSender(event)) {
+    throw new Error("Untrusted runtime IPC sender");
+  }
+}
+
+function parseSubmitPromptRequest(value: unknown): SubmitPromptRequest {
+  if (!isRecord(value) || typeof value.prompt !== "string") {
+    throw new Error("submitPrompt requires a prompt");
+  }
+  const mode = optionalString(value.mode);
+  if (mode !== undefined && mode !== "interactive" && mode !== "headless" && mode !== "dry_run") {
+    throw new Error("submitPrompt mode is invalid");
+  }
+  const request: SubmitPromptRequest = {
+    prompt: value.prompt,
+  };
+  if (mode !== undefined) request.mode = mode;
+  if (value.options !== undefined) {
+    if (!isRecord(value.options)) throw new Error("submitPrompt options must be an object");
+    request.options = value.options;
+  }
+  return request;
+}
+
+function parseRunId(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new Error(`${label} requires runId`);
+  }
+  return value;
+}
+
+function parseSubscriptionId(value: unknown): string {
+  if (!isRecord(value) || typeof value.subscriptionId !== "string" || value.subscriptionId.length === 0) {
+    throw new Error("runtime subscriptionId is required");
+  }
+  return value.subscriptionId;
+}
+
+function parseSubscribeOptions(value: unknown): SubscribeRunOptions | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isRecord(value)) throw new Error("subscribe options must be an object");
+  const options: SubscribeRunOptions = {};
+  if (value.afterSeq !== undefined) {
+    const afterSeq = optionalNumber(value.afterSeq);
+    if (afterSeq === undefined || afterSeq < 0) {
+      throw new Error("subscribe afterSeq must be a non-negative number");
+    }
+    options.afterSeq = afterSeq;
+  }
+  if (value.filter !== undefined) {
+    if (!isRecord(value.filter)) throw new Error("subscribe filter must be an object");
+    options.filter = value.filter;
+  }
+  return options;
+}
+
+function parseSubscribeRequest(value: unknown): {
+  runId: string;
+  options?: SubscribeRunOptions;
+  subscriptionId: string;
+} {
+  if (!isRecord(value)) throw new Error("subscribeRun requires a request object");
+  return {
+    runId: parseRunId(value.runId, "subscribeRun"),
+    options: parseSubscribeOptions(value.options),
+    subscriptionId: parseSubscriptionId(value),
+  };
+}
+
+function parseApprovalDecision(value: unknown): ApprovalDecision {
+  if (
+    !isRecord(value) ||
+    typeof value.runId !== "string" ||
+    typeof value.ticketId !== "string" ||
+    (value.decision !== "approve" && value.decision !== "reject")
+  ) {
+    throw new Error("approve requires a valid approval decision");
+  }
+  const decision: ApprovalDecision = {
+    runId: value.runId,
+    ticketId: value.ticketId,
+    decision: value.decision,
+  };
+  const reason = optionalString(value.reason);
+  if (reason !== undefined) decision.reason = reason;
+  return decision;
+}
+
+function parseCancelRequest(value: unknown): { runId: string; reason?: string } {
+  if (!isRecord(value)) throw new Error("cancel requires a request object");
+  const runId = parseRunId(value.runId, "cancel");
+  const reason = optionalString(value.reason);
+  return reason === undefined ? { runId } : { runId, reason };
+}
+
+const eventMatches = (
+  message: ServerMessage,
+  runId: string,
+  options?: SubscribeRunOptions,
+): message is Extract<ServerMessage, { type: "event" }> => {
+  if (message.type !== "event") return false;
+  if (message.event.runId !== runId) return false;
+  if (options?.afterSeq !== undefined && (message.event.checkpointSeq ?? 0) <= options.afterSeq) {
+    return false;
+  }
+  if (options?.filter?.kinds && !options.filter.kinds.includes(message.event.kind)) {
+    return false;
+  }
+  return true;
+};
+
+export function createRuntimeIpcController(options: RuntimeIpcControllerOptions) {
+  const subscriptions = new Map<string, DesktopSubscription>();
+  let connected = false;
+
+  const ensureConnected = async () => {
+    if (connected) return;
+    await options.client.connect(options.socketPath);
+    connected = true;
+  };
+
+  const findSubscriptionBySubscribeMessageId = (messageId: string) => {
+    for (const [subscriptionId, subscription] of subscriptions) {
+      if (subscription.subscribeMessageId === messageId) {
+        return { subscriptionId, subscription };
+      }
+    }
+    return null;
+  };
+
+  const disposeSubscription = (subscriptionId: string, senderId?: number) => {
+    const subscription = subscriptions.get(subscriptionId);
+    if (!subscription) return;
+    if (senderId !== undefined && subscription.webContentsId !== senderId) {
+      throw new Error("Renderer does not own runtime subscription");
+    }
+    if (subscription.daemonSubscriptionId) {
+      options.client.unsubscribe(subscription.daemonSubscriptionId);
+      subscriptions.delete(subscriptionId);
+      return;
+    }
+    subscription.disposed = true;
+  };
+
+  const disposeAll = () => {
+    for (const subscriptionId of subscriptions.keys()) {
+      disposeSubscription(subscriptionId);
+    }
+    subscriptions.clear();
+  };
+
+  const removeMessageHandler = options.client.onMessage((message) => {
+    if (message.type === "subscribed" && message.messageId) {
+      const matched = findSubscriptionBySubscribeMessageId(message.messageId);
+      if (matched) {
+        matched.subscription.daemonSubscriptionId = message.subscriptionId;
+        if (matched.subscription.disposed) {
+          options.client.unsubscribe(message.subscriptionId);
+          subscriptions.delete(matched.subscriptionId);
+        }
+      }
+      return;
+    }
+    for (const [subscriptionId, subscription] of subscriptions) {
+      if (subscription.disposed) continue;
+      if (!eventMatches(message, subscription.runId, subscription.options)) continue;
+      const target = options.webContentsFromId(subscription.webContentsId);
+      if (!target || target.isDestroyed()) {
+        disposeSubscription(subscriptionId);
+        continue;
+      }
+      const payload: RuntimeTransportEvent = { type: "event", event: message.event };
+      target.send(`runtime:event:${subscriptionId}`, payload);
+    }
+  });
+
+  return {
+    subscriptionCount: () => subscriptions.size,
+    disposeSubscription,
+    dispose() {
+      disposeAll();
+      removeMessageHandler();
+    },
+    register(ipcMain: Pick<IpcMain, "handle">) {
+      ipcMain.handle("runtime:connect", async (event) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        await ensureConnected();
+      });
+
+      ipcMain.handle("runtime:disconnect", (event) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        disposeAll();
+        options.client.disconnect();
+        connected = false;
+      });
+
+      ipcMain.handle("runtime:submitPrompt", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseSubmitPromptRequest(rawRequest);
+        await ensureConnected();
+        const runId = await options.client.submitPrompt(
+          request.prompt,
+          request.mode ?? "interactive",
+          request.options,
+        );
+        return { runId };
+      });
+
+      ipcMain.handle("runtime:getState", async (event, rawRunId: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const runId = parseRunId(rawRunId, "getState");
+        await ensureConnected();
+        return { runId, state: await options.client.getState(runId) };
+      });
+
+      ipcMain.handle("runtime:subscribeRun", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseSubscribeRequest(rawRequest);
+        await ensureConnected();
+        const subscribeMessageId = (options.idFactory ?? defaultIdFactory)();
+        subscriptions.set(request.subscriptionId, {
+          runId: request.runId,
+          webContentsId: event.sender.id,
+          options: request.options,
+          subscribeMessageId,
+        });
+        options.client.subscribeToRun(request.runId, {
+          afterSeq: request.options?.afterSeq,
+          filter: request.options?.filter,
+          messageId: subscribeMessageId,
+        });
+      });
+
+      ipcMain.handle("runtime:unsubscribeRun", (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        disposeSubscription(parseSubscriptionId(rawRequest), event.sender.id);
+      });
+
+      ipcMain.handle("runtime:approve", async (event, rawDecision: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const decision = parseApprovalDecision(rawDecision);
+        await ensureConnected();
+        await options.client.approve(
+          decision.ticketId,
+          decision.decision,
+          decision.reason,
+          decision.runId,
+        );
+      });
+
+      ipcMain.handle("runtime:cancel", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseCancelRequest(rawRequest);
+        await ensureConnected();
+        await options.client.cancel(request.runId, request.reason);
+      });
+
+      ipcMain.handle("runtime:drain", async (event) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        await ensureConnected();
+        await options.client.drain();
+      });
+    },
+  };
+}

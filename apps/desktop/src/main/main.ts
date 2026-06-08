@@ -1,32 +1,11 @@
-import { app, BrowserWindow, ipcMain, webContents } from "electron";
+import { app, BrowserWindow, ipcMain, webContents, type IpcMainInvokeEvent } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DaemonClient, type ServerMessage } from "@kirakira/runtime-daemon";
-import type {
-  ApprovalDecision,
-  RuntimeTransportEvent,
-  SubmitPromptRequest,
-  SubscribeRunOptions,
-} from "@kirakira/frontend-core";
+import { DaemonClient } from "@kirakira/runtime-daemon";
+import { createRuntimeIpcController } from "./runtime-ipc.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const client = new DaemonClient();
-let connected = false;
-
-const subscriptions = new Map<
-  string,
-  {
-    runId: string;
-    webContentsId: number;
-    options?: SubscribeRunOptions;
-    subscribeMessageId: string;
-    daemonSubscriptionId?: string;
-    disposed?: boolean;
-  }
->();
-
-const nextRuntimeMessageId = () =>
-  `desktop-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 const isLocalDevUrl = (value: string | undefined): value is string => {
   if (!value) return false;
@@ -47,75 +26,32 @@ const rendererUrl = () => {
   return isLocalDevUrl(devUrl) ? devUrl : null;
 };
 
-const ensureConnected = async () => {
-  if (connected) return;
-  await client.connect(process.env.KIRAKIRA_DAEMON_SOCKET);
-  connected = true;
+const trustedRendererOrigins = () => {
+  const devUrl = rendererUrl();
+  if (!devUrl) return new Set<string>();
+  return new Set([new URL(devUrl).origin]);
 };
 
-const eventMatches = (
-  message: ServerMessage,
-  runId: string,
-  options?: SubscribeRunOptions,
-): message is Extract<ServerMessage, { type: "event" }> => {
-  if (message.type !== "event") return false;
-  if (message.event.runId !== runId) return false;
-  if (options?.afterSeq !== undefined && (message.event.checkpointSeq ?? 0) <= options.afterSeq) {
+const isTrustedRuntimeSender = (event: IpcMainInvokeEvent): boolean => {
+  const frameUrl = event.senderFrame?.url;
+  if (!frameUrl) return false;
+  try {
+    const parsed = new URL(frameUrl);
+    if (parsed.protocol === "file:") return true;
+    return trustedRendererOrigins().has(parsed.origin);
+  } catch {
     return false;
   }
-  if (options?.filter?.kinds && !options.filter.kinds.includes(message.event.kind)) {
-    return false;
-  }
-  return true;
 };
 
-const findSubscriptionBySubscribeMessageId = (messageId: string) => {
-  for (const [subscriptionId, subscription] of subscriptions) {
-    if (subscription.subscribeMessageId === messageId) {
-      return { subscriptionId, subscription };
-    }
-  }
-  return null;
-};
-
-const disposeDesktopSubscription = (subscriptionId: string, senderId?: number) => {
-  const subscription = subscriptions.get(subscriptionId);
-  if (!subscription) return;
-  if (senderId !== undefined && subscription.webContentsId !== senderId) {
-    throw new Error("Renderer does not own runtime subscription");
-  }
-  if (subscription.daemonSubscriptionId) {
-    client.unsubscribe(subscription.daemonSubscriptionId);
-    subscriptions.delete(subscriptionId);
-    return;
-  }
-  subscription.disposed = true;
-};
-
-client.onMessage((message) => {
-  if (message.type === "subscribed" && message.messageId) {
-    const matched = findSubscriptionBySubscribeMessageId(message.messageId);
-    if (matched) {
-      matched.subscription.daemonSubscriptionId = message.subscriptionId;
-      if (matched.subscription.disposed) {
-        client.unsubscribe(message.subscriptionId);
-        subscriptions.delete(matched.subscriptionId);
-      }
-    }
-    return;
-  }
-  for (const [subscriptionId, subscription] of subscriptions) {
-    if (subscription.disposed) continue;
-    if (!eventMatches(message, subscription.runId, subscription.options)) continue;
-    const target = webContents.fromId(subscription.webContentsId);
-    if (!target || target.isDestroyed()) {
-      disposeDesktopSubscription(subscriptionId);
-      continue;
-    }
-    const payload: RuntimeTransportEvent = { type: "event", event: message.event };
-    target.send(`runtime:event:${subscriptionId}`, payload);
-  }
-});
+createRuntimeIpcController({
+  client,
+  socketPath: process.env.KIRAKIRA_DAEMON_SOCKET,
+  isTrustedSender: isTrustedRuntimeSender,
+  webContentsFromId(id) {
+    return webContents.fromId(id) ?? undefined;
+  },
+}).register(ipcMain);
 
 const createWindow = async () => {
   const window = new BrowserWindow({
@@ -140,85 +76,6 @@ const createWindow = async () => {
     await window.loadFile(join(__dirname, "..", "renderer", "index.html"));
   }
 };
-
-ipcMain.handle("runtime:connect", async () => {
-  await ensureConnected();
-});
-
-ipcMain.handle("runtime:disconnect", () => {
-  subscriptions.clear();
-  client.disconnect();
-  connected = false;
-});
-
-ipcMain.handle(
-  "runtime:submitPrompt",
-  async (_event, request: SubmitPromptRequest) => {
-    await ensureConnected();
-    const runId = await client.submitPrompt(
-      request.prompt,
-      request.mode ?? "interactive",
-      request.options,
-    );
-    return { runId };
-  },
-);
-
-ipcMain.handle("runtime:getState", async (_event, runId: string) => {
-  await ensureConnected();
-  return { runId, state: await client.getState(runId) };
-});
-
-ipcMain.handle(
-  "runtime:subscribeRun",
-  async (
-    event,
-    request: {
-      runId: string;
-      options?: SubscribeRunOptions;
-      subscriptionId: string;
-    },
-  ) => {
-    await ensureConnected();
-    const subscribeMessageId = nextRuntimeMessageId();
-    subscriptions.set(request.subscriptionId, {
-      runId: request.runId,
-      webContentsId: event.sender.id,
-      options: request.options,
-      subscribeMessageId,
-    });
-    client.subscribeToRun(request.runId, {
-      afterSeq: request.options?.afterSeq,
-      filter: request.options?.filter,
-      messageId: subscribeMessageId,
-    });
-  },
-);
-
-ipcMain.handle(
-  "runtime:unsubscribeRun",
-  (event, request: { subscriptionId: string }) => {
-    disposeDesktopSubscription(request.subscriptionId, event.sender.id);
-  },
-);
-
-ipcMain.handle("runtime:approve", async (_event, decision: ApprovalDecision) => {
-  await ensureConnected();
-  await client.approve(decision.ticketId, decision.decision, decision.reason, decision.runId);
-});
-
-ipcMain.handle(
-  "runtime:cancel",
-  async (_event, request: { runId: string; reason?: string }) => {
-    await ensureConnected();
-    await client.cancel(request.runId, request.reason);
-  },
-);
-
-ipcMain.handle("runtime:drain", async () => {
-  await ensureConnected();
-  await client.drain();
-});
 
 app.whenReady().then(() => {
   void createWindow();
