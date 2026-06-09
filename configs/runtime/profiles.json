@@ -662,6 +662,25 @@
           }
         }
       },
+      "memory": {
+        "persistenceGate": {
+          "name": "memory-store:persistence",
+          "liveEnv": "KIRAKIRA_MEMORY_PERSISTENCE_SMOKE_LIVE",
+          "passedEnv": "KIRAKIRA_MEMORY_PERSISTENCE_SMOKE_PASSED",
+          "checks": [
+            "memory-store:checkpoint",
+            "memory-store:retain-reflect"
+          ],
+          "unitTests": [
+            "test/unit/runtime-daemon/memory-runtime-deps.test.ts",
+            "test/unit/runtime/memory-test-host-env.test.ts"
+          ],
+          "liveTests": [
+            "test/integration/memory/checkpoint-restore.test.ts",
+            "test/integration/memory/retain-to-recall.test.ts"
+          ]
+        }
+      },
       "mcp": {
         "workspaceRoot": ".",
         "appRoot": "."

@@ -105,6 +105,33 @@ export interface EphemeralDelegateRunnerOptions {
   ) => RuntimeDeps;
 }
 
+export interface ForkRuntimeDepsForDelegateOptions {
+  capabilityScope?: RuntimeCapabilityScope;
+  allowNestedDelegation?: boolean;
+}
+
+export function forkRuntimeDepsForDelegate(
+  deps: RuntimeDeps,
+  options: ForkRuntimeDepsForDelegateOptions = {},
+): RuntimeDeps {
+  const capabilityScope = options.capabilityScope;
+  const baseDeps = options.allowNestedDelegation
+    ? deps
+    : { ...deps, delegateRunner: undefined };
+  const skillInjector = baseDeps.skillInjector.fork(capabilityScope?.skillNames);
+  const contextAssembler = baseDeps.contextAssembler.fork({
+    capabilityScope,
+    skillInjector,
+  });
+  const toolExecutor = baseDeps.toolExecutor.fork({ capabilityScope });
+  return {
+    ...baseDeps,
+    skillInjector,
+    contextAssembler,
+    toolExecutor,
+  };
+}
+
 export function createEphemeralDelegateRunner(
   deps: RuntimeDeps,
   options: EphemeralDelegateRunnerOptions = {},
@@ -134,9 +161,10 @@ export function createEphemeralDelegateRunner(
       capabilityScope,
     );
     const worker = new EphemeralWorker(parentConfig, options.policy);
-    const baseChildDeps = options.allowNestedDelegation
-      ? deps
-      : { ...deps, delegateRunner: undefined };
+    const baseChildDeps = forkRuntimeDepsForDelegate(deps, {
+      capabilityScope,
+      allowNestedDelegation: options.allowNestedDelegation,
+    });
     const childDeps = options.forkDeps
       ? options.forkDeps(baseChildDeps, capabilityScope, effectiveRequest)
       : baseChildDeps;

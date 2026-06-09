@@ -350,6 +350,13 @@ export class ToolExecutor {
       new DirectMcpManagerToolGateway(first as McpPep, second as McpClientManager, third);
   }
 
+  fork(overrides: Partial<ToolExecutorOptions> = {}): ToolExecutor {
+    return new ToolExecutor(this.gateway, {
+      ...this.options,
+      ...overrides,
+    });
+  }
+
   async execute(toolName: string, args: Record<string, unknown>): Promise<ToolResult> {
     const { server, tool } = splitToolName(toolName);
     const mcpServer = this.options.resolveServer?.(toolName) ?? server;
@@ -357,7 +364,9 @@ export class ToolExecutor {
       typeof this.options.capabilityScope === "function"
         ? this.options.capabilityScope()
         : this.options.capabilityScope;
+    const explicitMcpTool = toolName.includes(":") || mcpServer !== "default";
     const serverScopeApplies =
+      explicitMcpTool &&
       capabilityScope?.mcpServers !== undefined && capabilityScope.mcpServers.length > 0;
     if (
       !scopeAllowsToolName(capabilityScope, toolName) ||

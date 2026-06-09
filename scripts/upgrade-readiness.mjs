@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildEamParityAudit } from "./eam-parity-audit.mjs";
+import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
 import {
   buildRuntimeProfileProjection,
   loadRuntimeProfiles,
@@ -62,13 +63,17 @@ export function buildUpgradeReadinessReport(options = {}) {
   const config = loadRuntimeProfiles(join(workspaceRoot, "configs", "runtime", "profiles.json"));
   const profile = resolveRuntimeProfile(profileName, config, {});
   const projection = buildRuntimeProfileProjection(profile, { config });
+  const memoryPersistenceSmoke = buildMemoryPersistenceSmokeCommand(
+    { profileName: "test-host" },
+    options.env ?? process.env,
+  );
   const parity = buildEamParityAudit({
     workspaceRoot,
     referenceRoot: join(workspaceRoot, "reference_project", "eam-agent"),
     depth: "files",
   });
 
-  const context = { workspaceRoot, packageJson, profile, projection, parity };
+  const context = { workspaceRoot, packageJson, profile, projection, parity, memoryPersistenceSmoke };
   const tracks = [
     eamMechanismTrack(context),
     presentationTrack(context),
@@ -98,6 +103,9 @@ export function buildUpgradeReadinessReport(options = {}) {
       openWork: openWork.length,
     },
     tracks,
+    gates: {
+      memoryPersistence: memoryPersistenceSmoke,
+    },
     openWork,
   };
 }
@@ -310,7 +318,7 @@ function harnessApiTrack({ packageJson, projection }) {
   };
 }
 
-function ecosystemTrack({ projection }) {
+function ecosystemTrack({ workspaceRoot, projection, memoryPersistenceSmoke }) {
   const readiness = projection.fragments?.readiness;
   const memoryStack = projection.fragments?.memoryStack;
   return {
@@ -339,7 +347,41 @@ function ecosystemTrack({ projection }) {
         memoryStack?.enabled === true && Array.isArray(memoryStack.services) && memoryStack.services.length >= 5,
         `enabled=${String(memoryStack?.enabled)}, services=${memoryStack?.services?.length ?? 0}`,
       ),
+      passFail(
+        "Memory retain/reflect unit contract is separate from live persistence",
+        memoryUnitContractCovered(workspaceRoot, memoryPersistenceSmoke),
+        memoryUnitContractEvidence(memoryPersistenceSmoke),
+      ),
+      memoryPersistenceLiveGateCheck(memoryPersistenceSmoke),
     ],
+  };
+}
+
+function memoryUnitContractCovered(workspaceRoot, smoke) {
+  const tests = smoke?.unitContract?.tests ?? [];
+  return tests.length > 0 && tests.every((testPath) => existsSync(join(workspaceRoot, testPath)));
+}
+
+function memoryUnitContractEvidence(smoke) {
+  const tests = smoke?.unitContract?.tests ?? [];
+  return `unit=${tests.join(", ") || "missing"}; command=${smoke?.unitContract?.command?.display ?? "missing"}`;
+}
+
+function memoryPersistenceLiveGateCheck(smoke) {
+  const gate = smoke?.liveGate;
+  const status = gate?.status === "passed" ? "pass" : "warn";
+  const evidence = gate?.status === "passed"
+    ? `passed=${smoke.gate}; profile=${smoke.profile}`
+    : [
+        `status=${gate?.status ?? "missing"}`,
+        `profile=${smoke?.profile ?? "missing"}`,
+        `checks=${(smoke?.checks ?? []).join(",") || "missing"}`,
+        `command=node scripts/memory-persistence-smoke.mjs --profile ${smoke?.profile ?? "test-host"} --live`,
+      ].join("; ");
+  return {
+    label: "Memory-store checkpoint + retain/reflect live persistence gate",
+    status,
+    evidence,
   };
 }
 

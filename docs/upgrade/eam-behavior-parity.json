@@ -27,7 +27,7 @@
       "sourceName": "agent-runtime",
       "targetName": "agent-runtime",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
+      "status": "covered",
       "behavior": "Kirakira adds runtime capability scoping and ephemeral delegate execution while preserving all EAM agent-runtime files.",
       "extensionFiles": [
         "packages/agent-runtime/src/runtime-scope.ts",
@@ -48,13 +48,20 @@
           "command": "pnpm exec vitest run test/unit/agent-runtime/capability-scope.test.ts test/unit/agent-runtime/react-loop-delegate.test.ts test/unit/agent-runtime/tool-executor-scope.test.ts"
         },
         {
+          "kind": "test",
+          "path": "test/unit/agent-runtime/react-loop-delegate.test.ts",
+          "command": "pnpm exec vitest run test/unit/agent-runtime/react-loop-delegate.test.ts"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-08-runtime-capability-scope.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-child-runtime-memory-desktop-gates.md"
         }
       ],
-      "remainingGaps": [
-        "Provide a concrete forked child runtime view for context assembler, tool registry, skill injector, and MCP client instead of relying on parent dependency reuse plus scope checks."
-      ]
+      "remainingGaps": []
     },
     {
       "kind": "package",
@@ -174,7 +181,7 @@
       "sourceName": "mcp-adapter",
       "targetName": "mcp-adapter",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
+      "status": "covered",
       "behavior": "Kirakira adds profile-driven alias catalogs, gateway trust/policy/audit context, MCP span propagation, and daemon-hosted SDK export selection while preserving EAM adapter files.",
       "extensionFiles": [
         "packages/mcp-adapter/src/alias-catalog.ts",
@@ -197,6 +204,11 @@
           "path": "test/unit/runtime-daemon/mcp-runtime.test.ts"
         },
         {
+          "kind": "test",
+          "path": "test/smoke/runtime-daemon/mcp-live-propagation-smoke.test.ts",
+          "command": "pnpm exec vitest run test/smoke/runtime-daemon/mcp-live-propagation-smoke.test.ts"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
         },
@@ -213,6 +225,10 @@
           "path": "docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md"
         },
         {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-mcp-live-propagation-smoke.md"
+        },
+        {
           "kind": "spec",
           "url": "https://modelcontextprotocol.io/specification/2025-11-25/schema"
         },
@@ -221,9 +237,7 @@
           "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/"
         }
       ],
-      "remainingGaps": [
-        "Add live propagation smoke coverage across daemon-owned MCP transports."
-      ]
+      "remainingGaps": []
     },
     {
       "kind": "package",
@@ -263,10 +277,24 @@
           "kind": "test",
           "path": "test/unit/runtime-contracts/status.test.ts",
           "command": "pnpm exec vitest run test/unit/runtime-contracts test/unit/runtime-daemon/memory-runtime-deps.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/scripts/memory-persistence-smoke.test.ts",
+          "command": "pnpm exec vitest run test/unit/scripts/memory-persistence-smoke.test.ts test/unit/scripts/upgrade-readiness.test.ts"
+        },
+        {
+          "kind": "smoke",
+          "path": "scripts/memory-persistence-smoke.mjs",
+          "command": "node scripts/memory-persistence-smoke.mjs --profile test-host --live"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-child-runtime-memory-desktop-gates.md"
         }
       ],
       "remainingGaps": [
-        "Run gated Docker/local checkpoint and retain/reflect persistence validation against the test-host memory stack."
+        "Run the profile-gated live command `node scripts/memory-persistence-smoke.mjs --profile test-host --live` against the test-host memory stack."
       ]
     },
     {

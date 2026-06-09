@@ -55,6 +55,10 @@ export function scopeAllowsToolName(
 ): boolean {
   if (scope === undefined) return true;
   if (scope.toolNames?.includes(toolName)) return true;
+  const separatorIndex = toolName.indexOf(":");
+  if (separatorIndex > 0 && scope.mcpServers?.includes(toolName.slice(0, separatorIndex))) {
+    return true;
+  }
   return scope.toolNames === undefined && scope.mcpServers === undefined;
 }
 

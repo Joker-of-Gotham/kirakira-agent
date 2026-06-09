@@ -12,6 +12,10 @@ export class HistoryCompressor {
     private readonly modelClient?: ModelClient,
   ) {}
 
+  fork(budgetTracker: BudgetTracker): HistoryCompressor {
+    return new HistoryCompressor(budgetTracker, this.modelClient);
+  }
+
   shouldCompress(state: ReactWorkerState): boolean {
     const histBudget = state.config.contextBudget.historyAllocation;
     const turns = state.turns;

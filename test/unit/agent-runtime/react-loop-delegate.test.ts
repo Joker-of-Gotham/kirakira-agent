@@ -1,8 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { RunEvent } from "../../../packages/event-store/src/index.js";
-import { createEphemeralDelegateRunner } from "../../../packages/agent-runtime/src/index.js";
+import {
+  BudgetTracker,
+  ContextAssembler,
+  createEphemeralDelegateRunner,
+  forkRuntimeDepsForDelegate,
+  HistoryCompressor,
+  ModelClient,
+  SkillInjector,
+  ToolExecutor,
+  ToolRegistry,
+  ToolSearchEngine,
+} from "../../../packages/agent-runtime/src/index.js";
 import { reactLoop } from "../../../packages/agent-runtime/src/loop/react-loop.js";
 import type {
+  AgentMcpToolGateway,
   ReactWorkerState,
   WorkingSet,
   Workspace,
@@ -49,6 +61,65 @@ function workingSet(): WorkingSet {
   };
 }
 
+type TestContextAssembler = RuntimeDeps["contextAssembler"] & {
+  assembledStates: ReactWorkerState[];
+  forkedAssemblers: TestContextAssembler[];
+};
+
+function testContextAssembler(): TestContextAssembler {
+  const assembledStates: ReactWorkerState[] = [];
+  const forkedAssemblers: TestContextAssembler[] = [];
+  const assembler = {
+    setTaskPreamble() {},
+    async assemble(state: ReactWorkerState) {
+      assembledStates.push(state);
+      return workingSet();
+    },
+    recordModelUsage() {},
+    fork() {
+      const child = testContextAssembler();
+      forkedAssemblers.push(child);
+      return child;
+    },
+    get assembledStates() {
+      return assembledStates;
+    },
+    get forkedAssemblers() {
+      return forkedAssemblers;
+    },
+  } as unknown as TestContextAssembler;
+  return assembler;
+}
+
+function testSkillInjector(): RuntimeDeps["skillInjector"] {
+  return {
+    promote() {},
+    getAdvertised() {
+      return [];
+    },
+    getInjectionContent() {
+      return "";
+    },
+    materializedPaths() {
+      return "";
+    },
+    fork() {
+      return testSkillInjector();
+    },
+  } as unknown as RuntimeDeps["skillInjector"];
+}
+
+function testToolExecutor(): RuntimeDeps["toolExecutor"] {
+  return {
+    async execute() {
+      return { success: true, output: "" };
+    },
+    fork() {
+      return testToolExecutor();
+    },
+  } as unknown as RuntimeDeps["toolExecutor"];
+}
+
 function runtimeDeps(
   steps: Array<Record<string, unknown>>,
   emitted: RunEvent[],
@@ -59,7 +130,6 @@ function runtimeDeps(
     sandboxProfile: "test",
     artifacts: new Map(),
   };
-  const assembledStates: ReactWorkerState[] = [];
 
   return {
     modelClient: {
@@ -69,26 +139,9 @@ function runtimeDeps(
         return next;
       },
     } as unknown as RuntimeDeps["modelClient"],
-    toolExecutor: {} as RuntimeDeps["toolExecutor"],
-    skillInjector: {
-      promote() {},
-      getInjectionContent() {
-        return "";
-      },
-    } as unknown as RuntimeDeps["skillInjector"],
-    contextAssembler: {
-      setTaskPreamble() {},
-      async assemble(state: ReactWorkerState) {
-        assembledStates.push(state);
-        return workingSet();
-      },
-      recordModelUsage() {},
-      get assembledStates() {
-        return assembledStates;
-      },
-    } as unknown as RuntimeDeps["contextAssembler"] & {
-      assembledStates: ReactWorkerState[];
-    },
+    toolExecutor: testToolExecutor(),
+    skillInjector: testSkillInjector(),
+    contextAssembler: testContextAssembler(),
     workspaceExecutor: {} as RuntimeDeps["workspaceExecutor"],
     eventWriter: {
       async emit(event: RunEvent) {
@@ -107,6 +160,102 @@ function runtimeDeps(
         artifactRefs: ["artifact-child"],
       };
     },
+  };
+}
+
+function forkableRuntimeDeps(emitted: RunEvent[] = []): RuntimeDeps {
+  const workspace: Workspace = {
+    id: "workspace-1",
+    rootPath: "C:/workspace",
+    sandboxProfile: "test",
+    artifacts: new Map(),
+  };
+  const gateway: AgentMcpToolGateway = {
+    async callTool(request) {
+      return {
+        server: request.server,
+        tool: request.tool,
+        success: true,
+        content: [{ type: "text", text: `${request.server}:${request.tool} ok` }],
+        isError: false,
+      };
+    },
+  };
+  const registry = new ToolRegistry();
+  registry.register({
+    name: "repo.read",
+    description: "repo read available delegated runtime tools",
+    inputSchema: { type: "object" },
+  });
+  registry.register({
+    name: "web.search",
+    description: "web search available delegated runtime tools",
+    inputSchema: { type: "object" },
+  });
+  registry.register({
+    name: "filesystem:read_file",
+    description: "filesystem read available delegated runtime tools",
+    inputSchema: { type: "object" },
+  });
+  const budget = new BudgetTracker();
+  const modelClient = new ModelClient({
+    async complete() {
+      return {
+        text: "{}",
+        model: "test-model",
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0,
+        },
+      };
+    },
+  });
+  const skillInjector = new SkillInjector([
+    {
+      name: "research",
+      description: "research skill",
+      version: "1.0.0",
+      path: "unused",
+    },
+    {
+      name: "review",
+      description: "review skill",
+      version: "1.0.0",
+      path: "unused",
+    },
+  ]);
+  return {
+    modelClient,
+    toolExecutor: new ToolExecutor(gateway, {
+      pepContext: {
+        sessionId: "run-1",
+        traceId: "trace-1",
+        userId: "user-1",
+        workspaceRoot: workspace.rootPath,
+        interactive: false,
+        roles: [],
+      },
+      async onEvent(event) {
+        emitted.push(event);
+      },
+    }),
+    skillInjector,
+    contextAssembler: new ContextAssembler(
+      new ToolSearchEngine(),
+      skillInjector,
+      new HistoryCompressor(budget, modelClient),
+      budget,
+      registry,
+      { toolCapabilityQuery: "available delegated runtime tools" },
+    ),
+    workspaceExecutor: {} as RuntimeDeps["workspaceExecutor"],
+    eventWriter: {
+      async emit(event: RunEvent) {
+        emitted.push(event);
+      },
+    },
+    workspace,
   };
 }
 
@@ -510,10 +659,10 @@ describe("reactLoop delegate handling", () => {
     });
 
     expect(result.success).toBe(true);
-    const assembler = deps.contextAssembler as RuntimeDeps["contextAssembler"] & {
-      assembledStates: ReactWorkerState[];
-    };
-    expect(assembler.assembledStates[0]?.config).toMatchObject({
+    const assembler = deps.contextAssembler as TestContextAssembler;
+    expect(assembler.assembledStates).toEqual([]);
+    const childAssembler = assembler.forkedAssemblers[0];
+    expect(childAssembler?.assembledStates[0]?.config).toMatchObject({
       model: "scoped-model",
       toolScope: ["repo.read"],
       skillScope: [],
@@ -552,6 +701,56 @@ describe("reactLoop delegate handling", () => {
       mcpServers: [],
     });
     expect(childEmitted.map((event) => event.kind)).toContain("run.completed");
+  });
+
+  it("creates a concrete scoped child runtime view by default", async () => {
+    const emitted: RunEvent[] = [];
+    const parentDeps = forkableRuntimeDeps(emitted);
+    const childDeps = forkRuntimeDepsForDelegate(parentDeps, {
+      capabilityScope: {
+        toolNames: ["repo.read"],
+        skillNames: ["research"],
+        mcpServers: ["filesystem"],
+      },
+    });
+
+    expect(childDeps.contextAssembler).not.toBe(parentDeps.contextAssembler);
+    expect(childDeps.skillInjector).not.toBe(parentDeps.skillInjector);
+    expect(childDeps.toolExecutor).not.toBe(parentDeps.toolExecutor);
+    expect(childDeps.delegateRunner).toBeUndefined();
+
+    const state = initialState();
+    state.config = {
+      ...state.config,
+      toolScope: ["repo.read"],
+      skillScope: ["research"],
+      mcpServers: ["filesystem"],
+    };
+    const workingSet = await childDeps.contextAssembler.assemble(state);
+
+    expect(workingSet.toolSchemas.map((tool) => tool.name).sort()).toEqual([
+      "filesystem:read_file",
+      "repo.read",
+    ]);
+    expect(workingSet.skillHints.map((skill) => skill.name)).toEqual(["research"]);
+    expect(workingSet.systemPrompt).toContain("research skill");
+    expect(workingSet.systemPrompt).not.toContain("review skill");
+    expect(workingSet.systemPrompt).not.toContain("web search available delegated runtime tools");
+
+    const denied = await childDeps.toolExecutor.execute("web.search", { q: "x" });
+    expect(denied).toMatchObject({
+      success: false,
+      error: "capability_scope_denied",
+    });
+
+    const allowed = await childDeps.toolExecutor.execute("filesystem:read_file", {
+      path: "README.md",
+    });
+    expect(allowed).toMatchObject({
+      success: true,
+      output: "filesystem:read_file ok",
+    });
+    expect(emitted.map((event) => event.kind)).toContain("tool.call.started");
   });
 
   it("denies tool calls outside the worker capability scope", async () => {

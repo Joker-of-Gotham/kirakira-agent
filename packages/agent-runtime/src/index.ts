@@ -89,6 +89,8 @@ export {
 export {
   createEphemeralDelegateRunner,
   type EphemeralDelegateRunnerOptions,
+  forkRuntimeDepsForDelegate,
+  type ForkRuntimeDepsForDelegateOptions,
 } from "./worker/delegate-runner.js";
 export { HistoryCompressor } from "./context/history-compressor.js";
 export { InterruptHandler } from "./interrupt/interrupt-handler.js";

@@ -1398,4 +1398,232 @@ describe("DaemonMcpRuntime", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it("smoke-tests trace, audit, and policy propagation across daemon-owned MCP transports", async () => {
+    const cases: Array<{
+      label: string;
+      server: string;
+      tool: string;
+      traceId: string;
+      parentSpanId: string;
+      transport: McpTransport;
+      auth: McpAuth;
+      trust: McpServerConfig["trust"];
+      expectedTrust: Record<string, unknown>;
+      expectedOtelAttributes: Record<string, unknown>;
+      expectedConnectionTransport: string;
+      expectedConnectionTrustTier: string;
+    }> = [
+      {
+        label: "stdio",
+        server: "filesystem-core",
+        tool: "read_file",
+        traceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        parentSpanId: "1111111111111111",
+        transport: { kind: "stdio", command: "node", args: ["server.js"] },
+        auth: { mode: "none" },
+        trust: "untrusted",
+        expectedTrust: {
+          tier: "unknown",
+          source: "first-use",
+          trustedAnnotations: false,
+          configuredLevel: "untrusted",
+          transportKind: "stdio",
+          authMode: "none",
+        },
+        expectedOtelAttributes: {
+          "mcp.transport.kind": "stdio",
+          "network.transport": "pipe",
+          "mcp.auth.mode": "none",
+        },
+        expectedConnectionTransport: "stdio",
+        expectedConnectionTrustTier: "community",
+      },
+      {
+        label: "http",
+        server: "docs",
+        tool: "search",
+        traceId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        parentSpanId: "2222222222222222",
+        transport: { kind: "http", url: "https://mcp.example.test/mcp" },
+        auth: { mode: "bearer", clientSecretEnv: "DOCS_MCP_TOKEN" },
+        trust: "user-approved",
+        expectedTrust: {
+          tier: "verified",
+          source: "config",
+          trustedAnnotations: true,
+          configuredLevel: "user-approved",
+          transportKind: "http",
+          authMode: "bearer",
+          serverUrl: "https://mcp.example.test/mcp",
+          issuer: "mcp.example.test",
+        },
+        expectedOtelAttributes: {
+          "mcp.transport.kind": "http",
+          "network.transport": "tcp",
+          "network.protocol.name": "http",
+          "mcp.auth.mode": "bearer",
+        },
+        expectedConnectionTransport: "http",
+        expectedConnectionTrustTier: "verified",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const workspaceRoot = await mkdtemp(
+        join(tmpdir(), `kirakira-mcp-runtime-propagation-${testCase.label}-`),
+      );
+      const traceContext = {
+        traceparent: `00-${testCase.traceId}-${testCase.parentSpanId}-01`,
+        tracestate: `case=${testCase.label}`,
+        baggage: `transport=${testCase.label},run=run-${testCase.label}`,
+      };
+      const policy = decision("allow");
+      policy.traceId = `policy-trace-${testCase.label}`;
+      policy.decision.decision_id = `decision-${testCase.label}`;
+      policy.decision.reason_codes = [`allow_${testCase.label}`];
+      const exporter = new InMemoryMcpSpanExporter();
+      const manager = fakeManager(
+        {
+          content: [{ type: "text", text: `ok:${testCase.label}` }],
+          structuredContent: { transport: testCase.label },
+          isError: false,
+        },
+        {
+          serverName: testCase.server,
+          transport: testCase.transport,
+          auth: testCase.auth,
+          trust: testCase.trust,
+          tools: [{ name: testCase.tool, inputSchema: { type: "object" } }],
+        },
+      );
+      const auditBridge = {
+        recordConnection: vi.fn(async () => {}),
+        recordToolCall: vi.fn(async () => {}),
+      } as unknown as McpAuditBridge;
+      const runtime = new DaemonMcpRuntime({
+        workspaceRoot,
+        mcpManager: manager.manager,
+        mcpPep: fakePep(policy),
+        mcpAuditBridge: auditBridge,
+        mcpSpanRecorder: new ExportingMcpSpanRecorder(exporter),
+        userId: "developer-1",
+      });
+
+      try {
+        const result = await runtime.callTool({
+          server: testCase.server,
+          tool: testCase.tool,
+          arguments: { query: "metadata propagation" },
+          runId: `run-${testCase.label}`,
+          traceId: testCase.traceId,
+          traceContext,
+        });
+
+        const expectedMeta = {
+          traceparent: expect.stringMatching(
+            new RegExp(`^00-${testCase.traceId}-[0-9a-f]{16}-01$`),
+          ),
+          tracestate: traceContext.tracestate,
+          baggage: traceContext.baggage,
+        };
+        const listCall = manager.request.mock.calls.find(
+          ([, method]) => method === "tools/list",
+        );
+        const toolCall = manager.request.mock.calls.find(
+          ([, method]) => method === "tools/call",
+        );
+
+        expect(listCall?.[2]).toMatchObject({ _meta: expectedMeta });
+        expect(toolCall?.[2]).toMatchObject({
+          name: testCase.tool,
+          arguments: { query: "metadata propagation" },
+          _meta: expectedMeta,
+        });
+        expect(auditBridge.recordConnection).toHaveBeenCalledWith(
+          expect.objectContaining({
+            serverId: testCase.server,
+            trustTier: testCase.expectedConnectionTrustTier,
+            transport: testCase.expectedConnectionTransport,
+            status: "connected",
+            userId: "developer-1",
+            sessionId: `run-${testCase.label}`,
+            traceId: testCase.traceId,
+          }),
+        );
+        expect(auditBridge.recordToolCall).toHaveBeenCalledWith(
+          expect.objectContaining({
+            serverId: testCase.server,
+            toolName: testCase.tool,
+            trustTier: testCase.expectedTrust.tier,
+            authMode: testCase.expectedTrust.authMode,
+            decisionId: `decision-${testCase.label}`,
+            status: "success",
+            traceId: `policy-trace-${testCase.label}`,
+          }),
+        );
+        expect(exporter.spans).toHaveLength(1);
+        expect(exporter.spans[0]).toMatchObject({
+          name: `tools/call ${testCase.tool}`,
+          kind: "CLIENT",
+          context: {
+            traceId: testCase.traceId,
+            parentSpanId: testCase.parentSpanId,
+          },
+          attributes: {
+            "mcp.method.name": "tools/call",
+            "mcp.server.name": testCase.server,
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": testCase.tool,
+            "kirakira.runtime.message.type": "mcp_call",
+            "kirakira.policy.trace_id": `policy-trace-${testCase.label}`,
+            "kirakira.policy.decision_id": `decision-${testCase.label}`,
+            ...testCase.expectedOtelAttributes,
+          },
+          status: { code: "OK" },
+        });
+        expect(result).toMatchObject({
+          server: testCase.server,
+          tool: testCase.tool,
+          success: true,
+          structuredContent: { transport: testCase.label },
+          policy: {
+            effect: "allow",
+            reasonCodes: [`allow_${testCase.label}`],
+            approvalRequired: false,
+            traceId: `policy-trace-${testCase.label}`,
+            decisionId: `decision-${testCase.label}`,
+          },
+          trust: testCase.expectedTrust,
+          audit: {
+            auditRequired: true,
+            eventKinds: ["policy.decision", "tool.exec", "tool.result"],
+            ledger: "mcp-audit-bridge",
+            decisionId: `decision-${testCase.label}`,
+          },
+          otel: {
+            spanName: `tools/call ${testCase.tool}`,
+            traceId: testCase.traceId,
+            parentSpanId: testCase.parentSpanId,
+            traceContext: expectedMeta,
+            status: "OK",
+            attributes: {
+              "mcp.method.name": "tools/call",
+              "mcp.protocol.version": "2025-11-25",
+              "mcp.server.name": testCase.server,
+              "gen_ai.operation.name": "execute_tool",
+              "gen_ai.tool.name": testCase.tool,
+              "kirakira.policy.trace_id": `policy-trace-${testCase.label}`,
+              "kirakira.policy.decision_id": `decision-${testCase.label}`,
+              ...testCase.expectedOtelAttributes,
+            },
+          },
+        });
+        expect(result.otel.traceContext?.traceparent).not.toBe(traceContext.traceparent);
+      } finally {
+        await runtime.close();
+        await rm(workspaceRoot, { recursive: true, force: true });
+      }
+    }
+  });
 });

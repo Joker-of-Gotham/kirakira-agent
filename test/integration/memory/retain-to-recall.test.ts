@@ -5,6 +5,7 @@ import { PostgresStoreAdapter } from "../../../packages/memory-service/src/adapt
 import { RecallPipeline } from "../../../packages/memory-service/src/recall/recall-pipeline.js";
 import { GraphRecallRoute } from "../../../packages/memory-service/src/recall/routes/graph-route.js";
 import { SimilarityRecallRoute } from "../../../packages/memory-service/src/recall/routes/similarity-route.js";
+import { ReflectPipeline } from "../../../packages/memory-service/src/reflect/reflect-pipeline.js";
 import { RetainPipeline } from "../../../packages/memory-service/src/retain/retain-pipeline.js";
 import { resolveEpisodeBodyUri } from "../../../packages/memory-service/src/adapters/s3-blob-adapter.js";
 
@@ -121,5 +122,66 @@ describe.skipIf(skipIfNoDocker())("retain-to-recall (postgres)", () => {
     });
 
     expect(bundle.recordIds.some((id) => receipt.memoryRecordIds.includes(id))).toBe(true);
+  });
+
+  it("persists reflect observations, beliefs, and outbox rows after retain", async () => {
+    const blob = new MapBlobAdapter();
+    const blobCfg = { bucket: "integration-test" };
+    const store = new PostgresStoreAdapter(hooks.sql);
+    const serviceCfg = {
+      retain: { factBaseConfidence: 0.8, factConfidenceStep: 0.05 },
+    } as MemoryServiceConfig;
+    const retain = new RetainPipeline({ blob, blobConfig: blobCfg, serviceConfig: serviceCfg });
+    const receipt = await retain.run(
+      {
+        tenantId: "tenant-reflect-pg",
+        workspaceId: "ws-reflect-pg",
+        namespace: "project",
+        sourceType: "chat",
+        content: "Fact: the memory persistence smoke requires durable reflect observations and beliefs.",
+        metadata: { subject: "memory-persistence-smoke" },
+      },
+      store,
+    );
+
+    expect(receipt.factIds.length).toBeGreaterThan(0);
+
+    const reflect = new ReflectPipeline();
+    const reflected = await reflect.run(
+      {
+        tenantId: "tenant-reflect-pg",
+        workspaceId: "ws-reflect-pg",
+        scope: "memory-store-smoke",
+        factIds: receipt.factIds,
+        maxConsolidations: 1,
+      },
+      store,
+    );
+
+    expect(reflected.observationIds).toHaveLength(1);
+    expect(reflected.beliefUpdates).toHaveLength(1);
+
+    const observation = await store.getRecord(reflected.observationIds[0]!);
+    const belief = await store.getRecord(reflected.beliefUpdates[0]!.beliefId);
+    const outbox = await store.claimOutboxEvents(50);
+
+    expect(observation).toMatchObject({
+      kind: "observation",
+      tenantId: "tenant-reflect-pg",
+      workspaceId: "ws-reflect-pg",
+    });
+    expect(observation?.metadata.factIds).toEqual(expect.arrayContaining(receipt.factIds));
+    expect(belief).toMatchObject({
+      kind: "belief",
+      tenantId: "tenant-reflect-pg",
+      workspaceId: "ws-reflect-pg",
+    });
+    expect(outbox).toContainEqual(
+      expect.objectContaining({
+        aggregateType: "memory_reflect",
+        aggregateId: reflected.observationIds[0],
+        eventType: "memory.observation.created",
+      }),
+    );
   });
 });

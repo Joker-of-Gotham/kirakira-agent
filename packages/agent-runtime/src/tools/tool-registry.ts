@@ -1,6 +1,7 @@
 import type { McpClientManager } from "@kirakira/mcp-adapter";
 
-import type { ToolSchema } from "../types.js";
+import type { RuntimeCapabilityScope, ToolSchema } from "../types.js";
+import { scopeAllowsToolName } from "../runtime-scope.js";
 
 function asToolList(result: unknown): Array<{
   name: string;
@@ -22,6 +23,19 @@ export class ToolRegistry {
 
   register(tool: ToolSchema): void {
     this.eager.set(tool.name, tool);
+  }
+
+  fork(scope?: RuntimeCapabilityScope): ToolRegistry {
+    const forked = new ToolRegistry();
+    for (const tool of this.all()) {
+      if (!scopeAllowsToolName(scope, tool.name)) continue;
+      forked.register({
+        ...tool,
+        inputSchema: { ...tool.inputSchema },
+        ...(tool.policyHints !== undefined ? { policyHints: { ...tool.policyHints } } : {}),
+      });
+    }
+    return forked;
   }
 
   async discover(manager: McpClientManager, serverNames: string[]): Promise<ToolSchema[]> {

@@ -4,16 +4,17 @@ import type {
   ContextBudget,
   Message,
   ReactWorkerState,
+  RuntimeCapabilityScope,
   ToolSchema,
   Turn,
   WorkingSet,
 } from "../types.js";
 import type { TokenUsage } from "../types.js";
 
-import type { ToolSearchEngine } from "./tool-search.js";
+import { ToolSearchEngine } from "./tool-search.js";
+import { BudgetTracker } from "./budget-tracker.js";
 import type { SkillInjector } from "./skill-injector.js";
 import type { HistoryCompressor } from "./history-compressor.js";
-import type { BudgetTracker } from "./budget-tracker.js";
 import type { ToolRegistry } from "../tools/tool-registry.js";
 import type { ArtifactStore } from "../sandbox/artifact-store.js";
 import {
@@ -24,6 +25,13 @@ import {
 export type ContextAssemblerInitOptions = ContextAssemblerOptions & {
   artifactStore?: ArtifactStore;
 };
+
+export interface ContextAssemblerForkOptions {
+  capabilityScope?: RuntimeCapabilityScope;
+  skillInjector?: SkillInjector;
+  registry?: ToolRegistry;
+  taskPreamble?: string;
+}
 
 function turnsToMessages(turns: Turn[]): Message[] {
   const msgs: Message[] = [];
@@ -53,6 +61,24 @@ export class ContextAssembler {
     private readonly registry: ToolRegistry,
     private options: ContextAssemblerInitOptions = {},
   ) {}
+
+  fork(options: ContextAssemblerForkOptions = {}): ContextAssembler {
+    const budget = new BudgetTracker();
+    const childSkillInjector =
+      options.skillInjector ?? this.skillInjector.fork(options.capabilityScope?.skillNames);
+    const childRegistry = options.registry ?? this.registry.fork(options.capabilityScope);
+    return new ContextAssembler(
+      new ToolSearchEngine(),
+      childSkillInjector,
+      this.historyCompressor.fork(budget),
+      budget,
+      childRegistry,
+      {
+        ...this.options,
+        ...(options.taskPreamble !== undefined ? { taskPreamble: options.taskPreamble } : {}),
+      },
+    );
+  }
 
   setTaskPreamble(preamble: string | undefined): void {
     this.options = { ...this.options, taskPreamble: preamble };

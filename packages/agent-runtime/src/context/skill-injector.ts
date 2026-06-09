@@ -14,6 +14,20 @@ export class SkillInjector {
     }
   }
 
+  fork(allowedNames?: readonly string[]): SkillInjector {
+    const allowed = allowedNames !== undefined ? new Set(allowedNames) : undefined;
+    const forked = new SkillInjector(
+      [...this.registry.values()]
+        .filter((registration) => allowed === undefined || allowed.has(registration.name))
+        .map((registration) => ({ ...registration })),
+    );
+    for (const [name, tier] of this.tiers) {
+      if (allowed !== undefined && !allowed.has(name)) continue;
+      forked.tiers.set(name, tier);
+    }
+    return forked;
+  }
+
   getAdvertised(allowedNames?: readonly string[]): SkillHint[] {
     const allowed = allowedNames !== undefined ? new Set(allowedNames) : undefined;
     const out: SkillHint[] = [];

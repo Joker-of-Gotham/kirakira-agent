@@ -36,6 +36,27 @@ describe("upgrade readiness gate", () => {
     expect(report.summary.checks).toBeGreaterThan(12);
     expect(report.summary.openWork).toBeGreaterThan(0);
     expect(report.openWork.some((item) => item.item.includes("profile-selected OTel"))).toBe(true);
+    expect(report.gates.memoryPersistence.profile).toBe("test-host");
+    expect(report.tracks).toContainEqual(
+      expect.objectContaining({
+        id: "docker-local-ecosystem",
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            label: "Memory retain/reflect unit contract is separate from live persistence",
+            status: "pass",
+          }),
+          expect.objectContaining({
+            label: "Memory-store checkpoint + retain/reflect live persistence gate",
+            status: "warn",
+          }),
+        ]),
+      }),
+    );
+    expect(
+      report.openWork.some((item) =>
+        item.item.includes("Memory-store checkpoint + retain/reflect live persistence gate"),
+      ),
+    ).toBe(true);
     expect(JSON.stringify(report)).not.toContain("5173");
   });
 
