@@ -18,6 +18,15 @@ export type {
   RuntimeAckResultPayload,
   RuntimeSubmitAckResult,
 } from "./ack-result.js";
+export type {
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
+  RuntimeMcpToolPolicyResult,
+} from "./mcp-call.js";
+export {
+  isRuntimeMcpToolCallResult,
+  parseRuntimeMcpToolCallAckResult,
+} from "./mcp-call.js";
 export {
   DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
   RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,

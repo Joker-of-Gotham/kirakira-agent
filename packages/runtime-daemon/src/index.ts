@@ -57,6 +57,11 @@ export {
 export { KernelBridge } from "./bridge/kernel-bridge.js";
 export { RuntimeBridge } from "./bridge/runtime-bridge.js";
 export type {
+  DaemonMcpRuntimeOptions,
+  DaemonMcpToolCallInput,
+} from "./bridge/mcp-runtime.js";
+export { DaemonMcpRuntime } from "./bridge/mcp-runtime.js";
+export type {
   DaemonDeepResearchCompositionInput,
   DaemonDeepResearchOptions,
   DaemonMemoryResearchSourceOptions,

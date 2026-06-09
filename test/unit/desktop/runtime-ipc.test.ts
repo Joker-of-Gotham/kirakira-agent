@@ -65,6 +65,19 @@ function createFakeClient() {
         encoding: "utf8" as const,
         content: "preview",
       })),
+      callMcpTool: vi.fn(async () => ({
+        server: "filesystem-core",
+        tool: "read_file",
+        success: true,
+        content: [{ type: "text", text: "preview" }],
+        latencyMs: 5,
+        policy: {
+          effect: "allow" as const,
+          reasonCodes: ["baseline_read_workspace"],
+          approvalRequired: false,
+          traceId: "trace-1",
+        },
+      })),
       subscribeToRun: vi.fn(),
       unsubscribe: vi.fn(),
       approve: vi.fn(async () => {}),
@@ -302,6 +315,46 @@ describe("desktop runtime IPC controller", () => {
         runId: "run-1",
       }),
     ).rejects.toThrow("getArtifactContent requires artifactId");
+  });
+
+  it("validates MCP tool calls before forwarding through desktop IPC", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:callMcpTool", eventFor(36), {
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        runId: "run-1",
+        traceId: "trace-1",
+      }),
+    ).resolves.toMatchObject({
+      server: "filesystem-core",
+      tool: "read_file",
+      success: true,
+    });
+    expect(fake.client.callMcpTool).toHaveBeenCalledWith({
+      server: "filesystem-core",
+      tool: "read_file",
+      arguments: { path: "README.md" },
+      runId: "run-1",
+      traceId: "trace-1",
+    });
+
+    await expect(
+      ipcMain.invoke("runtime:callMcpTool", eventFor(36), {
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: ["README.md"],
+      }),
+    ).rejects.toThrow("callMcpTool arguments must be an object");
   });
 
   it("reports desktop IPC status without forcing daemon connection", async () => {

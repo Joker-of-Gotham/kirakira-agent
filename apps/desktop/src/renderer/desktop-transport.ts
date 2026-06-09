@@ -27,6 +27,7 @@ export function createDesktopRuntimeTransport(): RuntimeTransport | null {
     submitPrompt: (request) => bridge.submitPrompt(request),
     getState: (runId) => bridge.getState(runId),
     getArtifactContent: (request) => bridge.getArtifactContent(request),
+    callMcpTool: (request) => bridge.callMcpTool(request),
     subscribeRun(
       runId: string,
       onEvent: (event: RuntimeTransportEvent) => void,

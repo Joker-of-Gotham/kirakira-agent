@@ -4,12 +4,15 @@ import type {
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeAckResultParser,
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
   RuntimeRunMode,
   RuntimeServerMessage,
 } from "@kirakira/runtime-contracts";
 import {
   RuntimeRequestTracker,
   parseRuntimeArtifactContentAckResult,
+  parseRuntimeMcpToolCallAckResult,
   parseRuntimeServerMessage,
   parseRuntimeStateSnapshotAckResult,
   parseRuntimeSubmitAckResult,
@@ -290,6 +293,20 @@ export function createBrowserGatewayTransport(
           messageId: idFactory(),
         },
         parseRuntimeArtifactContentAckResult,
+      );
+    },
+    async callMcpTool(input: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult> {
+      return request(
+        {
+          type: "mcp_call",
+          server: input.server,
+          tool: input.tool,
+          ...(input.arguments !== undefined ? { arguments: input.arguments } : {}),
+          ...(input.runId !== undefined ? { runId: input.runId } : {}),
+          ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
+          messageId: idFactory(),
+        },
+        parseRuntimeMcpToolCallAckResult,
       );
     },
     subscribeRun(

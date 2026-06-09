@@ -4,6 +4,8 @@ import type {
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeAckResultParser,
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
   RunStateSnapshot,
   RuntimeRequestTracker,
   RuntimeRunMode,
@@ -12,6 +14,7 @@ import type {
 import {
   RuntimeRequestTracker as RuntimeRequestTrackerImpl,
   parseRuntimeArtifactContentAckResult,
+  parseRuntimeMcpToolCallAckResult,
   parseRuntimeStateSnapshotAckResult,
   parseRuntimeSubmitAckResult,
   parseRuntimeVoidAckResult,
@@ -305,6 +308,17 @@ export class DaemonClient {
       ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
       messageId: ulid(),
     }, 60_000, parseRuntimeArtifactContentAckResult);
+  }
+
+  async callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult> {
+    return this.rpcResult({
+      type: "mcp_call",
+      server: request.server,
+      tool: request.tool,
+      ...(request.arguments !== undefined ? { arguments: request.arguments } : {}),
+      ...(request.runId !== undefined ? { runId: request.runId } : {}),
+      ...(request.traceId !== undefined ? { traceId: request.traceId } : {}),
+    }, 60_000, parseRuntimeMcpToolCallAckResult);
   }
 
   async enqueuePrompt(prompt: string, priority?: number): Promise<void> {

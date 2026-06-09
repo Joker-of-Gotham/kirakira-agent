@@ -3,6 +3,8 @@ import type {
   RuntimeTransportEvent,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -348,6 +350,26 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         };
       }
       return artifact;
+    },
+    async callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult> {
+      return {
+        server: request.server,
+        tool: request.tool,
+        success: true,
+        content: [
+          {
+            type: "text",
+            text: `Mock MCP response from ${request.server}:${request.tool}`,
+          },
+        ],
+        latencyMs: 0,
+        policy: {
+          effect: "allow",
+          reasonCodes: ["mock_runtime"],
+          approvalRequired: false,
+          traceId: request.traceId ?? `${request.runId ?? "mock"}-trace`,
+        },
+      };
     },
     subscribeRun(runId, onEvent, options): Unsubscribe {
       const listeners = listenersByRun.get(runId) ?? new Set<Listener>();

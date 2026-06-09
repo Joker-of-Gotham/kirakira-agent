@@ -4,6 +4,7 @@ import {
   makeRuntimeProtocolError,
   parseRuntimeArtifactContentAckResult,
   parseRuntimeClientMessage,
+  parseRuntimeMcpToolCallAckResult,
   parseRuntimeServerMessage,
   parseRuntimeStateSnapshotAckResult,
   parseRuntimeSubmitAckResult,
@@ -88,6 +89,42 @@ describe("runtime protocol codec", () => {
     ).toMatchObject({
       ok: false,
       error: { code: "invalid_message", messageId: "artifact-bad" },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "mcp_call",
+        messageId: "mcp-1",
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        runId: "run-1",
+        traceId: "trace-1",
+      }),
+    ).toEqual({
+      ok: true,
+      message: {
+        type: "mcp_call",
+        messageId: "mcp-1",
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        runId: "run-1",
+        traceId: "trace-1",
+      },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "mcp_call",
+        messageId: "mcp-bad",
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: ["README.md"],
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_message", messageId: "mcp-bad" },
     });
   });
 
@@ -208,6 +245,12 @@ describe("RuntimeRequestTracker", () => {
       10_000,
       parseRuntimeVoidAckResult,
     );
+    const mcp = tracker.track(
+      "mcp-1",
+      "mcp",
+      10_000,
+      parseRuntimeMcpToolCallAckResult,
+    );
 
     tracker.handleServerMessage({ type: "ack", messageId: "submit-1", result: { runId: "run-1" } });
     tracker.handleServerMessage({
@@ -235,11 +278,33 @@ describe("RuntimeRequestTracker", () => {
       },
     });
     tracker.handleServerMessage({ type: "ack", messageId: "drain-1" });
+    tracker.handleServerMessage({
+      type: "ack",
+      messageId: "mcp-1",
+      result: {
+        server: "filesystem-core",
+        tool: "read_file",
+        success: true,
+        content: [{ type: "text", text: "ok" }],
+        latencyMs: 3,
+        policy: {
+          effect: "allow",
+          reasonCodes: ["baseline_read_workspace"],
+          approvalRequired: false,
+          traceId: "trace-1",
+        },
+      },
+    });
 
     await expect(submit).resolves.toEqual({ runId: "run-1" });
     await expect(state).resolves.toMatchObject({ runId: "run-1", status: "running" });
     await expect(artifact).resolves.toMatchObject({ artifactId: "artifact-1", content: "hello" });
     await expect(drain).resolves.toBeUndefined();
+    await expect(mcp).resolves.toMatchObject({
+      server: "filesystem-core",
+      tool: "read_file",
+      success: true,
+    });
   });
 
   it("rejects matching requests when typed ack payload parsing fails", async () => {

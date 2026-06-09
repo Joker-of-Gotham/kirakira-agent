@@ -49,7 +49,7 @@ change, a validation command, and a pushed commit.
 | --- | --- | --- | --- | --- |
 | Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts` | Partial. Contracts, inheritance, delegate bridge, and kernel events exist. | Add a declarative swarm/topology projection from resolved config into kernel routing and delegation policy; validate multi-subagent fanout and lineage. |
 | Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts` | Partial. Kernel research executor and daemon composition exist. | Enable daemon default memory-backed research source from resolved memory service config; add an end-to-end daemon run test. |
-| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, runtime MCP manifest projection | Advancing. Catalog rendering, MCP manager registration, and public daemon manifest projection exist. | Join runtime browser gateway control messages to MCP tool invocation through PEP/audit and expose live tool health. |
+| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest and `mcp_call` projection | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, and shared browser/desktop MCP tool invocation through PEP now exist. | Expose live tool health/discovery views, emit MCP calls into the run event stream, and merge duplicate MCP registration helpers into one profile-driven runtime dependency factory. |
 | Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory` | Partial. Package surface exists; pipeline env bridge exists. | Make memory service construction a daemon dependency, then connect retain/recall/reflect to runs and research. |
 | Policy and harness | `reference_project/eam-agent/packages/policy-engine`, `packages/eamd`, `policies/*` | `packages/policy-engine`, `packages/kirakirad`, `policies/*` | Partial. PEP/PDP packages exist. | Centralize runtime policy context generation and ensure web/desktop tool actions pass through same PEP path as CLI. |
 | Registry and skills | `reference_project/eam-agent/packages/registry-client`, `packages/skill-runtime` | `packages/registry-client`, `packages/skill-runtime`, `skills-lock.json` | Partial. Packages exist; lockfile is currently untracked local state. | Decide tracked vs generated lockfile policy; connect registry trust decisions to runtime install/activation UI and CLI. |
@@ -79,16 +79,19 @@ Latest four-lane audit intake on 2026-06-09:
   and presentation endpoints. CLI config loading is now routed through
   `@kirakira/config-resolver`; runtime control ack/result parsing now lives in
   `@kirakira/runtime-contracts`. Runtime manifests now expose the resolved MCP
-  directory without secrets. Next work should target MCP tool invocation
-  contracts and per-service test readiness.
+  directory without secrets, and `mcp_call` now carries browser/desktop MCP
+  tool invocation through daemon-side PEP and typed ack results. Next work
+  should target live MCP discovery/health surfaces, run-event emission for
+  direct client tool calls, and per-service test readiness.
 
 ## Execution Queue
 
 1. **Runtime deps factory:** create one profile-driven factory for MCP, PDP,
    audit, memory, subagent, and deep-research runtime dependencies.
 2. **MCP runtime loop:** expose daemon MCP tools/health through
-   `RuntimeManifest`, then add a browser-gateway request path for tool
-   invocation guarded by PEP.
+   `RuntimeManifest`, browser gateway, and desktop IPC.
+   Tool invocation is now wired; health/discovery UI and run-event emission
+   remain.
 3. **Memory daemon composition:** construct memory service dependencies from
    resolved runtime profile env and inject memory recall into deep research by
    default.

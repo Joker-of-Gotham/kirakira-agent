@@ -13,6 +13,11 @@ export type {
   SubscribeRunOptions,
   Unsubscribe,
 } from "./transport.js";
+export type {
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
+  RuntimeMcpToolPolicyResult,
+} from "@kirakira/runtime-contracts";
 export type { BrowserGatewayTransportOptions } from "./browser-gateway-transport.js";
 export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";
 export type { BrowserGatewayHealthOptions } from "./browser-gateway-health.js";

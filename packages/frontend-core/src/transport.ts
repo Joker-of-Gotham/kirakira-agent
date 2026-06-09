@@ -5,6 +5,8 @@ import type {
   RuntimeArtifactContentRequest,
   RuntimeBrowserGatewayHealth,
   RuntimeDaemonHealth,
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpToolCallResult,
   RuntimeRunMode,
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
@@ -70,6 +72,7 @@ export interface RuntimeTransport {
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<RuntimeTransportSnapshot>;
   getArtifactContent(request: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent>;
+  callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult>;
   subscribeRun(
     runId: string,
     onEvent: (event: RuntimeTransportEvent) => void,

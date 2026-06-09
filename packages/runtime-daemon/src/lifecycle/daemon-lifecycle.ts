@@ -13,6 +13,10 @@ import {
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
 import { KernelBridge, type KernelBridgeOptions } from "../bridge/kernel-bridge.js";
+import {
+  DaemonMcpRuntime,
+  type DaemonMcpRuntimeOptions,
+} from "../bridge/mcp-runtime.js";
 import { RuntimeBridge } from "../bridge/runtime-bridge.js";
 import { resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { eventMatchesSubscription } from "../server/event-utils.js";
@@ -36,6 +40,10 @@ export interface DaemonConfig {
   eventStorePath?: string;
   gateway?: GatewayBridgeOptions;
   kernel?: KernelBridgeOptions;
+  mcpRuntime?: Omit<
+    DaemonMcpRuntimeOptions,
+    "workspaceRoot" | "mcpConfigPath" | "resolvedConfig" | "runtimeProfileName"
+  >;
   browserGateway?: BrowserGatewayConfig;
   shutdownTimeoutMs?: number;
 }
@@ -131,6 +139,7 @@ export class DaemonLifecycle {
   private uds: UdsServer | null = null;
   private browserGateway: BrowserGatewayServer | null = null;
   private browserGatewayInfo: BrowserGatewayListenInfo | null = null;
+  private mcpRuntime: DaemonMcpRuntime | null = null;
   private unsubEvents: (() => void) | null = null;
   private _running = false;
   private socketPath = "";
@@ -153,6 +162,13 @@ export class DaemonLifecycle {
       process.cwd();
     this.capabilities = daemonCapabilityOverrides(config.kernel);
     this.mcpManifest = runtimeMcpManifest(config.kernel);
+    this.mcpRuntime = new DaemonMcpRuntime({
+      ...(config.mcpRuntime ?? {}),
+      workspaceRoot: this.workspaceRoot,
+      mcpConfigPath: config.kernel?.mcpConfigPath,
+      resolvedConfig: config.kernel?.resolvedConfig,
+      runtimeProfileName: config.kernel?.runtimeProfileName,
+    });
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
     await this.gateway.start();
@@ -280,6 +296,9 @@ export class DaemonLifecycle {
       case "get_artifact":
         await this.handleGetArtifact(clientId, msg);
         break;
+      case "mcp_call":
+        await this.handleMcpCall(clientId, msg);
+        break;
       case "control":
         await this.handleControl(clientId, session, msg.message, msg.messageId);
         break;
@@ -406,6 +425,44 @@ export class DaemonLifecycle {
       );
     } finally {
       reader.close();
+    }
+  }
+
+  private async handleMcpCall(
+    clientId: string,
+    msg: Extract<ClientMessage, { type: "mcp_call" }>,
+  ): Promise<void> {
+    const runtime = this.mcpRuntime;
+    if (!runtime) {
+      this.sendRequestError(
+        clientId,
+        msg.messageId,
+        "mcp_unavailable",
+        "MCP runtime is not available",
+      );
+      return;
+    }
+    try {
+      const result = await runtime.callTool({
+        server: msg.server,
+        tool: msg.tool,
+        ...(msg.arguments !== undefined ? { arguments: msg.arguments } : {}),
+        ...(msg.runId !== undefined ? { runId: msg.runId } : {}),
+        ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+      });
+      this.sendToClient(clientId, {
+        type: "ack",
+        messageId: msg.messageId,
+        result,
+      });
+    } catch (error) {
+      this.sendRequestError(
+        clientId,
+        msg.messageId,
+        "mcp_call_failed",
+        "MCP tool call failed",
+        error instanceof Error ? error.message : String(error),
+      );
     }
   }
 
@@ -539,6 +596,8 @@ export class DaemonLifecycle {
     this.browserGatewayInfo = null;
     await this.gateway?.stop();
     this.gateway = null;
+    await this.mcpRuntime?.close();
+    this.mcpRuntime = null;
     await this.kernelBridge?.destroy();
     this.kernelBridge = null;
     this.runtime = null;

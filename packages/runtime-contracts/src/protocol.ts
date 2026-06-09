@@ -11,6 +11,7 @@ import {
 } from "./events.js";
 import type { RunStateSnapshot } from "./snapshot.js";
 import type { RuntimeAckResultParser } from "./ack-result.js";
+import type { RuntimeMcpToolCallRequest } from "./mcp-call.js";
 
 export type RuntimeClientMessage =
   | {
@@ -42,6 +43,10 @@ export type RuntimeClientMessage =
       maxBytes?: number;
       messageId: string;
     }
+  | ({
+      type: "mcp_call";
+      messageId: string;
+    } & RuntimeMcpToolCallRequest)
   | {
       type: "ping";
       messageId?: string;
@@ -270,6 +275,11 @@ function parseEventFilter(value: unknown): EventFilter | undefined | null {
   return filter;
 }
 
+function parseRecordArguments(value: unknown): Record<string, unknown> | undefined | null {
+  if (value === undefined) return undefined;
+  return isRecord(value) ? value : null;
+}
+
 export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessageParseResult {
   if (!isRecord(raw) || typeof raw.type !== "string") {
     return error("invalid_message", "Client message must be an object with a type", undefined, raw);
@@ -316,6 +326,41 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           artifactId: raw.artifactId,
           messageId: raw.messageId,
           ...(maxBytes !== undefined ? { maxBytes } : {}),
+        },
+      };
+    }
+    case "mcp_call": {
+      if (
+        typeof raw.server !== "string" ||
+        raw.server.length === 0 ||
+        typeof raw.tool !== "string" ||
+        raw.tool.length === 0 ||
+        typeof raw.messageId !== "string"
+      ) {
+        return error("invalid_message", "mcp_call requires server, tool, and messageId", raw, raw);
+      }
+      const args = parseRecordArguments(raw.arguments);
+      if (args === null) {
+        return error("invalid_message", "mcp_call arguments must be an object", raw, raw.arguments);
+      }
+      const runId = optionalString(raw.runId);
+      if (raw.runId !== undefined && runId === undefined) {
+        return error("invalid_message", "mcp_call runId must be a string", raw, raw.runId);
+      }
+      const traceId = optionalString(raw.traceId);
+      if (raw.traceId !== undefined && traceId === undefined) {
+        return error("invalid_message", "mcp_call traceId must be a string", raw, raw.traceId);
+      }
+      return {
+        ok: true,
+        message: {
+          type: "mcp_call",
+          server: raw.server,
+          tool: raw.tool,
+          messageId: raw.messageId,
+          ...(args !== undefined ? { arguments: args } : {}),
+          ...(runId !== undefined ? { runId } : {}),
+          ...(traceId !== undefined ? { traceId } : {}),
         },
       };
     }

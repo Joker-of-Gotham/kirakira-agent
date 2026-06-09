@@ -6,6 +6,7 @@ import {
   sanitizeRuntimeDaemonHealth,
   type RuntimeDaemonHealth,
   type RuntimeClientMessage,
+  type RuntimeMcpToolCallRequest,
 } from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
@@ -24,6 +25,7 @@ export interface RuntimeIpcControllerOptions {
     | "submitPrompt"
     | "getState"
     | "getArtifactContent"
+    | "callMcpTool"
     | "subscribeToRun"
     | "unsubscribe"
     | "approve"
@@ -176,6 +178,46 @@ function parseArtifactContentRequest(value: unknown): RuntimeArtifactContentRequ
     runId,
     artifactId: validated.artifactId,
     ...(validated.maxBytes !== undefined ? { maxBytes: validated.maxBytes } : {}),
+  };
+}
+
+function parseMcpToolCallRequest(value: unknown): RuntimeMcpToolCallRequest {
+  if (!isRecord(value)) throw new Error("callMcpTool requires a request object");
+  if (typeof value.server !== "string" || value.server.length === 0) {
+    throw new Error("callMcpTool requires server");
+  }
+  if (typeof value.tool !== "string" || value.tool.length === 0) {
+    throw new Error("callMcpTool requires tool");
+  }
+  if (value.arguments !== undefined && !isRecord(value.arguments)) {
+    throw new Error("callMcpTool arguments must be an object");
+  }
+  const runId = optionalString(value.runId);
+  if (value.runId !== undefined && runId === undefined) {
+    throw new Error("callMcpTool runId must be a string");
+  }
+  const traceId = optionalString(value.traceId);
+  if (value.traceId !== undefined && traceId === undefined) {
+    throw new Error("callMcpTool traceId must be a string");
+  }
+  const validated = validateRuntimeClientMessage({
+    type: "mcp_call",
+    server: value.server,
+    tool: value.tool,
+    ...(value.arguments !== undefined ? { arguments: value.arguments } : {}),
+    ...(runId !== undefined ? { runId } : {}),
+    ...(traceId !== undefined ? { traceId } : {}),
+    messageId: "desktop-mcp-validate",
+  });
+  if (validated.type !== "mcp_call") {
+    throw new Error("callMcpTool message is malformed");
+  }
+  return {
+    server: validated.server,
+    tool: validated.tool,
+    ...(validated.arguments !== undefined ? { arguments: validated.arguments } : {}),
+    ...(validated.runId !== undefined ? { runId: validated.runId } : {}),
+    ...(validated.traceId !== undefined ? { traceId: validated.traceId } : {}),
   };
 }
 
@@ -444,6 +486,13 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         const request = parseArtifactContentRequest(rawRequest);
         await ensureConnected();
         return options.client.getArtifactContent(request);
+      });
+
+      ipcMain.handle("runtime:callMcpTool", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseMcpToolCallRequest(rawRequest);
+        await ensureConnected();
+        return options.client.callMcpTool(request);
       });
 
       ipcMain.handle("runtime:subscribeRun", async (event, rawRequest: unknown) => {

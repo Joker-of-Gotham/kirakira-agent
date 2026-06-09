@@ -194,6 +194,66 @@ describe("browser gateway runtime transport", () => {
     });
   });
 
+  it("calls MCP tools through the runtime protocol and resolves typed results", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const pending = transport.callMcpTool({
+      server: "filesystem-core",
+      tool: "read_file",
+      arguments: { path: "README.md" },
+      runId: "run-1",
+      traceId: "trace-1",
+    });
+    const frame = JSON.parse(socket?.sent[0] ?? "{}") as {
+      messageId: string;
+      type: string;
+    };
+    expect(frame).toMatchObject({
+      type: "mcp_call",
+      server: "filesystem-core",
+      tool: "read_file",
+      arguments: { path: "README.md" },
+      runId: "run-1",
+      traceId: "trace-1",
+    });
+
+    socket?.message({
+      type: "ack",
+      messageId: frame.messageId,
+      result: {
+        server: "filesystem-core",
+        tool: "read_file",
+        success: true,
+        content: [{ type: "text", text: "preview" }],
+        latencyMs: 5,
+        policy: {
+          effect: "allow",
+          reasonCodes: ["baseline_read_workspace"],
+          approvalRequired: false,
+          traceId: "trace-1",
+        },
+      },
+    });
+    await expect(pending).resolves.toMatchObject({
+      server: "filesystem-core",
+      tool: "read_file",
+      success: true,
+    });
+  });
+
   it("maps subscriptions to events and sends daemon unsubscribe frames", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;
