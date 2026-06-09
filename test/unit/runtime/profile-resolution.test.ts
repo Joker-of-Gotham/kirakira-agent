@@ -5,6 +5,7 @@ import {
   buildRuntimeEnvPlan,
   buildMcpConfigPlan,
   buildMemoryStackPlan,
+  buildRuntimeComposePlan,
   buildRuntimeProfileProjection,
   buildRuntimeReadinessPlan,
   buildRuntimeServiceProjection,
@@ -139,6 +140,13 @@ describe("runtime profile rendering", () => {
       profile: "container",
       mode: "container",
     });
+    expect(projection.fragments.compose).toEqual(buildRuntimeComposePlan(profile));
+    expect(projection.fragments.compose).toMatchObject({
+      source: "runtime-profile.compose",
+      files: ["docker-compose.yml"],
+      profiles: ["cli"],
+      args: ["-f", "docker-compose.yml", "--profile", "cli"],
+    });
     expect(projection.fragments.mcpConfig).toEqual(buildMcpConfigPlan(profile, { config }));
     expect(projection.fragments.mcpConfig.config).toEqual(renderMcpConfig(profile));
     expect(projection.fragments.memoryStack).toEqual(buildMemoryStackPlan(profile, { config }));
@@ -200,6 +208,10 @@ describe("runtime profile rendering", () => {
       "--wait",
       ...memoryServices,
     ]);
+    expect(projection.fragments.memoryStack.compose).toMatchObject({
+      files: projection.fragments.compose.files,
+      profiles: projection.fragments.compose.profiles,
+    });
     expect(projection.fragments.memoryStack.services.map((service) => service.name))
       .toEqual(memoryServices);
     expect(projection.fragments.memoryStack.checks.map((check) => check.service))
@@ -208,6 +220,8 @@ describe("runtime profile rendering", () => {
       kind: "container",
       runtimeServices: expandRuntimeServiceRefs(["@runtime-stack"], config),
       compose: {
+        files: projection.fragments.compose.files,
+        profiles: projection.fragments.compose.profiles,
         args: [
           "compose",
           "-f",
@@ -829,6 +843,17 @@ describe("runtime profile rendering", () => {
     const projection = JSON.parse(projectionResult.stdout);
 
     expect(projectionResult.status).toBe(0);
+    expect(projection.fragments.compose).toMatchObject({
+      project: "kirakira-agent-test",
+      files: ["docker-compose.test.yml"],
+      profiles: [],
+      args: [
+        "-p",
+        "kirakira-agent-test",
+        "-f",
+        "docker-compose.test.yml",
+      ],
+    });
     expect(projection.fragments.readiness.compose.args).toEqual([
       "compose",
       "-p",
@@ -844,6 +869,8 @@ describe("runtime profile rendering", () => {
       "neo4j",
       "minio",
     ]);
+    expect(projection.fragments.readiness.compose.project).toBe(projection.fragments.compose.project);
+    expect(projection.fragments.memoryStack.compose.project).toBe(projection.fragments.compose.project);
     expect(projection.fragments.memoryStack.compose.args).toEqual([
       "compose",
       "-p",

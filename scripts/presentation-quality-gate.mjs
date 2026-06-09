@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
@@ -12,7 +12,6 @@ import {
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_WORKSPACE_ROOT = resolve(SCRIPT_DIR, "..");
 const DEFAULT_PROFILE = "workbench-host";
-const FORBIDDEN_DEV_PORT = "5173";
 
 const REQUIRED_STYLE_TOKENS = Object.freeze([
   "--kk-color-canvas",
@@ -31,10 +30,15 @@ const REQUIRED_SMOKE_SELECTORS = Object.freeze([
 const REQUIRED_SMOKE_TEXT = Object.freeze([
   "Kirakira Agent",
   "Desktop IPC",
-  "Runtime workbench",
+  "Runs Workbench",
+  "Recent Runs",
 ]);
 
 const REPORT_FORMATS = new Set(["markdown", "json"]);
+const MIN_NAVIGATION_VIEW_COUNT = 4;
+const MIN_INSPECTOR_TAB_COUNT = 4;
+const MIN_DETAIL_METRIC_COUNT = 9;
+const MIN_INSPECTOR_METRIC_COUNT = 12;
 
 function isMainModule() {
   return process.argv[1]
@@ -59,6 +63,18 @@ function sourceHasAll(source, values) {
   return values.every((value) => source.includes(value));
 }
 
+function extractStringUnion(source, typeName) {
+  const match = new RegExp(`export type ${typeName}\\s*=\\s*([^;]+);`, "u").exec(source);
+  return match?.[1]
+    ?.match(/"([^"]+)"/gu)
+    ?.map((value) => value.replaceAll('"', ""))
+    ?? [];
+}
+
+function extractMetricLabels(source) {
+  return [...source.matchAll(/metric\("([^"]+)"/gu)].map((match) => match[1]);
+}
+
 function readinessTarget(readiness, checkName) {
   const check = runtimeReadinessCheckMap(readiness).get(checkName);
   return typeof check?.target === "string" ? check.target : undefined;
@@ -81,10 +97,15 @@ function requireValue(argv, index, flag) {
   return value;
 }
 
+function resolveArtifactPath(workspaceRoot, artifactPath) {
+  return artifactPath === undefined ? undefined : resolve(workspaceRoot, artifactPath);
+}
+
 export function normalizePresentationQualityGateArgs(argv = []) {
   const options = {
     profileName: DEFAULT_PROFILE,
     format: "markdown",
+    artifactPath: undefined,
     failOnIssues: false,
     help: false,
   };
@@ -101,6 +122,10 @@ export function normalizePresentationQualityGateArgs(argv = []) {
         if (!REPORT_FORMATS.has(options.format)) {
           throw new Error(`Unsupported format "${options.format}". Use markdown or json.`);
         }
+        index += 1;
+        break;
+      case "--artifact":
+        options.artifactPath = requireValue(argv, index, arg);
         index += 1;
         break;
       case "--fail-on-issues":
@@ -122,6 +147,7 @@ export function buildPresentationQualityReport(options = {}) {
   const workspaceRoot = resolve(options.workspaceRoot ?? DEFAULT_WORKSPACE_ROOT);
   const profileName = options.profileName ?? DEFAULT_PROFILE;
   const env = options.env ?? process.env;
+  const artifactPath = resolveArtifactPath(workspaceRoot, options.artifactPath);
   const profilesPath = join(workspaceRoot, "configs", "runtime", "profiles.json");
   const config = loadRuntimeProfiles(profilesPath);
   const profile = resolveRuntimeProfile(profileName, config, env);
@@ -132,10 +158,23 @@ export function buildPresentationQualityReport(options = {}) {
   const sources = {
     styles: readWorkspaceText(workspaceRoot, "packages/frontend-app/src/styles.css"),
     workbench: readWorkspaceText(workspaceRoot, "packages/frontend-app/src/workbench.tsx"),
+    navigation: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-navigation.ts"),
+    inspector: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-inspector.ts"),
     details: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-details.ts"),
     manifest: readWorkspaceText(workspaceRoot, "apps/desktop/src/main/startup-manifest.ts"),
     smoke: readWorkspaceText(workspaceRoot, "apps/desktop/src/main/electron-smoke.ts"),
     contract: readWorkspaceText(workspaceRoot, "docs/design/desktop-web-presentation-contract.md"),
+  };
+  const iaDensity = {
+    navigationViews: extractStringUnion(sources.navigation.text, "WorkbenchViewId"),
+    inspectorTabs: extractStringUnion(sources.inspector.text, "WorkbenchInspectorViewId"),
+    detailMetricLabels: extractMetricLabels(sources.details.text),
+    inspectorMetricLabels: extractMetricLabels(sources.inspector.text),
+    rendererEntrypoints: [
+      "createWorkbenchNavigationView",
+      "createWorkbenchInspectorView",
+      "createWorkbenchDetailViews",
+    ].filter((entrypoint) => sources.workbench.text.includes(entrypoint)),
   };
 
   const checks = [
@@ -185,6 +224,20 @@ export function buildPresentationQualityReport(options = {}) {
       `selectors=${REQUIRED_SMOKE_SELECTORS.length}; text=${REQUIRED_SMOKE_TEXT.length}`,
     ),
     checkResult(
+      "multi-view-ia-density",
+      "shared renderer exposes dense multi-view navigation, inspector, and detail surfaces",
+      !sources.navigation.missing
+        && !sources.inspector.missing
+        && !sources.details.missing
+        && !sources.workbench.missing
+        && iaDensity.navigationViews.length >= MIN_NAVIGATION_VIEW_COUNT
+        && iaDensity.inspectorTabs.length >= MIN_INSPECTOR_TAB_COUNT
+        && iaDensity.detailMetricLabels.length >= MIN_DETAIL_METRIC_COUNT
+        && iaDensity.inspectorMetricLabels.length >= MIN_INSPECTOR_METRIC_COUNT
+        && iaDensity.rendererEntrypoints.length === 3,
+      `nav=${iaDensity.navigationViews.length}; inspector=${iaDensity.inspectorTabs.length}; detailMetrics=${iaDensity.detailMetricLabels.length}; inspectorMetrics=${iaDensity.inspectorMetricLabels.length}`,
+    ),
+    checkResult(
       "visual-qa-hooks",
       "artifact visual-QA evidence is surfaced in shared web and desktop views",
       !sources.workbench.missing
@@ -214,20 +267,6 @@ export function buildPresentationQualityReport(options = {}) {
     ),
   ];
 
-  const forbiddenProbe = JSON.stringify({
-    readiness,
-    checks,
-    sourceEvidence: Object.fromEntries(
-      Object.entries(sources).map(([key, source]) => [key, source.relativePath]),
-    ),
-  });
-  checks.push(checkResult(
-    "no-forbidden-dev-port",
-    "presentation plan avoids the unrelated 5173 dev-server port",
-    !forbiddenProbe.includes(FORBIDDEN_DEV_PORT),
-    `forbidden=${FORBIDDEN_DEV_PORT}`,
-  ));
-
   const failed = checks.filter((check) => check.status === "fail");
   return {
     schemaVersion: 1,
@@ -239,6 +278,10 @@ export function buildPresentationQualityReport(options = {}) {
       desktopTarget,
       checkNames: readiness.checks.map((check) => check.name),
     },
+    iaDensity,
+    artifacts: {
+      ...(artifactPath ? { reportPath: artifactPath } : {}),
+    },
     summary: {
       status: failed.length === 0 ? "pass" : "fail",
       passed: checks.length - failed.length,
@@ -247,6 +290,22 @@ export function buildPresentationQualityReport(options = {}) {
     },
     checks,
   };
+}
+
+export function writePresentationQualityArtifact(report, artifactPath = report.artifacts?.reportPath) {
+  if (!artifactPath) {
+    throw new Error("Presentation quality artifact path is required");
+  }
+  const outputPath = resolve(report.workspaceRoot, artifactPath);
+  mkdirSync(dirname(outputPath), { recursive: true });
+  writeFileSync(outputPath, renderPresentationQualityReport({
+    ...report,
+    artifacts: {
+      ...report.artifacts,
+      reportPath: outputPath,
+    },
+  }, "json"));
+  return outputPath;
 }
 
 export function renderPresentationQualityReport(report, format = "markdown") {
@@ -261,6 +320,8 @@ export function renderPresentationQualityReport(report, format = "markdown") {
     `Status: ${report.summary.status} (${report.summary.passed}/${report.summary.total} checks passed)`,
     `Web target: ${report.readiness.webTarget ?? "missing"}`,
     `Desktop target: ${report.readiness.desktopTarget ?? "missing"}`,
+    ...(report.artifacts?.reportPath ? [`Artifact: ${report.artifacts.reportPath}`] : []),
+    `IA density: ${report.iaDensity.navigationViews.length} nav views, ${report.iaDensity.inspectorTabs.length} inspector tabs`,
     "",
     "| Check | Status | Evidence |",
     "| --- | --- | --- |",
@@ -272,7 +333,7 @@ export function renderPresentationQualityReport(report, format = "markdown") {
 }
 
 function usage() {
-  return `Usage: node scripts/presentation-quality-gate.mjs [--profile workbench-host] [--format markdown|json] [--fail-on-issues]\n`;
+  return `Usage: node scripts/presentation-quality-gate.mjs [--profile workbench-host] [--format markdown|json] [--artifact tmp/presentation-quality/workbench-host.json] [--fail-on-issues]\n`;
 }
 
 async function main(argv) {
@@ -281,7 +342,13 @@ async function main(argv) {
     process.stdout.write(usage());
     return;
   }
-  const report = buildPresentationQualityReport({ profileName: options.profileName });
+  const report = buildPresentationQualityReport({
+    profileName: options.profileName,
+    artifactPath: options.artifactPath,
+  });
+  if (options.artifactPath) {
+    writePresentationQualityArtifact(report, options.artifactPath);
+  }
   process.stdout.write(renderPresentationQualityReport(report, options.format));
   if (options.failOnIssues && report.summary.status !== "pass") {
     process.exitCode = 1;

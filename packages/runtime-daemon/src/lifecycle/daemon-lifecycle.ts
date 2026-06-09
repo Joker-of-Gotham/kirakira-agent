@@ -38,7 +38,7 @@ import {
   RuntimeArtifactContentError,
   readRuntimeArtifactContent,
 } from "../server/artifact-content.js";
-import { activeRuntimeProfile } from "../bridge/runtime-profile.js";
+import { runtimeProfileComposition } from "../bridge/runtime-profile.js";
 
 export interface DaemonConfig {
   socketPath?: string;
@@ -86,87 +86,6 @@ function hasMcpRuntime(options: KernelBridgeOptions | undefined): boolean {
         (profile) => (profile.mcp_servers?.length ?? 0) > 0,
       ),
   );
-}
-
-function runtimeMcpManifest(
-  options: KernelBridgeOptions | undefined,
-): RuntimeMcpManifest | undefined {
-  const runtimeState = options?.resolvedConfig?.runtimeState;
-  const profile = activeRuntimeProfile(
-    options?.resolvedConfig,
-    options?.runtimeProfileName,
-  );
-  const servers = profile?.mcp_servers ?? [];
-  const catalog = runtimeState?.mcp_catalog;
-  if (servers.length === 0 && !catalog) return undefined;
-  return {
-    ...(profile?.name ? { profileName: profile.name } : {}),
-    ...(profile?.mcp_server_groups ? { serverGroups: profile.mcp_server_groups } : {}),
-    servers: servers.map((server) => ({
-      name: server.name,
-      command: server.command,
-      ...(server.args ? { args: server.args } : {}),
-      ...(server.env ? { envKeys: Object.keys(server.env).sort() } : {}),
-    })),
-    ...(catalog
-      ? {
-          catalog: {
-            ...(catalog.default_server_groups
-              ? { defaultServerGroups: catalog.default_server_groups }
-              : {}),
-            ...(catalog.groups ? { groups: catalog.groups } : {}),
-            ...(catalog.servers ? { servers: catalog.servers } : {}),
-          },
-        }
-      : {}),
-  };
-}
-
-function runtimeOrchestrationManifest(
-  options: KernelBridgeOptions | undefined,
-): RuntimeOrchestrationManifest | undefined {
-  const profile = activeRuntimeProfile(
-    options?.resolvedConfig,
-    options?.runtimeProfileName,
-  );
-  const orchestration = profile?.orchestration;
-  if (!profile || !orchestration) return undefined;
-  return {
-    profileName: profile.name,
-    ...(orchestration.handoff_mode ? { handoffMode: orchestration.handoff_mode } : {}),
-    ...(orchestration.default_role ? { defaultRole: orchestration.default_role } : {}),
-    ...(orchestration.lanes ? { lanes: orchestration.lanes } : {}),
-    ...(orchestration.roles
-      ? {
-          roles: orchestration.roles.map((role) => ({
-            id: role.id,
-            ...(role.description ? { description: role.description } : {}),
-            ...(role.lane ? { lane: role.lane } : {}),
-            ...(role.model ? { model: role.model } : {}),
-            ...(role.max_turns ? { maxTurns: role.max_turns } : {}),
-            ...(role.context ? { context: role.context } : {}),
-            ...(role.tool_scope ? { toolScope: role.tool_scope } : {}),
-            ...(role.skill_scope ? { skillScope: role.skill_scope } : {}),
-            ...(role.mcp_servers ? { mcpServers: role.mcp_servers } : {}),
-            ...(role.permissions ? { permissionLabels: role.permissions } : {}),
-          })),
-        }
-      : {}),
-    ...(orchestration.handoffs
-      ? {
-          handoffs: orchestration.handoffs.map((handoff) => ({
-            from: handoff.from,
-            to: handoff.to,
-            ...(handoff.mode ? { mode: handoff.mode } : {}),
-            ...(handoff.input_filter ? { inputFilter: handoff.input_filter } : {}),
-            ...(handoff.approval_required !== undefined
-              ? { approvalRequired: handoff.approval_required }
-              : {}),
-            ...(handoff.conditions ? { conditions: handoff.conditions } : {}),
-          })),
-        }
-      : {}),
-  };
 }
 
 function daemonCapabilityOverrides(
@@ -239,8 +158,12 @@ export class DaemonLifecycle {
       process.env.KIRAKIRA_WORKSPACE_ROOT ??
       process.cwd();
     this.capabilities = daemonCapabilityOverrides(config.kernel);
-    this.mcpManifest = runtimeMcpManifest(config.kernel);
-    this.orchestrationManifest = runtimeOrchestrationManifest(config.kernel);
+    const profileComposition = runtimeProfileComposition({
+      resolvedConfig: config.kernel?.resolvedConfig,
+      runtimeProfileName: config.kernel?.runtimeProfileName,
+    });
+    this.mcpManifest = profileComposition.mcpManifest;
+    this.orchestrationManifest = profileComposition.orchestrationManifest;
     this.mcpRuntime = new DaemonMcpRuntime({
       ...(config.mcpRuntime ?? {}),
       workspaceRoot: this.workspaceRoot,

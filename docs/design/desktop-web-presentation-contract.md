@@ -56,10 +56,14 @@ Renderer:
 Run these after desktop presentation changes:
 
 ```powershell
-node scripts/presentation-quality-gate.mjs --profile workbench-host --format markdown --fail-on-issues
+node scripts/presentation-quality-gate.mjs --profile workbench-host --format markdown --artifact tmp/presentation-quality/workbench-host.json --fail-on-issues
 pnpm --filter @kirakira/desktop typecheck
 pnpm exec vitest run test/unit/desktop/startup-manifest.test.ts test/unit/desktop/main-security.test.ts test/unit/desktop/preload.test.ts test/unit/desktop/renderer-endpoint.test.ts test/unit/desktop/runtime-ipc.test.ts test/unit/desktop/desktop-transport.test.ts
 ```
+
+The presentation gate is browser-safe: it resolves the runtime profile, checks
+the shared renderer contract, validates multi-view IA density, and can write a
+JSON QA artifact without starting Web, Electron, Docker, or local services.
 
 Remaining design work:
 

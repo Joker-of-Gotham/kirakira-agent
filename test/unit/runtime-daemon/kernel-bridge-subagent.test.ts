@@ -603,6 +603,183 @@ describe("runtime daemon subagent bridge", () => {
     }
   });
 
+  it("surfaces daemon-owned memory research source failures as bounded runtime events", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-default-memory-failure-"));
+    const eventStorePath = join(workspaceRoot, "events");
+    const recallCalls: RecallRequest[] = [];
+    const seen: RunEvent[] = [];
+    let factoryCalls = 0;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "default-memory-workspace",
+        deep_research: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 1,
+          max_tool_calls: 2,
+          require_citations: true,
+        },
+      },
+      runtimeState: {
+        default_profile: "workbench-host",
+        profiles: [
+          {
+            name: "workbench-host",
+            mode: "host",
+            workspace_root: workspaceRoot,
+            services: [
+              { name: "postgres" },
+              { name: "redis" },
+              { name: "minio" },
+            ],
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      runtimeProfileName: "workbench-host",
+      memory: {
+        env: {
+          DATABASE_URL: "postgres://runtime:runtime@127.0.0.1:15432/runtime",
+          REDIS_URL: "redis://127.0.0.1:16379/0",
+          QDRANT_URL: "http://127.0.0.1:16333",
+          NEO4J_URI: "bolt://127.0.0.1:17687",
+          KIRAKIRA_NEO4J_USER: "neo4j-runtime",
+          KIRAKIRA_NEO4J_PASSWORD: "neo4j-secret",
+          S3_ENDPOINT: "http://127.0.0.1:19000",
+          S3_ACCESS_KEY_ID: "minio-access",
+          S3_SECRET_ACCESS_KEY: "minio-secret",
+        },
+        serviceFactory() {
+          factoryCalls += 1;
+          return {
+            async recall(request) {
+              recallCalls.push(request);
+              throw new Error("daemon memory recall unavailable");
+            },
+            async explainRetrieval() {
+              return trace;
+            },
+          };
+        },
+      },
+      kernelOptions: {
+        planContext: {
+          workspace: workspaceRoot,
+          availableTools: [],
+          availableSkills: [],
+          availableMcpServers: [],
+        },
+        planner: {
+          async completeText() {
+            return JSON.stringify({
+              goal: "Collect failing daemon memory",
+              steps: [
+                {
+                  id: "research",
+                  description: "Collect failing daemon memory evidence",
+                  kind: "research",
+                  dependsOn: [],
+                  canParallelize: false,
+                  research: {
+                    question: "What happens when daemon memory recall fails?",
+                    requiredSourceKinds: ["memory"],
+                  },
+                },
+              ],
+              estimatedComplexity: "moderate",
+              requiresSubagents: false,
+            });
+          },
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      const unsubscribe = bridge.onEvent((event) => {
+        seen.push(event);
+      });
+      const completed = waitForBridgeEvent(
+        bridge,
+        (event) => event.kind === "run.completed",
+      );
+
+      const runId = await bridge.submitRun("Collect failing daemon memory", "headless", {
+        workspaceRoot,
+      });
+      await completed;
+      unsubscribe();
+
+      expect(factoryCalls).toBe(1);
+      expect(recallCalls).toHaveLength(1);
+      expect(recallCalls[0]).toMatchObject({
+        tenantId: "default-memory-workspace",
+        workspaceId: workspaceRoot,
+        query: "What happens when daemon memory recall fails?",
+        runId,
+        level: "L3",
+        includeRedacted: false,
+      });
+      expect(seen.map((event) => event.kind)).toEqual(
+        expect.arrayContaining([
+          "memory.recall.started",
+          "memory.recall.failed",
+          "research.source.failed",
+          "research.task.failed",
+          "research.failed",
+          "task.failed",
+          "run.completed",
+        ]),
+      );
+      const recallFailed = seen.find((event) => event.kind === "memory.recall.failed");
+      expect(recallFailed?.runId).toBe(runId);
+      expect(recallFailed?.payload).toMatchObject({
+        operation: "recall",
+        sourceKind: "memory",
+        runId,
+        researchRunId: `${runId}:research:research`,
+        researchTaskId: expect.any(String),
+        parentTaskId: "research",
+        nodeId: "research",
+        tenantId: "default-memory-workspace",
+        workspaceId: workspaceRoot,
+        level: "L3",
+        includeRedacted: false,
+        requireCitations: true,
+        error: "daemon memory recall unavailable",
+      });
+      expect(recallFailed?.payload.queryHash).toEqual(expect.any(String));
+      expect(recallFailed?.payload.queryPreview).toBe(
+        "What happens when daemon memory recall fails?",
+      );
+      const researchFailed = seen.find((event) => event.kind === "research.failed");
+      expect(researchFailed?.payload).toMatchObject({
+        nodeId: "research",
+        parentTaskId: "research",
+        sourcePolicy: "workspace",
+        requiredSourceKinds: ["memory"],
+        requireCitations: true,
+        errorCode: "Error",
+        message: "daemon memory recall unavailable",
+      });
+      const taskFailed = seen.find((event) => event.kind === "task.failed");
+      expect(taskFailed?.payload).toMatchObject({
+        taskId: "research",
+        nodeId: "research",
+        kind: "research",
+        error: "daemon memory recall unavailable",
+      });
+    } finally {
+      await bridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("uses memory-backed checkpoint repository from the runtime memory profile unless kernel options override it", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-memory-checkpoints-"));
     const eventStorePath = join(workspaceRoot, "events");

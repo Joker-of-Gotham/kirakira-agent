@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "gate": "presentation",
+  "profile": "workbench-host",
+  "status": "passed",
+  "passedAt": "2026-06-09T20:51:39.901Z",
+  "checks": [
+    "daemon:browser-gateway",
+    "presentation:web",
+    "daemon:socket",
+    "presentation:desktop"
+  ],
+  "surfaces": [
+    "web",
+    "desktop"
+  ],
+  "targets": {
+    "daemon:browser-gateway": {
+      "type": "http-health",
+      "target": "http://127.0.0.1:17373/healthz",
+      "endpoint": "ws://127.0.0.1:17373/runtime",
+      "responseSchema": "browser-gateway-health"
+    },
+    "presentation:web": {
+      "type": "http",
+      "target": "http://127.0.0.1:5183/"
+    },
+    "daemon:socket": {
+      "type": "socket",
+      "target": "\\\\.\\pipe\\kirakira-agent-daemon-b48b29c06414"
+    },
+    "presentation:desktop": {
+      "type": "http",
+      "target": "http://127.0.0.1:5174/"
+    }
+  },
+  "command": "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --live",
+  "readiness": {
+    "timeoutMs": 180000,
+    "intervalMs": 1000,
+    "probeTimeoutMs": 2000
+  }
+}

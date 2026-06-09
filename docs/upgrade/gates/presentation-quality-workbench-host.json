@@ -1,0 +1,126 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-09T20:53:34.244Z",
+  "workspaceRoot": "C:\\technical-development\\kirakira-agent",
+  "profile": "workbench-host",
+  "readiness": {
+    "webTarget": "http://127.0.0.1:5183/",
+    "desktopTarget": "http://127.0.0.1:5174/",
+    "checkNames": [
+      "service:postgres",
+      "service:redis",
+      "service:qdrant",
+      "service:neo4j",
+      "service:minio",
+      "service:kirakirad",
+      "daemon:socket",
+      "daemon:browser-gateway",
+      "presentation:web",
+      "presentation:desktop",
+      "orchestration:topology"
+    ]
+  },
+  "iaDensity": {
+    "navigationViews": [
+      "runs",
+      "agents",
+      "research",
+      "systems"
+    ],
+    "inspectorTabs": [
+      "memory",
+      "research",
+      "mcp",
+      "artifacts"
+    ],
+    "detailMetricLabels": [
+      "Citations",
+      "Runs",
+      "Linked",
+      "Artifacts",
+      "Kinds",
+      "Visual QA",
+      "Phase",
+      "Inputs",
+      "Outputs"
+    ],
+    "inspectorMetricLabels": [
+      "State",
+      "Events",
+      "Client ops",
+      "Runs",
+      "Evidence",
+      "Citations",
+      "Servers",
+      "Ready",
+      "Attention",
+      "Artifacts",
+      "Kinds",
+      "Preview"
+    ],
+    "rendererEntrypoints": [
+      "createWorkbenchNavigationView",
+      "createWorkbenchInspectorView",
+      "createWorkbenchDetailViews"
+    ]
+  },
+  "artifacts": {
+    "reportPath": "C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-quality-workbench-host.json"
+  },
+  "summary": {
+    "status": "pass",
+    "passed": 8,
+    "failed": 0,
+    "total": 8
+  },
+  "checks": [
+    {
+      "id": "profile-web-target",
+      "label": "runtime profile declares the web presentation readiness target",
+      "status": "pass",
+      "evidence": "presentation:web=http://127.0.0.1:5183/"
+    },
+    {
+      "id": "profile-desktop-target",
+      "label": "runtime profile declares the desktop renderer readiness target",
+      "status": "pass",
+      "evidence": "presentation:desktop=http://127.0.0.1:5174/"
+    },
+    {
+      "id": "shared-design-tokens",
+      "label": "shared workbench styles expose the presentation design tokens",
+      "status": "pass",
+      "evidence": "tokens=--kk-color-canvas, --kk-color-surface, --kk-color-accent, --kk-space-1, --kk-radius-md; focus-visible=true"
+    },
+    {
+      "id": "workbench-a11y-anchors",
+      "label": "shared workbench exposes stable shell and accessibility anchors",
+      "status": "pass",
+      "evidence": "anchors=kk-shell, Run navigation, Runtime workspace"
+    },
+    {
+      "id": "desktop-smoke-content-contract",
+      "label": "Electron smoke contract asserts shared renderer content",
+      "status": "pass",
+      "evidence": "selectors=3; text=4"
+    },
+    {
+      "id": "multi-view-ia-density",
+      "label": "shared renderer exposes dense multi-view navigation, inspector, and detail surfaces",
+      "status": "pass",
+      "evidence": "nav=4; inspector=4; detailMetrics=9; inspectorMetrics=12"
+    },
+    {
+      "id": "visual-qa-hooks",
+      "label": "artifact visual-QA evidence is surfaced in shared web and desktop views",
+      "status": "pass",
+      "evidence": "hooks=artifact cards, subagent drawer, visual QA labels"
+    },
+    {
+      "id": "presentation-contract-doc",
+      "label": "presentation contract documents the OpenHuman reference boundary and QA entry points",
+      "status": "pass",
+      "evidence": "doc=docs/design/desktop-web-presentation-contract.md"
+    }
+  ]
+}

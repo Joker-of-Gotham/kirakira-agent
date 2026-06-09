@@ -30,7 +30,8 @@ export const DEFAULT_ELECTRON_SMOKE_SELECTORS = [
 export const DEFAULT_ELECTRON_SMOKE_TEXT = [
   "Kirakira Agent",
   "Desktop IPC",
-  "Runtime workbench",
+  "Runs Workbench",
+  "Recent Runs",
 ] as const;
 
 const EXTERNAL_BROWSER_PROTOCOLS = ["https:", "http:", "mailto:"] as const;

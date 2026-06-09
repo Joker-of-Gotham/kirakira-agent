@@ -13,7 +13,10 @@ import type { ResolvedConfig } from "@kirakira/core";
 import type { OrchestratorKernelOptions } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
 import type { BrowserGatewayConfig } from "../server/browser-gateway-server.js";
 import type { DaemonConfig } from "../lifecycle/daemon-lifecycle.js";
-import { activeRuntimeProfile } from "../bridge/runtime-profile.js";
+import {
+  runtimeProfileComposition,
+  type RuntimeProfileTopology,
+} from "../bridge/runtime-profile.js";
 
 export type DaemonEnv = Record<string, string | undefined>;
 
@@ -59,34 +62,18 @@ function nonnegativeInteger(value: unknown): number | undefined {
 
 const KERNEL_LANES = ["foreground", "queued", "background", "delegated"] as const;
 
-function runtimeProfileFromResolvedConfig(
+function runtimeProfileCompositionFromResolvedConfig(
   resolvedConfig: ResolvedConfig,
   env: DaemonEnv,
 ) {
-  return activeRuntimeProfile(
+  return runtimeProfileComposition({
     resolvedConfig,
-    env.KIRAKIRA_RUNTIME_PROFILE,
-  );
-}
-
-function mcpServerNamesFromResolvedConfig(
-  resolvedConfig: ResolvedConfig,
-  env: DaemonEnv,
-): string[] {
-  const profile = runtimeProfileFromResolvedConfig(resolvedConfig, env);
-  return profile?.mcp_servers?.map((server) => server.name) ?? [];
-}
-
-function topologyFromResolvedConfig(
-  resolvedConfig: ResolvedConfig,
-  env: DaemonEnv,
-) {
-  const profile = runtimeProfileFromResolvedConfig(resolvedConfig, env);
-  return profile?.orchestration ?? resolvedConfig.agentToml.orchestration?.topology;
+    runtimeProfileName: env.KIRAKIRA_RUNTIME_PROFILE,
+  });
 }
 
 function topologyLaneCapacities(
-  topology: ReturnType<typeof topologyFromResolvedConfig>,
+  topology: RuntimeProfileTopology | undefined,
 ): OrchestratorKernelOptions["laneCapacities"] {
   const out: NonNullable<OrchestratorKernelOptions["laneCapacities"]> = {};
   for (const lane of KERNEL_LANES) {
@@ -99,7 +86,7 @@ function topologyLaneCapacities(
 }
 
 function topologyDefaultRole(
-  topology: ReturnType<typeof topologyFromResolvedConfig>,
+  topology: RuntimeProfileTopology | undefined,
 ) {
   const defaultRoleId = topology?.default_role;
   return defaultRoleId
@@ -112,12 +99,16 @@ export function kernelOptionsFromResolvedConfig(
   env: DaemonEnv,
 ): OrchestratorKernelOptions {
   const orchestration = resolvedConfig.agentToml.orchestration;
-  const profile = runtimeProfileFromResolvedConfig(resolvedConfig, env);
+  const profileComposition = runtimeProfileCompositionFromResolvedConfig(
+    resolvedConfig,
+    env,
+  );
+  const profile = profileComposition.profile;
   const workspace = profile?.workspace_root ?? env.KIRAKIRA_WORKSPACE_ROOT ?? ".";
-  const mcpServerNames = mcpServerNamesFromResolvedConfig(resolvedConfig, env);
+  const mcpServerNames = profileComposition.mcpServerNames;
   const maxConcurrency = positiveInteger(orchestration?.max_concurrency);
   const maxTurns = positiveInteger(orchestration?.default_subagent_turns);
-  const topology = topologyFromResolvedConfig(resolvedConfig, env);
+  const topology = profileComposition.topology;
   const defaultRole = topologyDefaultRole(topology);
   const laneCapacities = {
     ...(topologyLaneCapacities(topology) ?? {}),
@@ -176,12 +167,15 @@ export function daemonConfigFromEnv(
   const mcpConfigPath =
     env.KIRAKIRA_MCP_CONFIG_PATH ??
     resolvedConfig?.agentToml.mcp.config_files?.[0];
+  const profileComposition = resolvedConfig
+    ? runtimeProfileCompositionFromResolvedConfig(resolvedConfig, env)
+    : undefined;
   const kernel = env.KIRAKIRA_WORKSPACE_ROOT
     ? {
         workspaceRoot: env.KIRAKIRA_WORKSPACE_ROOT,
         ...(resolvedConfig
           ? {
-              runtimeProfileName: runtimeProfileFromResolvedConfig(resolvedConfig, env)?.name,
+              runtimeProfileName: profileComposition?.profile?.name,
             }
           : {}),
         ...(mcpConfigPath

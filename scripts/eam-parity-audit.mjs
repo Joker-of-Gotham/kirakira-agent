@@ -56,6 +56,7 @@ const PACKAGE_SENTINELS = ["package.json", "tsconfig.json", "src"];
 const DOC_SENTINELS = ["README.md"];
 const DEFAULT_FILE_EXCLUDES = new Set([
   ".git",
+  ".kirakira",
   ".turbo",
   "__pycache__",
   "coverage",
@@ -255,6 +256,16 @@ export function renderEamParityAudit(audit, format = "markdown") {
       `Status: ${formatCountMap(audit.behaviorParity.summary.status)}; Classification: ${formatCountMap(audit.behaviorParity.summary.classification)}`,
     );
     lines.push("");
+    if (audit.behaviorParity.nextMechanismGap) {
+      const gap = audit.behaviorParity.nextMechanismGap;
+      lines.push("### Next Mechanism Gap", "");
+      lines.push("| Priority | Target | Status | Gap | Evidence | Commands |");
+      lines.push("| --- | --- | --- | --- | --- | --- |");
+      lines.push(
+        `| ${escapeTableCell(gap.priority)} | \`${gap.targetName}\` | ${gap.status} | ${escapeTableCell(nextGapText(gap))} | ${escapeTableCell(gapEvidence(gap))} | ${escapeTableCell(gap.commands.join("; ") || "none")} |`,
+      );
+      lines.push("");
+    }
     lines.push("| Source | Target | Classification | Behavior status | Evidence | Remaining gaps |");
     lines.push("| --- | --- | --- | --- | --- | --- |");
     for (const check of audit.behaviorParity.checks) {
@@ -291,6 +302,7 @@ function loadBehaviorParity(behaviorPath, sections) {
   const extraTargetEntries = Array.isArray(payload.extraTargetEntries)
     ? payload.extraTargetEntries.map(normalizeExtraTargetEntry)
     : [];
+  const nextMechanismGap = normalizeNextMechanismGap(payload.nextMechanismGap);
   const driftRows = sections.flatMap((section) =>
     section.rows
       .filter((row) => row.status === "drift")
@@ -307,6 +319,7 @@ function loadBehaviorParity(behaviorPath, sections) {
     references: Array.isArray(payload.references) ? payload.references : [],
     checks,
     extraTargetEntries,
+    ...(nextMechanismGap !== undefined ? { nextMechanismGap } : {}),
     summary: {
       checks: checks.length,
       extraTargetEntries: extraTargetEntries.length,
@@ -356,6 +369,32 @@ function normalizeExtraTargetEntry(entry) {
       typeof entry.classification === "string" ? entry.classification : "unclassified",
     status: normalizeBehaviorStatus(entry.status),
     behavior: typeof entry.behavior === "string" ? entry.behavior : "",
+  };
+}
+
+function normalizeNextMechanismGap(gap) {
+  if (gap === undefined) return undefined;
+  if (!gap || typeof gap !== "object") {
+    throw new Error("nextMechanismGap must be an object when provided");
+  }
+  if (typeof gap.id !== "string" || gap.id.length === 0) {
+    throw new Error("nextMechanismGap requires an id");
+  }
+  if (typeof gap.targetName !== "string" || gap.targetName.length === 0) {
+    throw new Error("nextMechanismGap requires a targetName");
+  }
+  if (typeof gap.gap !== "string" || gap.gap.length === 0) {
+    throw new Error("nextMechanismGap requires a gap");
+  }
+  return {
+    id: gap.id,
+    targetName: gap.targetName,
+    priority: typeof gap.priority === "string" ? gap.priority : "high",
+    status: normalizeBehaviorStatus(gap.status),
+    gap: gap.gap,
+    rationale: typeof gap.rationale === "string" ? gap.rationale : "",
+    evidence: normalizeEvidence(gap.evidence),
+    commands: normalizeStringArray(gap.commands),
   };
 }
 
@@ -424,6 +463,21 @@ function behaviorEvidence(check) {
   const values = [];
   if (check.behavior) values.push(check.behavior);
   for (const item of check.evidence) {
+    if (item.path) values.push(`${item.kind}: ${item.path}`);
+    else if (item.command) values.push(`${item.kind}: ${item.command}`);
+    else if (item.url) values.push(`${item.kind}: ${item.url}`);
+    else if (item.note) values.push(`${item.kind}: ${item.note}`);
+  }
+  return values.join("; ") || "none";
+}
+
+function nextGapText(gap) {
+  return gap.rationale ? `${gap.gap} ${gap.rationale}` : gap.gap;
+}
+
+function gapEvidence(gap) {
+  const values = [];
+  for (const item of gap.evidence) {
     if (item.path) values.push(`${item.kind}: ${item.path}`);
     else if (item.command) values.push(`${item.kind}: ${item.command}`);
     else if (item.url) values.push(`${item.kind}: ${item.url}`);

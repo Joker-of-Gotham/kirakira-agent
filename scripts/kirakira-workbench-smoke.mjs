@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createServer } from "node:net";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -14,6 +16,20 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_SMOKE_TIMEOUT_MS = 120_000;
 const DEFAULT_SMOKE_INTERVAL_MS = 1_000;
 const DEFAULT_SMOKE_PROBE_TIMEOUT_MS = 2_000;
+const DEFAULT_RESULT_PATH = resolve(
+  repoRoot,
+  "docs",
+  "upgrade",
+  "gates",
+  "workbench-presentation-smoke.json",
+);
+const LOCAL_TARGET_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
+const DEFAULT_PORT_BY_PROTOCOL = Object.freeze({
+  "http:": 80,
+  "https:": 443,
+  "ws:": 80,
+  "wss:": 443,
+});
 
 function readValue(args, index, name) {
   const value = args[index + 1];
@@ -44,6 +60,8 @@ export function normalizeSmokeArgs(argv) {
     timeoutMs: undefined,
     intervalMs: undefined,
     probeTimeoutMs: undefined,
+    resultPath: DEFAULT_RESULT_PATH,
+    writeResult: true,
   };
 
   for (let index = 0; index < args.length; index += 1) {
@@ -82,6 +100,21 @@ export function normalizeSmokeArgs(argv) {
         "--probe-timeout-ms",
       );
       index += 1;
+      continue;
+    }
+    if (arg === "--result") {
+      options.resultPath = resolve(readValue(args, index, "--result"));
+      index += 1;
+      continue;
+    }
+    if (arg === "--write-result") {
+      options.resultPath = resolve(readValue(args, index, "--write-result"));
+      options.writeResult = true;
+      index += 1;
+      continue;
+    }
+    if (arg === "--no-write-result") {
+      options.writeResult = false;
       continue;
     }
     if (arg === "--skip-infra") {
@@ -137,6 +170,99 @@ function readinessTargetSummary(check) {
   );
 }
 
+function relativeEvidencePath(path) {
+  return path.replaceAll("\\", "/").replace(`${repoRoot.replaceAll("\\", "/")}/`, "");
+}
+
+function readSmokeResult(path) {
+  if (!path || !existsSync(path)) return undefined;
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    return { schemaVersion: 1, status: "invalid", path: relativeEvidencePath(path) };
+  }
+}
+
+function sameStringArray(left, right) {
+  return (
+    Array.isArray(left) &&
+    Array.isArray(right) &&
+    left.length === right.length &&
+    left.every((item, index) => item === right[index])
+  );
+}
+
+function surfaceNames(smokeCommand) {
+  return smokeCommand.gate
+    ? smokeCommand.surfaces.map((surface) => surface.plan.surface)
+    : [smokeCommand.plan.surface];
+}
+
+function smokeEvidenceIdentity(smokeCommand) {
+  return {
+    gate: smokeCommand.gate ? smokeCommand.gate.name : `workbench:${smokeCommand.plan.surface}`,
+    profile: smokeCommand.gate ? smokeCommand.profile.name : smokeCommand.plan.profile,
+    checks: smokeCommand.checks,
+    surfaces: surfaceNames(smokeCommand),
+  };
+}
+
+function smokeResultMatches(result, expected) {
+  return Boolean(
+    isRecord(result) &&
+      result.schemaVersion === 1 &&
+      result.status === "passed" &&
+      result.gate === expected.gate &&
+      result.profile === expected.profile &&
+      sameStringArray(result.checks, expected.checks) &&
+      sameStringArray(result.surfaces, expected.surfaces),
+  );
+}
+
+function liveEnvForSmoke(smokeCommand) {
+  return smokeCommand.gate?.liveEnv ?? "KIRAKIRA_WORKBENCH_SMOKE_LIVE";
+}
+
+function applySmokeEvidence(smokeCommand, options) {
+  const resultPath = options.resultPath === null ? undefined : (options.resultPath ?? DEFAULT_RESULT_PATH);
+  const result = readSmokeResult(resultPath);
+  const expectedResult = smokeEvidenceIdentity(smokeCommand);
+  const resultPassed = smokeResultMatches(result, expectedResult);
+  const skipReason = resultPassed
+    ? undefined
+    : smokeCommand.live
+      ? undefined
+      : `live gate is opt-in; set ${liveEnvForSmoke(smokeCommand)}=1 or pass --live`;
+
+  return {
+    ...smokeCommand,
+    schemaVersion: 1,
+    status: resultPassed ? "passed" : smokeCommand.live ? "ready" : "skipped",
+    ...(skipReason ? { skipReason } : {}),
+    evidence: {
+      ...(resultPath ? { resultPath: relativeEvidencePath(resultPath) } : {}),
+      ...(isRecord(result)
+        ? {
+            resultStatus: typeof result.status === "string" ? result.status : "unknown",
+            resultPassedAt: typeof result.passedAt === "string" ? result.passedAt : undefined,
+            resultMatches: resultPassed,
+          }
+        : {}),
+    },
+    liveGate: {
+      status: resultPassed ? "passed" : smokeCommand.live ? "pending" : "skipped",
+      ...(skipReason ? { skipReason } : {}),
+      command: smokeCommand.gate
+        ? `node scripts/kirakira-workbench-smoke.mjs --profile ${expectedResult.profile} --gate ${expectedResult.gate} --live`
+        : `node scripts/kirakira-workbench-smoke.mjs --profile ${expectedResult.profile} --surface ${smokeCommand.plan.surface} --live`,
+      checks: expectedResult.checks,
+      surfaces: expectedResult.surfaces,
+      targets: smokeCommand.targets,
+      timeoutMs: smokeCommand.readiness.timeoutMs,
+    },
+  };
+}
+
 export function buildWorkbenchSmokeTargets(readinessPlan) {
   return Object.fromEntries(
     (readinessPlan.checks ?? []).map((check) => [
@@ -152,6 +278,111 @@ function uniqueStrings(values) {
 
 function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function ownsDaemonTargets(plan) {
+  return plan.steps.some((step) => step.name === "daemon");
+}
+
+function ownsPresentationTargets(plan) {
+  const surface = plan.surface;
+  if (typeof surface !== "string" || surface.length === 0) return false;
+  return plan.steps.some((step) =>
+    step.name === surface || step.name === `${surface}-renderer` || step.name.startsWith(`${surface}-`),
+  );
+}
+
+export function ownedWorkbenchSmokeTargetNames(smokeCommand) {
+  const plan = smokeCommand.plan;
+  if (!plan) return [];
+  const owned = [];
+  for (const checkName of smokeCommand.checks ?? []) {
+    if (checkName.startsWith("daemon:") && ownsDaemonTargets(plan)) {
+      owned.push(checkName);
+      continue;
+    }
+    if (checkName === `presentation:${plan.surface}` && ownsPresentationTargets(plan)) {
+      owned.push(checkName);
+    }
+  }
+  return uniqueStrings(owned);
+}
+
+function localTcpTarget(checkName, target) {
+  if (!isRecord(target) || typeof target.target !== "string") return undefined;
+  let url;
+  try {
+    url = new URL(target.target);
+  } catch {
+    return undefined;
+  }
+  const defaultPort = DEFAULT_PORT_BY_PROTOCOL[url.protocol];
+  const port = url.port ? Number(url.port) : defaultPort;
+  if (!Number.isInteger(port) || port < 1) return undefined;
+  if (!LOCAL_TARGET_HOSTS.has(url.hostname)) return undefined;
+  return {
+    checkName,
+    target: target.target,
+    host: url.hostname,
+    port,
+    key: `${url.hostname}:${port}`,
+  };
+}
+
+export function ownedWorkbenchSmokeTcpTargets(smokeCommand) {
+  const targets = [];
+  const seen = new Set();
+  for (const checkName of ownedWorkbenchSmokeTargetNames(smokeCommand)) {
+    const target = localTcpTarget(checkName, smokeCommand.targets?.[checkName]);
+    if (!target || seen.has(target.key)) continue;
+    seen.add(target.key);
+    targets.push(target);
+  }
+  return targets;
+}
+
+function probeTcpPortAvailable(target) {
+  return new Promise((resolveProbe) => {
+    const server = createServer();
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      resolveProbe({
+        ...target,
+        ...result,
+      });
+    };
+    server.once("error", (error) => {
+      finish({
+        available: false,
+        code: error?.code,
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    });
+    server.once("listening", () => {
+      server.close(() => {
+        finish({ available: true });
+      });
+    });
+    server.listen({ host: target.host, port: target.port, exclusive: true });
+  });
+}
+
+export async function assertWorkbenchSmokeTargetsAvailable(smokeCommand, options = {}) {
+  const probe = options.probe ?? probeTcpPortAvailable;
+  const targets = ownedWorkbenchSmokeTcpTargets(smokeCommand);
+  const results = await Promise.all(targets.map((target) => probe(target)));
+  const occupied = results.filter((result) => result.available === false);
+  if (occupied.length === 0) return results;
+  const detail = occupied
+    .map((result) =>
+      `${result.checkName} ${result.target} on ${result.host}:${result.port}${result.code ? ` (${result.code})` : ""}`,
+    )
+    .join("; ");
+  throw new Error(
+    `Workbench smoke target ports are already in use: ${detail}. Stop the stale Kirakira process or choose a runtime profile/env port override before running the live gate.`,
+  );
 }
 
 export function resolveWorkbenchSmokeGate(profile, gateName = undefined) {
@@ -186,7 +417,7 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
     skipDaemon: options.skipDaemon,
   });
   const readinessPlan = readinessPlanForCheckNames(plan.readiness, plan.smoke?.checks ?? []);
-  return {
+  return applySmokeEvidence({
     live: liveRequested(options, env),
     profile,
     plan,
@@ -198,7 +429,7 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
       intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
       probeTimeoutMs: options.probeTimeoutMs ?? DEFAULT_SMOKE_PROBE_TIMEOUT_MS,
     },
-  };
+  }, options);
 }
 
 export function buildWorkbenchSmokeGateCommand(options = {}, env = process.env) {
@@ -215,7 +446,7 @@ export function buildWorkbenchSmokeGateCommand(options = {}, env = process.env) 
       env,
     ),
   );
-  return {
+  return applySmokeEvidence({
     live: liveRequested(options, env, gate),
     profile,
     gate,
@@ -227,10 +458,15 @@ export function buildWorkbenchSmokeGateCommand(options = {}, env = process.env) 
       intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
       probeTimeoutMs: options.probeTimeoutMs ?? DEFAULT_SMOKE_PROBE_TIMEOUT_MS,
     },
-  };
+  }, options);
 }
 
 export async function runWorkbenchSmoke(smokeCommand, options = {}) {
+  if (smokeCommand.live && options.portPreflight !== false) {
+    await assertWorkbenchSmokeTargetsAvailable(smokeCommand, {
+      probe: options.portProbe,
+    });
+  }
   await runWorkbenchSmokePlan(smokeCommand.plan, {
     supervisor: options.supervisor,
     processes: options.processes,
@@ -268,23 +504,33 @@ function surfaceSmokeReport(smokePlan) {
 function smokeReport(smokePlan) {
   if (smokePlan.gate) {
     return {
+      schemaVersion: smokePlan.schemaVersion,
       profile: smokePlan.profile.name,
       gate: smokePlan.gate.name,
       gateSource: smokePlan.gate.source,
       live: smokePlan.live,
+      status: smokePlan.status,
+      ...(smokePlan.skipReason ? { skipReason: smokePlan.skipReason } : {}),
       checks: smokePlan.checks,
       targets: smokePlan.targets,
+      evidence: smokePlan.evidence,
+      liveGate: smokePlan.liveGate,
       readiness: smokePlan.readiness,
       surfaces: smokePlan.surfaces.map(surfaceSmokeReport),
     };
   }
 
   return {
+    schemaVersion: smokePlan.schemaVersion,
     profile: smokePlan.plan.profile,
     surface: smokePlan.plan.surface,
     live: smokePlan.live,
+    status: smokePlan.status,
+    ...(smokePlan.skipReason ? { skipReason: smokePlan.skipReason } : {}),
     checks: smokePlan.checks,
     targets: smokePlan.targets,
+    evidence: smokePlan.evidence,
+    liveGate: smokePlan.liveGate,
     stepOverrides: smokePlan.plan.smoke?.stepOverrides ?? [],
     readiness: smokePlan.readiness,
     readinessPlan: smokePlan.readinessPlan,
@@ -296,6 +542,29 @@ function smokeReport(smokePlan) {
       waitFor: step.waitFor,
     })),
   };
+}
+
+export function writeWorkbenchSmokeResult(smokePlan, path = DEFAULT_RESULT_PATH) {
+  if (!path) return undefined;
+  const identity = smokeEvidenceIdentity(smokePlan);
+  const result = {
+    schemaVersion: 1,
+    gate: identity.gate,
+    profile: identity.profile,
+    status: "passed",
+    passedAt: new Date().toISOString(),
+    checks: identity.checks,
+    surfaces: identity.surfaces,
+    targets: smokePlan.targets,
+    command: smokePlan.gate
+      ? `node scripts/kirakira-workbench-smoke.mjs --profile ${identity.profile} --gate ${identity.gate} --live`
+      : `node scripts/kirakira-workbench-smoke.mjs --profile ${identity.profile} --surface ${identity.surfaces[0]} --live`,
+    readiness: smokePlan.readiness,
+  };
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify(result, null, 2)}\n`);
+  console.log(`Wrote live workbench smoke evidence to ${relativeEvidencePath(path)}.`);
+  return result;
 }
 
 async function main(argv) {
@@ -311,7 +580,11 @@ async function main(argv) {
   }
 
   if (!smokePlan.live) {
-    console.log("Skipping live workbench smoke; set KIRAKIRA_LIVE_E2E=1 or pass --live to start services.");
+    if (smokePlan.status === "passed") {
+      console.log("Live workbench smoke already has matching pass evidence.");
+    } else {
+      console.log(`Skipping live workbench smoke; ${smokePlan.skipReason}.`);
+    }
     console.log(JSON.stringify(report, null, 2));
     return;
   }
@@ -323,6 +596,9 @@ async function main(argv) {
     await runWorkbenchSmokeGate(smokePlan, { installSignalHandlers: true });
   } else {
     await runWorkbenchSmoke(smokePlan, { installSignalHandlers: true });
+  }
+  if (options.writeResult !== false) {
+    writeWorkbenchSmokeResult(smokePlan, options.resultPath ?? DEFAULT_RESULT_PATH);
   }
 }
 

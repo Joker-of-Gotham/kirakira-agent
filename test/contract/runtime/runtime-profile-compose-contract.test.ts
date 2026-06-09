@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRuntimeComposePlan,
   buildRuntimeReadinessPlan,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
@@ -161,9 +162,16 @@ describe("runtime profile compose contracts", () => {
   it("keeps test-host services aligned with docker-compose.test.yml", () => {
     const profile = resolveRuntimeProfile("test-host", loadRuntimeProfiles(), emptyEnv);
     const compose = loadComposeFile("docker-compose.test.yml", import.meta.url);
+    const composePlan = buildRuntimeComposePlan(profile);
+    const readiness = buildRuntimeReadinessPlan(profile);
 
     expect(profile.composeProject).toBe("kirakira-agent-test");
     expect(profile.composeFiles).toEqual(["docker-compose.test.yml"]);
+    expect(readiness.compose).toMatchObject({
+      project: composePlan.project,
+      files: composePlan.files,
+      profiles: composePlan.profiles,
+    });
     expect(Object.keys(profile.services ?? {}).sort()).toEqual([
       "minio",
       "neo4j",

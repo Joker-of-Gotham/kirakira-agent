@@ -634,11 +634,27 @@ function browserGatewayHealthUrl(endpoint) {
   }
 }
 
-function runtimeComposeReadiness(composeArgs, composeServiceNames) {
+function composePlanArgs(composePlan) {
+  if (Array.isArray(composePlan)) return composePlan;
+  return Array.isArray(composePlan?.args) ? composePlan.args : [];
+}
+
+function composePlanMetadata(composePlan) {
+  if (!isRecord(composePlan)) return {};
+  return {
+    ...(typeof composePlan.project === "string" ? { project: composePlan.project } : {}),
+    ...(Array.isArray(composePlan.files) ? { files: composePlan.files } : {}),
+    ...(Array.isArray(composePlan.profiles) ? { profiles: composePlan.profiles } : {}),
+  };
+}
+
+function runtimeComposeReadiness(composePlan, composeServiceNames) {
+  const composeArgs = composePlanArgs(composePlan);
   if (composeArgs.length === 0 || composeServiceNames.length === 0) return undefined;
   return {
     command: "docker",
     args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
+    ...composePlanMetadata(composePlan),
     services: composeServiceNames,
     wait: "running|healthy",
   };
@@ -704,13 +720,13 @@ function memoryStackServicePlan(config, profile, serviceName) {
 
 export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
   const enabled = isRecord(profile.memory) && profile.memory.enabled !== false;
   const serviceNames = memoryStackServiceNames(profile);
-  const composeArgs = renderComposeArgs(profile);
   const composeServiceNames = uniqueStrings(
     serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
   );
-  const compose = runtimeComposeReadiness(composeArgs, composeServiceNames);
+  const compose = runtimeComposeReadiness(composePlan, composeServiceNames);
   const composeEnabled = Boolean(compose);
   return {
     schemaVersion: 1,
@@ -874,6 +890,7 @@ function renderRuntimeStartupStep(profile, step, env, options) {
 
 export function buildRuntimeSurfaceStartupPlan(profile = resolveRuntimeProfile(), surface, options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
   const env = renderRuntimeEnv(profile);
   const infraServices = Array.isArray(profile.workbench?.infraServices)
     ? profile.workbench.infraServices
@@ -882,6 +899,7 @@ export function buildRuntimeSurfaceStartupPlan(profile = resolveRuntimeProfile()
   const readiness = buildRuntimeReadinessPlan(profile, {
     ...options,
     config,
+    composePlan,
     services: options.skipInfra ? [] : infraServices,
   });
   const steps = [];
@@ -930,6 +948,7 @@ function buildContainerStartupPlan(profile, options = {}) {
   const startup = profile.containerStartup;
   if (!isRecord(startup)) return undefined;
   const config = runtimeConfigForProfile(profile, options);
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
   const runtimeServices = Array.isArray(startup.runtimeServices)
     ? uniqueStrings(startup.runtimeServices)
     : [];
@@ -945,18 +964,19 @@ function buildContainerStartupPlan(profile, options = {}) {
     defaultCommand: Array.isArray(startup.defaultCommand) ? startup.defaultCommand : [],
     interactiveCommands: Array.isArray(startup.interactiveCommands) ? startup.interactiveCommands : [],
     runOptions: Array.isArray(startup.runOptions) ? startup.runOptions : [],
-    compose: runtimeComposeReadiness(renderComposeArgs(profile), composeServiceNames),
+    compose: runtimeComposeReadiness(composePlan, composeServiceNames),
   };
 }
 
 export function buildRuntimeStartupPlan(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
   const env = options.envPlan ?? buildRuntimeEnvPlan(profile);
-  const readiness = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config });
+  const readiness = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config, composePlan });
   const mcpConfig = options.mcpConfigPlan ?? buildMcpConfigPlan(profile, { ...options, config });
-  const memoryStack = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config });
-  const container = buildContainerStartupPlan(profile, { ...options, config });
-  const surfaces = buildRuntimeSurfaceStartupPlans(profile, { ...options, config });
+  const memoryStack = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config, composePlan });
+  const container = buildContainerStartupPlan(profile, { ...options, config, composePlan });
+  const surfaces = buildRuntimeSurfaceStartupPlans(profile, { ...options, config, composePlan });
   return {
     schemaVersion: 1,
     profile: profile.name,
@@ -1059,8 +1079,9 @@ function runtimeServiceProjection(config, profile, serviceName, readinessCheck, 
 
 export function buildRuntimeServiceProjection(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
-  const readinessPlan = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config });
-  const memoryStackPlan = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config });
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
+  const readinessPlan = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config, composePlan });
+  const memoryStackPlan = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config, composePlan });
   const readinessByService = checksByService(readinessPlan.checks);
   const memoryByService = servicesByName(memoryStackPlan.services);
   const serviceNames = uniqueStrings([
@@ -1095,13 +1116,15 @@ export function buildRuntimeMcpProjection(mcpConfigPlan) {
 
 export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const compose = buildRuntimeComposePlan(profile);
   const env = buildRuntimeEnvPlan(profile);
-  const readiness = buildRuntimeReadinessPlan(profile, { ...options, config });
+  const readiness = buildRuntimeReadinessPlan(profile, { ...options, config, composePlan: compose });
   const mcpConfig = buildMcpConfigPlan(profile, { ...options, config });
-  const memoryStack = buildMemoryStackPlan(profile, { ...options, config });
+  const memoryStack = buildMemoryStackPlan(profile, { ...options, config, composePlan: compose });
   const startup = buildRuntimeStartupPlan(profile, {
     ...options,
     config,
+    composePlan: compose,
     envPlan: env,
     readinessPlan: readiness,
     mcpConfigPlan: mcpConfig,
@@ -1114,12 +1137,14 @@ export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(),
     services: buildRuntimeServiceProjection(profile, {
       ...options,
       config,
+      composePlan: compose,
       readinessPlan: readiness,
       memoryStackPlan: memoryStack,
     }),
     mcp: buildRuntimeMcpProjection(mcpConfig),
     fragments: {
       env,
+      compose,
       readiness,
       mcpConfig,
       memoryStack,
@@ -1356,14 +1381,14 @@ function profileReadinessChecks(context) {
 
 export function buildRuntimeReadinessPlan(profile = resolveRuntimeProfile(), options = {}) {
   const config = options.config ?? loadRuntimeProfiles();
-  const composeArgs = renderComposeArgs(profile);
+  const composePlan = options.composePlan ?? buildRuntimeComposePlan(profile);
   const serviceNames = uniqueStrings(
     Array.isArray(options.services) ? options.services : readinessServiceNames(profile),
   );
   const composeServiceNames = uniqueStrings(
     serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
   );
-  const compose = runtimeComposeReadiness(composeArgs, composeServiceNames);
+  const compose = runtimeComposeReadiness(composePlan, composeServiceNames);
   const composeEnabled = Boolean(compose);
   const env = renderRuntimeEnv(profile);
   const checks = serviceNames.map((serviceName) =>
@@ -1454,6 +1479,24 @@ export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {
   };
   renderBoundEnv(env, profile);
   return env;
+}
+
+export function buildRuntimeComposePlan(profile = resolveRuntimeProfile()) {
+  const files = Array.isArray(profile.composeFiles) ? [...profile.composeFiles] : [];
+  const profiles = Array.isArray(profile.composeProfiles) ? [...profile.composeProfiles] : [];
+  const project = typeof profile.composeProject === "string" && profile.composeProject.length > 0
+    ? profile.composeProject
+    : undefined;
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.compose",
+    ...(project ? { project } : {}),
+    files,
+    profiles,
+    args: renderComposeArgs(profile),
+  };
 }
 
 export function renderComposeArgs(profile = resolveRuntimeProfile()) {
@@ -1692,6 +1735,9 @@ const PROFILE_ACTIONS = {
   },
   "compose-args"(profile) {
     console.log(renderComposeArgs(profile).join(" "));
+  },
+  compose(profile) {
+    console.log(JSON.stringify(buildRuntimeComposePlan(profile), null, 2));
   },
   readiness(profile) {
     console.log(JSON.stringify(buildRuntimeReadinessPlan(profile), null, 2));

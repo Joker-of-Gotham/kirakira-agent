@@ -112,6 +112,11 @@ describe("EAM parity audit", () => {
       "export const local = true;\n",
       "utf8",
     );
+    writeFile(
+      workspace,
+      "packages/memory-service/.kirakira/runtime/events.sqlite/_index.sqlite",
+      "generated",
+    );
     mkdirSync(join(reference, "docs", "plane"), { recursive: true });
     mkdirSync(join(workspace, "docs", "plane"), { recursive: true });
 
@@ -158,6 +163,18 @@ describe("EAM parity audit", () => {
       "docs/upgrade/eam-behavior-parity.json",
       JSON.stringify({
         schemaVersion: 1,
+        nextMechanismGap: {
+          id: "runtime-profile-dedup",
+          targetName: "runtime-daemon",
+          priority: "high",
+          status: "partial",
+          gap: "Centralize runtime profile selection before adding more daemon adapters.",
+          rationale: "Memory-store closure leaves daemon/profile duplication as the next shared risk.",
+          evidence: [
+            { kind: "source", path: "packages/runtime-daemon/src/bridge/runtime-profile.ts" },
+          ],
+          commands: ["node scripts/eam-parity-audit.mjs --depth files"],
+        },
         checks: [
           {
             kind: "package",
@@ -189,11 +206,19 @@ describe("EAM parity audit", () => {
       status: { covered: 1 },
       driftRows: { total: 1, checked: 1, unchecked: 0 },
     });
+    expect(audit.behaviorParity?.nextMechanismGap).toMatchObject({
+      id: "runtime-profile-dedup",
+      targetName: "runtime-daemon",
+      priority: "high",
+      status: "partial",
+    });
     expect(row?.behaviorCheck).toMatchObject({
       classification: "intentional-kirakira-extension",
       status: "covered",
     });
     expect(markdown).toContain("## Behavior Parity Checks");
+    expect(markdown).toContain("### Next Mechanism Gap");
+    expect(markdown).toContain("Centralize runtime profile selection");
     expect(markdown).toContain("local extension preserves source file parity");
   });
 

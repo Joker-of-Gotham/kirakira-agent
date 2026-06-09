@@ -133,7 +133,8 @@ function validProbe(): ElectronSmokeRendererProbe {
     textMarkers: [
       { text: "Kirakira Agent", found: true },
       { text: "Desktop IPC", found: true },
-      { text: "Runtime workbench", found: true },
+      { text: "Runs Workbench", found: true },
+      { text: "Recent Runs", found: true },
     ],
     bridge: {
       apiKey: "kirakiraRuntime",
@@ -159,6 +160,6 @@ function validProbe(): ElectronSmokeRendererProbe {
       nodeVersionExposed: false,
       electronApiExposed: false,
     },
-    bodyTextSample: "Kirakira Agent Desktop IPC Runtime workbench",
+    bodyTextSample: "Kirakira Agent Desktop IPC Runs Workbench Recent Runs",
   };
 }

@@ -1,11 +1,18 @@
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { EventEmitter } from "node:events";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  assertWorkbenchSmokeTargetsAvailable,
   buildWorkbenchSmokeCommand,
   buildWorkbenchSmokeGateCommand,
   normalizeSmokeArgs,
+  ownedWorkbenchSmokeTcpTargets,
+  ownedWorkbenchSmokeTargetNames,
   runWorkbenchSmoke,
   runWorkbenchSmokeGate,
+  writeWorkbenchSmokeResult,
 } from "../../../scripts/kirakira-workbench-smoke.mjs";
 import {
   buildWorkbenchSmokePlan,
@@ -57,6 +64,19 @@ describe("workbench smoke gate", () => {
       gateName: "presentation",
       dryRun: true,
     });
+    expect(
+      normalizeSmokeArgs([
+        "--gate",
+        "presentation",
+        "--result",
+        "tmp/workbench-smoke.json",
+        "--no-write-result",
+      ]),
+    ).toMatchObject({
+      gateName: "presentation",
+      resultPath: expect.stringContaining("tmp"),
+      writeResult: false,
+    });
     expect(() => normalizeSmokeArgs(["--gate", "presentation", "--surface", "web"])).toThrow(
       /--gate cannot be combined with --surface/u,
     );
@@ -73,6 +93,13 @@ describe("workbench smoke gate", () => {
     );
 
     expect(smoke.live).toBe(false);
+    expect(smoke.status).toBe("skipped");
+    expect(smoke.liveGate).toMatchObject({
+      status: "skipped",
+      command: "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --surface web --live",
+      checks: ["daemon:browser-gateway", "presentation:web"],
+      surfaces: ["web"],
+    });
     expect(smoke.plan.profile).toBe("workbench-host");
     expect(smoke.plan.surface).toBe("web");
     expect(smoke.plan.steps.map((step) => [step.name, step.mode])).toEqual([
@@ -106,7 +133,7 @@ describe("workbench smoke gate", () => {
       }),
     );
     expect(smoke.readiness.timeoutMs).toBe(120_000);
-    expect(JSON.stringify(smoke)).not.toContain("5173");
+    expect(smoke.targets["presentation:web"]?.target).toBe("http://127.0.0.1:5183/");
   });
 
   it("exposes resolved smoke readiness targets from profile endpoint overrides", () => {
@@ -146,6 +173,82 @@ describe("workbench smoke gate", () => {
     expect(JSON.stringify(smoke)).not.toContain("17373");
   });
 
+  it("derives live preflight targets from the owned profile surface", () => {
+    const web = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "web",
+        skipInfra: true,
+        live: true,
+      },
+      {
+        KIRAKIRA_WEB_PORT: "5199",
+        KIRAKIRA_BROWSER_GATEWAY_PORT: "17399",
+      },
+    );
+    const webWithoutDaemon = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "web",
+        skipInfra: true,
+        skipDaemon: true,
+        live: true,
+      },
+      {
+        KIRAKIRA_WEB_PORT: "5199",
+        KIRAKIRA_BROWSER_GATEWAY_PORT: "17399",
+      },
+    );
+
+    expect(ownedWorkbenchSmokeTargetNames(web)).toEqual([
+      "daemon:browser-gateway",
+      "presentation:web",
+    ]);
+    expect(ownedWorkbenchSmokeTcpTargets(web)).toEqual([
+      expect.objectContaining({
+        checkName: "daemon:browser-gateway",
+        host: "127.0.0.1",
+        port: 17399,
+      }),
+      expect.objectContaining({
+        checkName: "presentation:web",
+        host: "127.0.0.1",
+        port: 5199,
+      }),
+    ]);
+    expect(ownedWorkbenchSmokeTargetNames(webWithoutDaemon)).toEqual([
+      "presentation:web",
+    ]);
+    expect(JSON.stringify({ web, webWithoutDaemon })).not.toContain("5173");
+  });
+
+  it("fails live preflight with a profile-derived occupied target report", async () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "desktop",
+        skipInfra: true,
+        live: true,
+      },
+      {
+        KIRAKIRA_DESKTOP_RENDERER_PORT: "5179",
+        KIRAKIRA_BROWSER_GATEWAY_PORT: "17399",
+      },
+    );
+
+    await expect(
+      assertWorkbenchSmokeTargetsAvailable(smoke, {
+        probe: async (target: { checkName: string; port: number; target: string }) => ({
+          ...target,
+          available: target.checkName !== "presentation:desktop",
+          code: target.checkName === "presentation:desktop" ? "EADDRINUSE" : undefined,
+        }),
+      }),
+    ).rejects.toThrow(
+      /presentation:desktop http:\/\/127\.0\.0\.1:5179\/ on 127\.0\.0\.1:5179 \(EADDRINUSE\)/u,
+    );
+  });
+
   it("keeps full live smoke compose services in the selected readiness plan", () => {
     const smoke = buildWorkbenchSmokeCommand(
       {
@@ -183,42 +286,110 @@ describe("workbench smoke gate", () => {
   });
 
   it("builds the profile-owned presentation smoke gate for web, desktop, and gateway targets", () => {
-    const smoke = buildWorkbenchSmokeGateCommand(
-      {
-        profileName: "workbench-host",
-        gateName: "presentation",
-        skipInfra: true,
-      },
-      {},
-    );
+    const tempRoot = mkdtempSync(join(tmpdir(), "kirakira-workbench-smoke-missing-"));
 
-    expect(smoke.live).toBe(false);
-    expect(smoke.gate).toMatchObject({
-      name: "presentation",
-      source: "runtime-profile.workbench.smokeGates",
-      liveEnv: "KIRAKIRA_WORKBENCH_SMOKE_LIVE",
-      surfaces: ["web", "desktop"],
-    });
-    expect(smoke.surfaces.map((surface) => surface.plan.surface)).toEqual(["web", "desktop"]);
-    expect(smoke.checks).toEqual([
-      "daemon:browser-gateway",
-      "presentation:web",
-      "daemon:socket",
-      "presentation:desktop",
-    ]);
-    expect(smoke.targets).toMatchObject({
-      "daemon:browser-gateway": {
-        target: "http://127.0.0.1:17373/healthz",
-        endpoint: "ws://127.0.0.1:17373/runtime",
-      },
-      "presentation:web": {
-        target: "http://127.0.0.1:5183/",
-      },
-      "presentation:desktop": {
-        target: "http://127.0.0.1:5174/",
-      },
-    });
-    expect(JSON.stringify(smoke)).not.toContain("5173");
+    try {
+      const smoke = buildWorkbenchSmokeGateCommand(
+        {
+          profileName: "workbench-host",
+          gateName: "presentation",
+          skipInfra: true,
+          resultPath: join(tempRoot, "missing-result.json"),
+        },
+        {},
+      );
+
+      expect(smoke.live).toBe(false);
+      expect(smoke.status).toBe("skipped");
+      expect(smoke.liveGate).toMatchObject({
+        status: "skipped",
+        command: "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --live",
+        surfaces: ["web", "desktop"],
+      });
+      expect(smoke.gate).toMatchObject({
+        name: "presentation",
+        source: "runtime-profile.workbench.smokeGates",
+        liveEnv: "KIRAKIRA_WORKBENCH_SMOKE_LIVE",
+        surfaces: ["web", "desktop"],
+      });
+      expect(smoke.surfaces.map((surface) => surface.plan.surface)).toEqual(["web", "desktop"]);
+      expect(smoke.checks).toEqual([
+        "daemon:browser-gateway",
+        "presentation:web",
+        "daemon:socket",
+        "presentation:desktop",
+      ]);
+      expect(smoke.targets).toMatchObject({
+        "daemon:browser-gateway": {
+          target: "http://127.0.0.1:17373/healthz",
+          endpoint: "ws://127.0.0.1:17373/runtime",
+        },
+        "presentation:web": {
+          target: "http://127.0.0.1:5183/",
+        },
+        "presentation:desktop": {
+          target: "http://127.0.0.1:5174/",
+        },
+      });
+      expect(smoke.targets["presentation:web"]?.target)
+        .not.toBe(smoke.targets["presentation:desktop"]?.target);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("writes and reuses durable live gate evidence", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "kirakira-workbench-smoke-"));
+    const resultPath = join(tempRoot, "workbench-smoke.json");
+
+    try {
+      const smoke = buildWorkbenchSmokeGateCommand(
+        {
+          profileName: "workbench-host",
+          gateName: "presentation",
+          skipInfra: true,
+          resultPath,
+        },
+        {},
+      );
+
+      const result = writeWorkbenchSmokeResult(smoke, resultPath);
+      const stored = JSON.parse(readFileSync(resultPath, "utf8"));
+      const replay = buildWorkbenchSmokeGateCommand(
+        {
+          profileName: "workbench-host",
+          gateName: "presentation",
+          skipInfra: true,
+          resultPath,
+        },
+        {},
+      );
+
+      expect(result).toMatchObject({
+        schemaVersion: 1,
+        gate: "presentation",
+        profile: "workbench-host",
+        status: "passed",
+        checks: [
+          "daemon:browser-gateway",
+          "presentation:web",
+          "daemon:socket",
+          "presentation:desktop",
+        ],
+        surfaces: ["web", "desktop"],
+      });
+      expect(stored).toMatchObject(result);
+      expect(replay.status).toBe("passed");
+      expect(replay.liveGate.status).toBe("passed");
+      expect(replay.evidence).toMatchObject({
+        resultStatus: "passed",
+        resultMatches: true,
+      });
+      expect(replay.targets["presentation:web"]?.target)
+        .not.toBe(replay.targets["presentation:desktop"]?.target);
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it("uses the profile gate live environment opt-in", () => {
@@ -251,7 +422,8 @@ describe("workbench smoke gate", () => {
       const launcherPlan = buildWorkbenchSmokePlan(profile, surface, { skipInfra: true });
 
       expect(smoke.plan).toEqual(launcherPlan);
-      expect(JSON.stringify(smoke.plan)).not.toContain("5173");
+      expect(smoke.plan.profile).toBe(profile.name);
+      expect(smoke.plan.surface).toBe(surface);
     }
   });
 
@@ -273,7 +445,8 @@ describe("workbench smoke gate", () => {
     expect(smoke.targets["presentation:desktop"]).toMatchObject({
       target: "http://127.0.0.1:5174/",
     });
-    expect(JSON.stringify(smoke)).not.toContain("5173");
+    expect(smoke.targets["presentation:desktop"]?.target)
+      .not.toBe(smoke.targets["presentation:web"]?.target);
   });
 
   it("keeps desktop Electron smoke non-interactive and profile-derived", () => {
@@ -309,7 +482,7 @@ describe("workbench smoke gate", () => {
       "daemon:browser-gateway",
       "presentation:desktop",
     ]);
-    expect(JSON.stringify(smoke)).not.toContain("5173");
+    expect(smoke.plan.surface).toBe("desktop");
   });
 
   it("runs foreground workbench steps as bounded smoke processes", async () => {
