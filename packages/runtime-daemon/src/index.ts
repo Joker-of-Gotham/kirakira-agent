@@ -67,6 +67,7 @@ export {
   registerMcpConfigFile,
   registerResolvedProfileServers,
 } from "./bridge/mcp-runtime-deps.js";
+export { createDaemonMcpOtelSdkFactory } from "./bridge/mcp-otel-sdk-factory.js";
 export type {
   DaemonMcpRuntimeOptions,
   DaemonMcpToolCallInput,

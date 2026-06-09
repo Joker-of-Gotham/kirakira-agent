@@ -58,7 +58,8 @@ remains `http://127.0.0.1:5174/`, and the browser gateway remains
 
 ## Remaining Risks
 
-- OpenTelemetry SDK/OTLP mode still requires daemon/runtime hosts to inject a
-  concrete SDK factory when a profile asks for SDK-owned export.
+- OpenTelemetry SDK/OTLP host injection was still open in this slice and was
+  later closed by
+  `docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md`.
 - Live Docker/local checkpoint, retain/reflect, web, and Electron smoke gates
   still need a slower execution window.

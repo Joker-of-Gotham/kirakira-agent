@@ -8,6 +8,7 @@ import {
   InMemoryMcpSpanExporter,
   type McpAuditBridge,
   type McpClientManager,
+  type McpOtelSdkFactory,
   type OpenTelemetryApiLike,
 } from "@kirakira/mcp-adapter";
 import type { EnforcementResult, McpPep } from "@kirakira/policy-engine";
@@ -552,6 +553,150 @@ describe("DaemonMcpRuntime", () => {
     } finally {
       await missingApiDeps.close();
       await apiDeps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("uses a daemon-hosted OpenTelemetry SDK factory for MCP SDK recorder plans", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-sdk-"));
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp: {
+            telemetry: {
+              enabled: true,
+              mode: "opentelemetry-sdk",
+              tracerName: "kirakira.sdk.daemon.mcp",
+              exporter: {
+                type: "otlp",
+                otlp: {
+                  tracesEndpoint: "http://127.0.0.1:4318/v1/traces",
+                  tracesProtocol: "http/json",
+                  tracesTimeoutMs: 2500,
+                },
+              },
+            },
+          },
+        },
+      ],
+      "profiled-host",
+    );
+    const otelSpan = {
+      spanContext: vi.fn(() => ({
+        traceId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        spanId: "bbbbbbbbbbbbbbbb",
+      })),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      end: vi.fn(),
+    };
+    const tracer = { startSpan: vi.fn(() => otelSpan) };
+    const api: OpenTelemetryApiLike = {
+      context: { active: vi.fn(() => ({ active: true })) },
+      trace: {
+        getTracer: vi.fn(() => tracer),
+        setSpan: vi.fn((context, span) => ({ context, span })),
+      },
+      propagation: { inject: vi.fn() },
+    };
+    const shutdown = vi.fn(async () => {});
+    const sdkFactory: McpOtelSdkFactory = vi.fn(() => ({ api, shutdown }));
+    const manager = fakeManager({ content: [] });
+    const deps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelSdkFactory: sdkFactory,
+    });
+
+    try {
+      expect(deps.mcpOtelRecorderPlan).toMatchObject({
+        enabled: true,
+        mode: "opentelemetry-sdk",
+        tracerName: "kirakira.sdk.daemon.mcp",
+        sdk: {
+          tracesExporter: "otlp",
+          otlp: {
+            tracesEndpoint: "http://127.0.0.1:4318/v1/traces",
+            tracesProtocol: "http/json",
+            tracesTimeoutMs: 2500,
+          },
+        },
+      });
+      expect(sdkFactory).toHaveBeenCalledWith({
+        plan: expect.objectContaining({
+          mode: "opentelemetry-sdk",
+          tracerName: "kirakira.sdk.daemon.mcp",
+        }),
+      });
+      expect(deps.mcpSpanRecorder).toBeDefined();
+      expect(deps.mcpOtelRecorderError).toBeUndefined();
+
+      const span = deps.mcpSpanRecorder?.startSpan({
+        name: "tools/list",
+        kind: "CLIENT",
+        attributes: { "mcp.server.name": "filesystem-core" },
+      });
+      span?.end({ status: { code: "OK" }, endTimeUnixMs: 50 });
+      expect(api.trace.getTracer).toHaveBeenCalledWith("kirakira.sdk.daemon.mcp", undefined);
+      expect(tracer.startSpan).toHaveBeenCalledWith(
+        "tools/list",
+        expect.objectContaining({
+          kind: 2,
+          attributes: expect.objectContaining({
+            "service.name": "kirakira-agent",
+            "kirakira.runtime.profile": "profiled-host",
+            "mcp.server.name": "filesystem-core",
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(otelSpan.setStatus).toHaveBeenCalledWith({ code: 1 });
+      expect(otelSpan.end).toHaveBeenCalledWith(50);
+    } finally {
+      await deps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+    expect(shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps SDK-mode MCP OTel plans diagnosable when the daemon SDK factory is disabled", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-sdk-disabled-"));
+    const manager = fakeManager({ content: [] });
+    const deps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig: resolvedRuntimeConfig(
+        [
+          {
+            name: "profiled-host",
+            mode: "host",
+            mcp: { telemetry: { enabled: true, mode: "opentelemetry-sdk" } },
+          },
+        ],
+        "profiled-host",
+      ),
+      runtimeProfileName: "profiled-host",
+      mcpOtelSdkFactory: null,
+    });
+
+    try {
+      expect(deps.mcpOtelRecorderPlan).toMatchObject({
+        enabled: true,
+        mode: "opentelemetry-sdk",
+      });
+      expect(deps.mcpOtelRecorderError).toMatch(
+        /requires an injected OpenTelemetry SDK\/OTLP exporter factory/u,
+      );
+      expect(deps.mcpSpanRecorder).toBeUndefined();
+      expect(deps.mcpOtelShutdown).toBeUndefined();
+    } finally {
+      await deps.close();
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });

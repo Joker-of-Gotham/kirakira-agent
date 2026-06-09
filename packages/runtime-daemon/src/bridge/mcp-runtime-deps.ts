@@ -15,6 +15,7 @@ import {
   parseMcpConfigJson,
   type InMemoryMcpSpanExporter,
   type McpOtelRecorderPlan,
+  type McpOtelSdkFactory,
   type McpSpanExporter,
   type McpSpanRecorder,
   type OpenTelemetryApiLike,
@@ -26,6 +27,7 @@ import {
   ObligationExecutor,
   type AuditWriter,
 } from "@kirakira/policy-engine";
+import { createDaemonMcpOtelSdkFactory } from "./mcp-otel-sdk-factory.js";
 
 export interface DaemonMcpDependencyOptions {
   workspaceRoot: string;
@@ -40,6 +42,7 @@ export interface DaemonMcpDependencyOptions {
   mcpOtelRecorderPlan?: McpOtelRecorderPlan;
   mcpOtelApi?: OpenTelemetryApiLike;
   mcpOtelExporter?: McpSpanExporter;
+  mcpOtelSdkFactory?: McpOtelSdkFactory | null;
   mcpOtelEnv?: Record<string, string | undefined>;
   auditWriter?: AuditWriter;
 }
@@ -53,6 +56,7 @@ export interface DaemonMcpDependencies {
   mcpOtelRecorderPlan: McpOtelRecorderPlan;
   mcpOtelExporter?: InMemoryMcpSpanExporter;
   mcpOtelRecorderError?: string;
+  mcpOtelShutdown?: () => void | Promise<void>;
   ownsMcpManager: boolean;
   close(): Promise<void>;
 }
@@ -133,6 +137,7 @@ function mcpOtelRecorderSelection(
     | "mcpOtelEnv"
     | "mcpOtelExporter"
     | "mcpOtelRecorderPlan"
+    | "mcpOtelSdkFactory"
     | "mcpSpanRecorder"
     | "resolvedConfig"
     | "runtimeProfileName"
@@ -141,6 +146,7 @@ function mcpOtelRecorderSelection(
   plan: McpOtelRecorderPlan;
   recorder?: McpSpanRecorder;
   exporter?: InMemoryMcpSpanExporter;
+  shutdown?: () => void | Promise<void>;
   error?: string;
 } {
   const plan = buildDaemonMcpOtelRecorderPlan(options);
@@ -151,15 +157,22 @@ function mcpOtelRecorderSelection(
     };
   }
   try {
+    const sdkFactory = plan.mode === "opentelemetry-sdk"
+      ? options.mcpOtelSdkFactory === null
+        ? undefined
+        : options.mcpOtelSdkFactory ?? createDaemonMcpOtelSdkFactory()
+      : undefined;
     const created = createMcpOtelRecorderFromPlan({
       plan,
       ...(options.mcpOtelApi !== undefined ? { api: options.mcpOtelApi } : {}),
       ...(options.mcpOtelExporter !== undefined ? { exporter: options.mcpOtelExporter } : {}),
+      ...(sdkFactory !== undefined ? { sdkFactory } : {}),
     });
     return {
       plan: created.plan,
       ...(created.recorder !== undefined ? { recorder: created.recorder } : {}),
       ...(created.exporter !== undefined ? { exporter: created.exporter } : {}),
+      ...(created.shutdown !== undefined ? { shutdown: created.shutdown } : {}),
     };
   } catch (error) {
     return {
@@ -206,11 +219,13 @@ export function createDaemonMcpDependencies(
     ...(mcpOtel.recorder !== undefined ? { mcpSpanRecorder: mcpOtel.recorder } : {}),
     ...(mcpOtel.exporter !== undefined ? { mcpOtelExporter: mcpOtel.exporter } : {}),
     ...(mcpOtel.error !== undefined ? { mcpOtelRecorderError: mcpOtel.error } : {}),
+    ...(mcpOtel.shutdown !== undefined ? { mcpOtelShutdown: mcpOtel.shutdown } : {}),
     ownsMcpManager,
     async close() {
       if (ownsMcpManager) {
         await mcpManager.stopAll();
       }
+      await Promise.resolve(mcpOtel.shutdown?.());
       await pdp?.close();
     },
   };

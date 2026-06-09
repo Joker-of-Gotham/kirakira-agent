@@ -168,7 +168,7 @@
       "targetName": "mcp-adapter",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira adds profile-driven alias catalogs, gateway trust/policy/audit context, and MCP span propagation while preserving EAM adapter files.",
+      "behavior": "Kirakira adds profile-driven alias catalogs, gateway trust/policy/audit context, MCP span propagation, and daemon-hosted SDK export selection while preserving EAM adapter files.",
       "extensionFiles": [
         "packages/mcp-adapter/src/alias-catalog.ts",
         "packages/mcp-adapter/src/gateway-context.ts",
@@ -202,6 +202,10 @@
           "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
         },
         {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md"
+        },
+        {
           "kind": "spec",
           "url": "https://modelcontextprotocol.io/specification/2025-11-25/schema"
         },
@@ -211,7 +215,6 @@
         }
       ],
       "remainingGaps": [
-        "Inject a concrete OpenTelemetry SDK/OTLP factory from daemon/runtime hosts when a selected profile requires SDK-owned export.",
         "Add live propagation smoke coverage across daemon-owned MCP transports."
       ]
     },
@@ -313,6 +316,7 @@
         "packages/runtime-daemon/src/bin/kirakira-runtime-daemon.ts",
         "packages/runtime-daemon/src/bridge/agent-mcp-tool-gateway.ts",
         "packages/runtime-daemon/src/bridge/deep-research.ts",
+        "packages/runtime-daemon/src/bridge/mcp-otel-sdk-factory.ts",
         "packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts",
         "packages/runtime-daemon/src/bridge/mcp-runtime.ts",
         "packages/runtime-daemon/src/bridge/memory-runtime-deps.ts",
@@ -348,6 +352,10 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md"
         }
       ],
       "remainingGaps": [

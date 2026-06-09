@@ -13,6 +13,7 @@ import {
   type McpGatewayToolContext,
   type McpGatewayTrustContext,
   type McpOtelRecorderPlan,
+  type McpOtelSdkFactory,
   type McpSpanAttributes,
   type McpSpanExporter,
   type McpSpanHandle,
@@ -58,6 +59,7 @@ export interface DaemonMcpRuntimeOptions {
   mcpOtelRecorderPlan?: McpOtelRecorderPlan;
   mcpOtelApi?: OpenTelemetryApiLike;
   mcpOtelExporter?: McpSpanExporter;
+  mcpOtelSdkFactory?: McpOtelSdkFactory | null;
   mcpOtelEnv?: Record<string, string | undefined>;
   auditWriter?: AuditWriter;
   userId?: string;

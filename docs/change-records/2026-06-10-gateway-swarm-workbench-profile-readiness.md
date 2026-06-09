@@ -72,8 +72,9 @@ desktop renderer at `http://127.0.0.1:5174/`, and browser gateway at
 
 - Live Docker/local web and Electron smoke gates still need a slower execution
   window.
-- The profile-selected MCP OTel recorder is planned and constructible, but it
-  still needs daemon transport injection and real OTLP exporter configuration.
+- The profile-selected MCP OTel recorder was planned and constructible in this
+  slice; daemon-hosted OTLP HTTP/JSON SDK export was later added in
+  `docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md`.
 - Lineage, topology, and permission metadata currently travel through delegate
   action args and worker `extra`; `@kirakira/agent-runtime` should promote them
   into first-class delegate request fields.
