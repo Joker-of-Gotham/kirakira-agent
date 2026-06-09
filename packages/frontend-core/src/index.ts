@@ -113,7 +113,11 @@ export type {
 } from "./activity-rail.js";
 
 export { createWorkbenchInspectorView } from "./workbench-inspector.js";
-export { createWorkbenchNavigationView } from "./workbench-navigation.js";
+export {
+  WORKBENCH_VIEW_PRESENTATION,
+  createWorkbenchNavigationView,
+  workbenchViewPresentation,
+} from "./workbench-navigation.js";
 export {
   createArtifactDetailsView,
   createCitationLedgerView,
@@ -139,6 +143,7 @@ export type {
   WorkbenchNavigationInput,
   WorkbenchNavigationItem,
   WorkbenchNavigationView,
+  WorkbenchViewPresentation,
   WorkbenchViewId,
   WorkbenchViewTone,
 } from "./workbench-navigation.js";

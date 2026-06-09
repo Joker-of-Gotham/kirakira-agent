@@ -32,6 +32,7 @@ import {
   projectRunDashboard,
   runtimeTransportOrchestration,
   runtimeTransportSupportsArtifactContent,
+  workbenchViewPresentation,
   type RuntimeArtifactContent,
   type RuntimeMcpDirectoryTool,
   type RuntimeMcpDirectoryView,
@@ -352,8 +353,9 @@ export function KirakiraWorkbench({
       }),
     [activeWorkbenchView, mcpDirectoryView, projection, runtimeStatus],
   );
-  const activeNavigationLabel =
-    navigation.items.find((item) => item.id === navigation.activeView)?.label ?? "Runtime";
+  const activeNavigation = navigation.items.find((item) => item.id === navigation.activeView);
+  const activeNavigationLabel = activeNavigation?.label ?? "Runtime";
+  const activeNavigationSelector = activeNavigation?.selector ?? "workbench-view-runtime";
 
   useEffect(() => {
     if (!runId) return;
@@ -582,7 +584,7 @@ export function KirakiraWorkbench({
   ]);
 
   return (
-    <main className="kk-shell">
+    <main className="kk-shell" data-kk-workbench-view={activeNavigationSelector}>
       <aside className="kk-sidebar" aria-label="Run navigation">
         <div className="kk-brand">
           <div className="kk-brand-mark" aria-hidden="true">
@@ -600,6 +602,8 @@ export function KirakiraWorkbench({
               key={item.id}
               type="button"
               aria-current={item.selected ? "page" : undefined}
+              aria-label={item.navAriaLabel}
+              data-kk-workbench-view={item.selector}
               className={
                 item.selected
                   ? `kk-nav-item kk-nav-item-active kk-nav-item-${item.tone}`
@@ -982,9 +986,15 @@ function WorkbenchViewSurface({
   onRefreshMcp: () => void;
   onStartAndRefreshMcp: () => void;
 }) {
+  const presentation = workbenchViewPresentation(activeView);
+
   if (activeView === "agents") {
     return (
-      <section className="kk-main-grid kk-view-grid kk-view-agents" aria-label="Agent swarm workspace">
+      <section
+        className="kk-main-grid kk-view-grid kk-view-agents"
+        aria-label={presentation.workspaceAriaLabel}
+        data-kk-workbench-view={presentation.selector}
+      >
         <SwarmTopologyPanel topology={topology} onSelectFocus={onSelectFocus} />
         <AgentOperationsPanel
           topology={topology}
@@ -999,7 +1009,11 @@ function WorkbenchViewSurface({
 
   if (activeView === "research") {
     return (
-      <section className="kk-main-grid kk-view-grid kk-view-research" aria-label="Research workspace">
+      <section
+        className="kk-main-grid kk-view-grid kk-view-research"
+        aria-label={presentation.workspaceAriaLabel}
+        data-kk-workbench-view={presentation.selector}
+      >
         <ResearchWorkspacePanel
           researchRuns={researchRuns}
           artifacts={artifacts}
@@ -1018,7 +1032,11 @@ function WorkbenchViewSurface({
 
   if (activeView === "systems") {
     return (
-      <section className="kk-main-grid kk-view-grid kk-view-systems" aria-label="Memory, MCP, and artifact systems">
+      <section
+        className="kk-main-grid kk-view-grid kk-view-systems"
+        aria-label={presentation.workspaceAriaLabel}
+        data-kk-workbench-view={presentation.selector}
+      >
         <SystemInspectorPanel
           view={systemInspector}
           onViewChange={onInspectorViewChange}
@@ -1044,7 +1062,11 @@ function WorkbenchViewSurface({
   }
 
   return (
-    <section className="kk-main-grid kk-view-grid kk-view-runs" aria-label="Run operations workspace">
+    <section
+      className="kk-main-grid kk-view-grid kk-view-runs"
+      aria-label={presentation.workspaceAriaLabel}
+      data-kk-workbench-view={presentation.selector}
+    >
       <RunWorkstreamPanel
         workstream={workstream}
         onCancel={onCancel}

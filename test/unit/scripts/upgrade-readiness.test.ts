@@ -34,24 +34,15 @@ describe("upgrade readiness gate", () => {
     ]);
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
-    expect(report.summary.openWork).toBe(1);
-    expect(report.summary.advisoryWarnings).toBe(1);
-    expect(report.advisoryWarnings).toContainEqual(
-      expect.objectContaining({
-        item: "File-level mechanism drift has behavior classifications",
-        status: "warn",
-      }),
-    );
+    expect(report.summary.openWork).toBe(0);
+    expect(report.summary.advisoryWarnings).toBe(0);
+    expect(report.advisoryWarnings).toEqual([]);
+    expect(report.openWork).toEqual([]);
     expect(
       report.openWork.some((item) =>
         item.item.includes("File-level mechanism drift has behavior classifications"),
       ),
     ).toBe(false);
-    expect(
-      report.openWork.some((item) =>
-        item.item.includes("live daemon source adapters"),
-      ),
-    ).toBe(true);
     expect(report.gates.memoryPersistence.profile).toBe("test-host");
     expect(report.tracks).toContainEqual(
       expect.objectContaining({
@@ -77,7 +68,45 @@ describe("upgrade readiness gate", () => {
       resultPath: "docs/upgrade/gates/memory-persistence-smoke.json",
       resultMatches: true,
     });
-    expect(JSON.stringify(report)).not.toContain("5173");
+    expect(report.gates.harnessHardcoding).toMatchObject({
+      status: "pass",
+      forbiddenPort: 5173,
+      totalMatches: 0,
+    });
+    expect(report.gates.harnessHardcoding.scopes).toEqual([
+      expect.objectContaining({
+        name: "runtime-profile-projection",
+        status: "pass",
+        matchCount: 0,
+      }),
+      expect.objectContaining({
+        name: "runtime-profile-startup",
+        status: "pass",
+        matchCount: 0,
+      }),
+      expect.objectContaining({
+        name: "runtime-profile-readiness",
+        status: "pass",
+        matchCount: 0,
+      }),
+      expect.objectContaining({
+        name: "runtime-profile-mcp-config",
+        status: "pass",
+        matchCount: 0,
+      }),
+    ]);
+    expect(report.tracks).toContainEqual(
+      expect.objectContaining({
+        id: "harness-api-contracts",
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            label: "Runtime profile projection/startup avoids unrelated dev-server port",
+            status: "pass",
+            evidence: expect.stringContaining("forbiddenPort=5173"),
+          }),
+        ]),
+      }),
+    );
   });
 
   it("renders markdown and json reports", () => {
@@ -86,11 +115,12 @@ describe("upgrade readiness gate", () => {
     const json = JSON.parse(renderUpgradeReadinessReport(report, "json"));
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
-    expect(markdown).toContain("## Advisory Warnings");
-    expect(markdown).toContain("## Open Work");
+    expect(markdown).not.toContain("## Advisory Warnings");
+    expect(markdown).not.toContain("## Open Work");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
     expect(json.openWork.length).toBe(report.openWork.length);
     expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
+    expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });
 });

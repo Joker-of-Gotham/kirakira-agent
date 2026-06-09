@@ -6,9 +6,22 @@ import { runtimeTransportManifest } from "./runtime-capabilities.js";
 export type WorkbenchViewId = "runs" | "agents" | "research" | "systems";
 export type WorkbenchViewTone = "neutral" | "active" | "success" | "warning" | "danger";
 
+export interface WorkbenchViewPresentation {
+  id: WorkbenchViewId;
+  label: string;
+  navAriaLabel: string;
+  workspaceAriaLabel: string;
+  selector: string;
+  emptyState: string;
+}
+
 export interface WorkbenchNavigationItem {
   id: WorkbenchViewId;
   label: string;
+  navAriaLabel: string;
+  workspaceAriaLabel: string;
+  selector: string;
+  emptyState: string;
   count: number;
   status: string;
   tone: WorkbenchViewTone;
@@ -29,12 +42,44 @@ export interface WorkbenchNavigationInput {
 }
 
 const VIEW_ORDER: WorkbenchViewId[] = ["runs", "agents", "research", "systems"];
-const VIEW_LABELS: Record<WorkbenchViewId, string> = {
-  runs: "Runs",
-  agents: "Agents",
-  research: "Research",
-  systems: "Systems",
-};
+export const WORKBENCH_VIEW_PRESENTATION = {
+  runs: {
+    id: "runs",
+    label: "Runs",
+    navAriaLabel: "Show run operations workspace",
+    workspaceAriaLabel: "Run operations workspace",
+    selector: "workbench-view-runs",
+    emptyState: "Start a run to populate operations, activity, and topology.",
+  },
+  agents: {
+    id: "agents",
+    label: "Agents",
+    navAriaLabel: "Show agent swarm workspace",
+    workspaceAriaLabel: "Agent swarm workspace",
+    selector: "workbench-view-agents",
+    emptyState: "No agent workers or role readiness records have been projected yet.",
+  },
+  research: {
+    id: "research",
+    label: "Research",
+    navAriaLabel: "Show research evidence workspace",
+    workspaceAriaLabel: "Research evidence workspace",
+    selector: "workbench-view-research",
+    emptyState: "No research runs, citations, or evidence artifacts have been captured yet.",
+  },
+  systems: {
+    id: "systems",
+    label: "Systems",
+    navAriaLabel: "Show runtime systems workspace",
+    workspaceAriaLabel: "Memory, MCP, and artifact systems",
+    selector: "workbench-view-systems",
+    emptyState: "Runtime systems metadata is still loading or unavailable.",
+  },
+} as const satisfies Record<WorkbenchViewId, WorkbenchViewPresentation>;
+
+export function workbenchViewPresentation(id: WorkbenchViewId): WorkbenchViewPresentation {
+  return WORKBENCH_VIEW_PRESENTATION[id];
+}
 
 export function createWorkbenchNavigationView({
   projection,
@@ -46,9 +91,14 @@ export function createWorkbenchNavigationView({
   const safeActiveView = VIEW_ORDER.includes(activeView) ? activeView : "runs";
   const items: WorkbenchNavigationItem[] = VIEW_ORDER.map((id) => {
     const summary = summaryForView(id, projection, mcpDirectory, runtimeStatus, pendingApprovalCount);
+    const presentation = workbenchViewPresentation(id);
     return {
       id,
-      label: VIEW_LABELS[id],
+      label: presentation.label,
+      navAriaLabel: presentation.navAriaLabel,
+      workspaceAriaLabel: presentation.workspaceAriaLabel,
+      selector: presentation.selector,
+      emptyState: presentation.emptyState,
       selected: id === safeActiveView,
       ...summary,
     };

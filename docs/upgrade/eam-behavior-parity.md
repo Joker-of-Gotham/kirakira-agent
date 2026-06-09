@@ -25,18 +25,17 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After runtime-daemon profile composition closure, the highest-leverage remaining
-mechanism gap is `orchestrator-kernel-live-source-adapter-validation`: expand
-behavior validation from injected adapters to live daemon source adapters where
-practical.
+After runtime-daemon profile composition and orchestrator kernel bridge closure,
+the highest-leverage remaining mechanism gap is now product-level
+`deep-research-live-source-adapter-validation`: expand live source-adapter
+validation beyond daemon-owned memory source composition.
 
 Evidence:
 
-- `packages/orchestrator-kernel/src/research/research-task-executor.ts`
-- `packages/orchestrator-kernel/src/research/event-bridge.ts`
+- `packages/deep-research/src`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
-- `test/unit/orchestrator-kernel/task-executor.test.ts`
+- `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 
 Focused validation command:
 
@@ -66,7 +65,7 @@ pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts tes
 | `eamd -> kirakirad` | Intentional Kirakira extension | Covered | The rename rule maps EAM daemon files to `kirakirad`; only `go.sum` is extra. | None. |
 | `mcp-adapter` | Intentional Kirakira extension | Covered | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, profile/env-selected recorder plans, SDK/OTLP factory selection, daemon-hosted SDK export injection, tool-result errors with `isError`, and live stdio/HTTP daemon-owned propagation smoke coverage. | None. |
 | `memory-store` | Intentional Kirakira extension | Covered | Daemon checkpoint repository selection, checkpoint envelope compatibility, daemon retain/reflect service bridge contracts, reflect runtime event kinds, reflect started/completed/failed event emission, and the isolated `test-host` live gate are covered. `node scripts/memory-persistence-smoke.mjs --profile test-host --live` passed unit checkpoint/retain contracts plus live checkpoint, retain/recall, reflect observation, belief, and outbox persistence tests; durable evidence is in `docs/upgrade/gates/memory-persistence-smoke.json`. | None. |
-| `orchestrator-kernel` | Intentional Kirakira extension | Partial | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, async checkpoint events, and top-level agent-runtime delegate metadata fields. Runtime-daemon kernel bridge coverage now exercises the daemon-owned memory research source path and verifies bounded recall runtime events. | Expand behavior validation from injected adapters to live daemon source adapters where practical. |
+| `orchestrator-kernel` | Intentional Kirakira extension | Covered | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, async checkpoint events, and top-level agent-runtime delegate metadata fields. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, and multiple daemon memory source fanout through the orchestrator research executor. | None. |
 | `runtime-daemon` | Intentional Kirakira extension | Covered | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway; `runtimeProfileComposition` now feeds daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults; SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory; retain/reflect memory operations share the daemon memory service path with typed runtime events. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json`. | None. |
 
 ## Extra Target Entries
@@ -76,18 +75,24 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes and daemon composition; live source adapters remain gated. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes and daemon composition; live source-adapter coverage beyond daemon memory composition remains product roadmap work. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
+
+## Harness/API Hardcoding Evidence
+
+`scripts/upgrade-readiness.mjs` now emits `gates.harnessHardcoding` as
+machine-readable evidence for the unrelated dev-server port guard. The gate
+records `forbiddenPort=5173` and per-scope match counts for the runtime profile
+projection, startup fragment, readiness fragment, and MCP config fragment.
+Readiness should treat nonzero matches in any scope as an actionable Harness /
+SDK / API contract failure instead of relying on a prose assertion.
 
 ## Readiness Interpretation
 
 File-level parity no longer blocks on unknown drift: all eight drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
-keep the file-drift classification as an advisory warning, while counting only
-the remaining `partial` behavior row as actionable open work. This separates the
-global evidence warning from remaining live validation or integration closure,
-so the high structural score is not mistaken for final completion and the open
-work count is not inflated by source inventory drift that already has behavior
-classification evidence.
+treat the EAM file-drift rows as closed when all classified package rows are
+`covered`; remaining product-level extension work belongs in targeted roadmap
+gates rather than as EAM package parity open work.

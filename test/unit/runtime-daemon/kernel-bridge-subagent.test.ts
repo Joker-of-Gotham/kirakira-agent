@@ -114,6 +114,61 @@ const bundle: MemoryBundle = {
   createdAt: "2026-06-09T00:00:00.000Z",
 };
 
+function memoryBundle(id: string, recordId: string): MemoryBundle {
+  const queryId = `query-${id}`;
+  const traceId = `trace-${id}`;
+  return {
+    ...bundle,
+    id,
+    queryId,
+    context: {
+      ...bundle.context,
+      queryId,
+      levels: {
+        ...bundle.context.levels,
+        l0: {
+          ...bundle.context.levels.l0,
+          abstract: `Prior daemon research from ${id}`,
+        },
+        l1: {
+          ...bundle.context.levels.l1!,
+          stateSummary: `SAFE SUMMARY ${id}`,
+        },
+        l3: {
+          level: "L3",
+          evidence: [
+            {
+              id: `ev-${id}`,
+              sourceRecordId: recordId,
+              rawSpan: `Memory citation excerpt ${id}`,
+              artifactPointer: `artifact://doc-${id}#L10`,
+            },
+          ],
+          estimatedTokens: 64,
+        },
+      },
+    },
+    trace: {
+      ...trace,
+      traceId,
+      queryId,
+      normalizedQuery: `daemon research ${id}`,
+      routePlan: [`vector-${id}`],
+      routes: [
+        {
+          routeName: `vector-${id}`,
+          candidates: [{ recordId, score: 0.9, rank: 1 }],
+          filters: {},
+          durationMs: 12,
+        },
+      ],
+      fusionScores: [{ recordId, score: 0.82, selected: true }],
+      rerankScores: [{ recordId, score: 0.91, reason: "strong match" }],
+    },
+    recordIds: [recordId],
+  };
+}
+
 describe("runtime daemon subagent bridge", () => {
   it("creates an EphemeralWorker delegate runner from daemon runtime deps", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-daemon-runtime-"));
@@ -480,6 +535,186 @@ describe("runtime daemon subagent bridge", () => {
       const serializedResult = JSON.stringify(taskCompleted?.payload.result);
       expect(serializedResult).not.toContain("RAW MEMORY CONTENT MUST NOT LEAK");
       expect(serializedResult).not.toContain("rawSpan");
+    } finally {
+      await bridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("fans out daemon memory research source arrays through KernelBridge composition", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-research-array-"));
+    const eventStorePath = join(workspaceRoot, "events");
+    const seen: RunEvent[] = [];
+    const recallCalls: Array<{ source: string; request: RecallRequest }> = [];
+    const primary: Pick<MemoryService, "recall" | "explainRetrieval"> = {
+      async recall(request) {
+        recallCalls.push({ source: "primary", request });
+        return memoryBundle("primary", "rec-primary");
+      },
+      async explainRetrieval() {
+        return trace;
+      },
+    };
+    const secondary: Pick<MemoryService, "recall" | "explainRetrieval"> = {
+      async recall(request) {
+        recallCalls.push({ source: "secondary", request });
+        return memoryBundle("secondary", "rec-secondary");
+      },
+      async explainRetrieval() {
+        return trace;
+      },
+    };
+    const resolvedConfig = {
+      agentToml: {
+        deep_research: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 1,
+          max_tool_calls: 2,
+          require_citations: true,
+        },
+      },
+    } as Pick<ResolvedConfig, "agentToml">;
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      deepResearch: {
+        memory: [
+          {
+            service: primary,
+            tenantId: "tenant-primary",
+            workspaceId: ({ workspaceRoot: taskWorkspaceRoot }) => `${taskWorkspaceRoot}:primary`,
+            namespace: "project",
+            sessionId: ({ runId, node }) => `session-primary-${runId}-${node.id}`,
+            tokenBudget: 256,
+            limit: 1,
+          },
+          {
+            service: secondary,
+            tenantId: ({ runId }) => `tenant-secondary-${runId}`,
+            workspaceId: "workspace-secondary",
+            kinds: ["belief"],
+            sessionId: ({ runId, node }) => `session-secondary-${runId}-${node.id}`,
+            tokenBudget: 128,
+            limit: 2,
+          },
+        ],
+      },
+      kernelOptions: {
+        planContext: {
+          workspace: workspaceRoot,
+          availableTools: [],
+          availableSkills: [],
+          availableMcpServers: [],
+        },
+        planner: {
+          async completeText() {
+            return JSON.stringify({
+              goal: "Collect daemon research from multiple memory sources",
+              steps: [
+                {
+                  id: "research",
+                  description: "Collect daemon memory evidence from multiple sources",
+                  kind: "research",
+                  dependsOn: [],
+                  canParallelize: false,
+                  research: {
+                    question: "Which daemon memory sources have evidence?",
+                    requiredSourceKinds: ["memory"],
+                  },
+                },
+              ],
+              estimatedComplexity: "moderate",
+              requiresSubagents: false,
+            });
+          },
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      const unsubscribe = bridge.onEvent((event) => {
+        seen.push(event);
+      });
+      const completed = waitForBridgeEvent(
+        bridge,
+        (event) => event.kind === "run.completed",
+      );
+
+      const runId = await bridge.submitRun(
+        "Collect daemon research from multiple memory sources",
+        "headless",
+        { workspaceRoot },
+      );
+      await completed;
+      unsubscribe();
+
+      expect(recallCalls.map((call) => call.source)).toEqual(["primary", "secondary"]);
+      expect(recallCalls[0]?.request).toMatchObject({
+        tenantId: "tenant-primary",
+        workspaceId: `${workspaceRoot}:primary`,
+        query: "Which daemon memory sources have evidence?",
+        namespace: "project",
+        sessionId: `session-primary-${runId}-research`,
+        runId,
+        tokenBudget: 256,
+        limit: 1,
+        level: "L3",
+        includeRedacted: false,
+      });
+      expect(recallCalls[1]?.request).toMatchObject({
+        tenantId: `tenant-secondary-${runId}`,
+        workspaceId: "workspace-secondary",
+        query: "Which daemon memory sources have evidence?",
+        kinds: ["belief"],
+        sessionId: `session-secondary-${runId}-research`,
+        runId,
+        tokenBudget: 128,
+        limit: 2,
+        level: "L3",
+        includeRedacted: false,
+      });
+
+      const recallStarted = seen.filter((event) => event.kind === "memory.recall.started");
+      const recallCompleted = seen.filter((event) => event.kind === "memory.recall.completed");
+      expect(recallStarted).toHaveLength(2);
+      expect(recallCompleted).toHaveLength(2);
+      expect(recallStarted.map((event) => event.payload.tenantId)).toEqual([
+        "tenant-primary",
+        `tenant-secondary-${runId}`,
+      ]);
+      expect(recallStarted.map((event) => event.payload.sessionId)).toEqual([
+        `session-primary-${runId}-research`,
+        `session-secondary-${runId}-research`,
+      ]);
+      expect(recallCompleted.map((event) => event.payload.bundleId)).toEqual([
+        "primary",
+        "secondary",
+      ]);
+      const taskCompleted = seen.find(
+        (event) => event.kind === "task.completed" && event.payload.taskId === "research",
+      );
+      expect(taskCompleted?.payload.result).toMatchObject({
+        output: {
+          status: "evidence_collected",
+          sourcePolicy: "workspace",
+          requiredSourceKinds: ["memory"],
+          evidenceCount: 2,
+          citationCount: 2,
+          toolCalls: 1,
+          evidence: expect.arrayContaining([
+            expect.objectContaining({
+              metadata: expect.objectContaining({ bundleId: "primary" }),
+            }),
+            expect.objectContaining({
+              metadata: expect.objectContaining({ bundleId: "secondary" }),
+            }),
+          ]),
+        },
+      });
     } finally {
       await bridge.destroy();
       await rm(workspaceRoot, { recursive: true, force: true });

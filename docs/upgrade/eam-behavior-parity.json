@@ -21,21 +21,31 @@
       "expectation": "MCP tools/call spans map to execute_tool and should carry gen_ai.tool.name and jsonrpc.request.id when available."
     }
   ],
+  "readinessEvidence": {
+    "harnessHardcodingGate": {
+      "script": "scripts/upgrade-readiness.mjs",
+      "reportPath": "gates.harnessHardcoding",
+      "forbiddenPort": 5173,
+      "scopes": [
+        "runtime-profile-projection",
+        "runtime-profile-startup",
+        "runtime-profile-readiness",
+        "runtime-profile-mcp-config"
+      ],
+      "expectation": "Each scope reports matchCount=0 so unrelated dev-server port 5173 cannot hide in runtime profile projection or startup evidence."
+    }
+  },
   "nextMechanismGap": {
-    "id": "orchestrator-kernel-live-source-adapter-validation",
-    "targetName": "orchestrator-kernel",
+    "id": "deep-research-live-source-adapter-validation",
+    "targetName": "deep-research",
     "priority": "high",
     "status": "partial",
-    "gap": "Expand behavior validation from injected adapters to live daemon source adapters where practical.",
-    "rationale": "Runtime-daemon profile composition now routes MCP, memory, topology, OTel, and lifecycle dependency selection through one composition helper; the remaining partial drift row is live source-adapter validation in orchestrator-kernel.",
+    "gap": "Expand product-level live source-adapter validation beyond daemon-owned memory source composition.",
+    "rationale": "EAM package drift rows are behavior-covered; remaining live source-adapter work now belongs to Kirakira's standalone deep-research product extension rather than an EAM parity gap.",
     "evidence": [
       {
         "kind": "source",
-        "path": "packages/orchestrator-kernel/src/research/research-task-executor.ts"
-      },
-      {
-        "kind": "source",
-        "path": "packages/orchestrator-kernel/src/research/event-bridge.ts"
+        "path": "packages/deep-research/src"
       },
       {
         "kind": "source",
@@ -47,7 +57,11 @@
       },
       {
         "kind": "test",
-        "path": "test/unit/orchestrator-kernel/task-executor.test.ts"
+        "path": "test/unit/orchestrator-kernel/research-event-bridge.test.ts"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-daemon-memory-source-fanout-and-readiness-closure.md"
       }
     ],
     "commands": [
@@ -343,8 +357,8 @@
       "sourceName": "orchestrator-kernel",
       "targetName": "orchestrator-kernel",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira adds subagent task execution, research task execution, event projection, and runtime bridge contracts while preserving the EAM kernel file set.",
+      "status": "covered",
+      "behavior": "Kirakira adds subagent task execution, research task execution, event projection, and runtime bridge contracts while preserving the EAM kernel file set. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, and multiple daemon memory source fanout through the orchestrator research executor.",
       "extensionFiles": [
         "packages/orchestrator-kernel/src/execution/subagent-task-executor.ts",
         "packages/orchestrator-kernel/src/research/event-bridge.ts",
@@ -363,6 +377,10 @@
           "kind": "test",
           "path": "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts",
           "command": "pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
+        },
+        {
+          "kind": "source",
+          "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
         },
         {
           "kind": "record",
@@ -387,11 +405,13 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-runtime-profile-composition-and-presentation-qa.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-daemon-memory-source-fanout-and-readiness-closure.md"
         }
       ],
-      "remainingGaps": [
-        "Expand behavior validation from injected adapters to live daemon source adapters where practical."
-      ]
+      "remainingGaps": []
     },
     {
       "kind": "package",
@@ -496,7 +516,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; package-level live source-adapter coverage beyond daemon memory composition remains product roadmap work."
     },
     {
       "targetName": "frontend-app",

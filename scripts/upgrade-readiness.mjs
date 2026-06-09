@@ -67,13 +67,22 @@ export function buildUpgradeReadinessReport(options = {}) {
     { profileName: "test-host" },
     options.env ?? process.env,
   );
+  const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
     workspaceRoot,
     referenceRoot: join(workspaceRoot, "reference_project", "eam-agent"),
     depth: "files",
   });
 
-  const context = { workspaceRoot, packageJson, profile, projection, parity, memoryPersistenceSmoke };
+  const context = {
+    workspaceRoot,
+    packageJson,
+    profile,
+    projection,
+    parity,
+    memoryPersistenceSmoke,
+    harnessHardcoding,
+  };
   const tracks = [
     eamMechanismTrack(context),
     presentationTrack(context),
@@ -107,6 +116,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     tracks,
     gates: {
       memoryPersistence: memoryPersistenceSmoke,
+      harnessHardcoding,
     },
     advisoryWarnings: advisories,
     openWork,
@@ -315,8 +325,53 @@ function presentationTrack({ workspaceRoot, packageJson, projection }) {
   };
 }
 
-function harnessApiTrack({ packageJson, projection }) {
-  const serializedProjection = JSON.stringify(projection);
+function buildHarnessHardcodingGate(projection) {
+  const scopes = [
+    { name: "runtime-profile-projection", payload: projection },
+    { name: "runtime-profile-startup", payload: projection.fragments?.startup },
+    { name: "runtime-profile-readiness", payload: projection.fragments?.readiness },
+    { name: "runtime-profile-mcp-config", payload: projection.fragments?.mcpConfig },
+  ].map((scope) => {
+    const serialized = JSON.stringify(scope.payload ?? null);
+    const matchCount = countStringOccurrences(serialized, FORBIDDEN_PORT_TEXT);
+    return {
+      name: scope.name,
+      status: matchCount === 0 ? "pass" : "fail",
+      matchCount,
+      bytes: serialized.length,
+    };
+  });
+  const totalMatches = scopes.reduce((sum, scope) => sum + scope.matchCount, 0);
+  return {
+    status: totalMatches === 0 ? "pass" : "fail",
+    forbiddenPort: Number(FORBIDDEN_PORT_TEXT),
+    forbiddenToken: FORBIDDEN_PORT_TEXT,
+    totalMatches,
+    scopes,
+    evidence: hardcodingEvidence(scopes, totalMatches),
+  };
+}
+
+function countStringOccurrences(value, needle) {
+  if (needle.length === 0) return 0;
+  let count = 0;
+  let index = value.indexOf(needle);
+  while (index !== -1) {
+    count += 1;
+    index = value.indexOf(needle, index + needle.length);
+  }
+  return count;
+}
+
+function hardcodingEvidence(scopes, totalMatches) {
+  return [
+    `forbiddenPort=${FORBIDDEN_PORT_TEXT}`,
+    `matches=${totalMatches}`,
+    `scopes=${scopes.map((scope) => `${scope.name}:${scope.matchCount}`).join(",")}`,
+  ].join("; ");
+}
+
+function harnessApiTrack({ packageJson, projection, harnessHardcoding }) {
   return {
     id: "harness-api-contracts",
     title: "Harness / SDK / API Contracts",
@@ -341,9 +396,9 @@ function harnessApiTrack({ packageJson, projection }) {
         `mcpServers=${Object.keys(projection.fragments?.mcpConfig?.config?.mcpServers ?? {}).length}`,
       ),
       passFail(
-        "Projection avoids unrelated dev-server port",
-        !serializedProjection.includes(FORBIDDEN_PORT_TEXT),
-        "checked profile projection for forbidden dev-server port",
+        "Runtime profile projection/startup avoids unrelated dev-server port",
+        harnessHardcoding.status === "pass",
+        harnessHardcoding.evidence,
       ),
     ],
   };

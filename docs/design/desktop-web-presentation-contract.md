@@ -50,6 +50,10 @@ Renderer:
 - Treats the desktop bridge as optional and falls back to unavailable status
   when the bridge cannot answer.
 - Shares the same runtime transport shape as the web workbench.
+- Reads workbench view IA metadata from
+  `packages/frontend-core/src/workbench-navigation.ts`; Web and Electron should
+  use the shared `workbench-view-*` selectors, ARIA labels, and empty-state copy
+  instead of inventing per-surface labels.
 
 ## QA Entry Points
 

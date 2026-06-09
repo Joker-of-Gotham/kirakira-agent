@@ -9,6 +9,7 @@ import {
   createMcpDirectoryView,
   createWorkbenchNavigationView,
   projectRunDashboard,
+  workbenchViewPresentation,
   type RuntimeTransportStatus,
 } from "../../../packages/frontend-core/src/index.js";
 
@@ -48,6 +49,11 @@ describe("frontend-core workbench navigation view", () => {
 
     expect(nav.activeView).toBe("runs");
     expect(nav.items.find((item) => item.id === "runs")).toMatchObject({
+      label: "Runs",
+      navAriaLabel: "Show run operations workspace",
+      workspaceAriaLabel: "Run operations workspace",
+      selector: "workbench-view-runs",
+      emptyState: "Start a run to populate operations, activity, and topology.",
       count: 1,
       selected: true,
       status: "approval",
@@ -122,5 +128,28 @@ describe("frontend-core workbench navigation view", () => {
 
     expect(nav.activeView).toBe("runs");
     expect(nav.items.find((item) => item.id === "runs")?.selected).toBe(true);
+  });
+
+  it("publishes stable IA selectors and empty-state copy for each shared view", () => {
+    const nav = createWorkbenchNavigationView({
+      projection: createEmptyRunDashboard(),
+      mcpDirectory: createMcpDirectoryView(undefined),
+      activeView: "research",
+    });
+
+    expect(nav.items.map((item) => [item.id, item.selector])).toEqual([
+      ["runs", "workbench-view-runs"],
+      ["agents", "workbench-view-agents"],
+      ["research", "workbench-view-research"],
+      ["systems", "workbench-view-systems"],
+    ]);
+    expect(nav.items.every((item) => item.navAriaLabel.startsWith("Show "))).toBe(true);
+    expect(nav.items.every((item) => item.workspaceAriaLabel.length > 0)).toBe(true);
+    expect(nav.items.every((item) => item.emptyState.length > 0)).toBe(true);
+    expect(workbenchViewPresentation("research")).toMatchObject({
+      label: "Research",
+      workspaceAriaLabel: "Research evidence workspace",
+      selector: "workbench-view-research",
+    });
   });
 });
