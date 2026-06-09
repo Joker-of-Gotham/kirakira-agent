@@ -6,12 +6,14 @@ The docs are split into three layers:
 
 1. **entry docs**: the files you should read first
 2. **plane docs**: deeper subsystem notes grouped by responsibility
-3. **change records**: implementation history for concrete fixes and upgrades
+3. **upgrade control docs**: active parity roadmaps and execution queues
+4. **change records**: implementation history for concrete fixes and upgrades
 
 ## Start Here
 
 - [Top-level README](../README.md) - product-facing overview, screenshots, startup path
 - [Architecture](./architecture.md) - current runtime shape and subsystem boundaries
+- [EAM parity roadmap](./upgrade/eam-parity-roadmap.md) - active four-track upgrade queue
 - [Change records](./change-records/README.md) - implementation history and verification notes
 
 ## Core Planes
