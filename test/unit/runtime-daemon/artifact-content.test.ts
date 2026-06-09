@@ -8,7 +8,11 @@ import {
   readRuntimeArtifactContent,
 } from "../../../packages/runtime-daemon/src/server/artifact-content.js";
 
-const runState = (workspaceRoot: string, artifactPath: string): RunState => ({
+const runState = (
+  workspaceRoot: string,
+  artifactPath: string,
+  kind = "markdown",
+): RunState => ({
   runId: "run-1",
   status: "completed",
   workspaceRoot,
@@ -18,7 +22,7 @@ const runState = (workspaceRoot: string, artifactPath: string): RunState => ({
     "artifact-a": {
       id: "artifact-a",
       path: artifactPath,
-      kind: "markdown",
+      kind,
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:01.000Z",
     },
@@ -59,6 +63,30 @@ describe("runtime artifact content reader", () => {
         content: "01234567",
         truncated: true,
         sizeBytes: 16,
+      });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("encodes non-text previews as base64", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "kirakira-artifact-binary-"));
+    try {
+      await mkdir(path.join(root, "artifacts"));
+      await writeFile(path.join(root, "artifacts", "payload.bin"), Buffer.from([0, 1, 2, 3]));
+
+      const content = await readRuntimeArtifactContent({
+        state: runState(root, "artifacts/payload.bin", "binary"),
+        artifactId: "artifact-a",
+        fallbackWorkspaceRoot: root,
+        maxBytes: 4,
+      });
+
+      expect(content).toMatchObject({
+        encoding: "base64",
+        content: "AAECAw==",
+        truncated: false,
+        sizeBytes: 4,
       });
     } finally {
       await rm(root, { recursive: true, force: true });

@@ -2,10 +2,9 @@ import { open, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { RunState } from "@kirakira/runtime-contracts";
 import {
-  DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
-  RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
-  type ArtifactRecord,
   type RuntimeArtifactContent,
+  detectRuntimeArtifactContentEncoding,
+  resolveRuntimeArtifactContentMaxBytes,
 } from "@kirakira/runtime-contracts";
 
 export class RuntimeArtifactContentError extends Error {
@@ -24,43 +23,6 @@ export interface ReadRuntimeArtifactContentOptions {
   artifactId: string;
   fallbackWorkspaceRoot: string;
   maxBytes?: number;
-}
-
-const TEXT_ARTIFACT_KINDS = new Set([
-  "diff",
-  "json",
-  "log",
-  "markdown",
-  "md",
-  "patch",
-  "text",
-  "txt",
-  "yaml",
-  "yml",
-]);
-
-const TEXT_EXTENSIONS = new Set([
-  ".css",
-  ".csv",
-  ".diff",
-  ".html",
-  ".js",
-  ".json",
-  ".jsonl",
-  ".log",
-  ".md",
-  ".patch",
-  ".ts",
-  ".tsx",
-  ".txt",
-  ".xml",
-  ".yaml",
-  ".yml",
-]);
-
-function normalizeMaxBytes(maxBytes: number | undefined): number {
-  if (maxBytes === undefined) return DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES;
-  return Math.min(maxBytes, RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES);
 }
 
 function assertInsideWorkspace(root: string, target: string): void {
@@ -86,13 +48,6 @@ async function resolveArtifactPath(
   const target = await realpath(candidate);
   assertInsideWorkspace(root, target);
   return target;
-}
-
-function looksTextual(record: ArtifactRecord, filePath: string, bytes: Buffer): boolean {
-  const kind = record.kind?.toLowerCase();
-  if (kind && TEXT_ARTIFACT_KINDS.has(kind)) return true;
-  if (TEXT_EXTENSIONS.has(path.extname(filePath).toLowerCase())) return true;
-  return !bytes.includes(0);
 }
 
 async function readPrefix(filePath: string, maxBytes: number): Promise<Buffer> {
@@ -124,7 +79,7 @@ export async function readRuntimeArtifactContent(
   }
 
   const workspaceRoot = options.state.workspaceRoot ?? options.fallbackWorkspaceRoot;
-  const maxBytes = normalizeMaxBytes(options.maxBytes);
+  const maxBytes = resolveRuntimeArtifactContentMaxBytes(options.maxBytes);
   let filePath: string;
   try {
     filePath = await resolveArtifactPath(workspaceRoot, record.path);
@@ -148,7 +103,11 @@ export async function readRuntimeArtifactContent(
   const bytes = await readPrefix(filePath, maxBytes);
   const truncated = bytes.length > maxBytes;
   const previewBytes = truncated ? bytes.subarray(0, maxBytes) : bytes;
-  const text = looksTextual(record, filePath, previewBytes);
+  const encoding = detectRuntimeArtifactContentEncoding({
+    kind: record.kind,
+    path: record.path,
+    bytes: previewBytes,
+  });
   return {
     runId: options.state.runId,
     artifactId: record.id,
@@ -158,7 +117,9 @@ export async function readRuntimeArtifactContent(
     ...(record.updatedAt !== undefined ? { updatedAt: record.updatedAt } : {}),
     sizeBytes: fileStat.size,
     truncated,
-    encoding: text ? "utf8" : "base64",
-    content: text ? previewBytes.toString("utf8") : previewBytes.toString("base64"),
+    encoding,
+    content: encoding === "utf8"
+      ? previewBytes.toString("utf8")
+      : previewBytes.toString("base64"),
   };
 }

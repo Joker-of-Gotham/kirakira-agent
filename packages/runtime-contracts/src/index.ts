@@ -6,7 +6,12 @@ export type {
 export {
   DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
   RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
+  RUNTIME_TEXT_ARTIFACT_EXTENSIONS,
+  RUNTIME_TEXT_ARTIFACT_KINDS,
+  detectRuntimeArtifactContentEncoding,
   normalizeRuntimeArtifactContentMaxBytes,
+  resolveRuntimeArtifactContentMaxBytes,
+  runtimeArtifactContentLooksTextual,
 } from "./artifact-content.js";
 export type {
   ControlMessage,
