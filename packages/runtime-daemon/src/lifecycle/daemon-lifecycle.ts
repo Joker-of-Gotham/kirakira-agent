@@ -8,7 +8,7 @@ import {
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
-import { KernelBridge } from "../bridge/kernel-bridge.js";
+import { KernelBridge, type KernelBridgeOptions } from "../bridge/kernel-bridge.js";
 import { RuntimeBridge } from "../bridge/runtime-bridge.js";
 import { resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { eventMatchesSubscription } from "../server/event-utils.js";
@@ -27,6 +27,7 @@ export interface DaemonConfig {
   socketPath?: string;
   eventStorePath?: string;
   gateway?: GatewayBridgeOptions;
+  kernel?: KernelBridgeOptions;
   browserGateway?: BrowserGatewayConfig;
   shutdownTimeoutMs?: number;
 }
@@ -62,7 +63,7 @@ export class DaemonLifecycle {
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
     await this.gateway.start();
-    this.kernelBridge = new KernelBridge(this.eventStorePath);
+    this.kernelBridge = new KernelBridge(this.eventStorePath, config.kernel);
     await this.kernelBridge.create();
     this.runtime = new RuntimeBridge(this.kernelBridge.getKernel());
     this.unsubEvents = this.kernelBridge.onEvent((ev) => {

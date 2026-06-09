@@ -56,6 +56,12 @@ export {
 
 export { KernelBridge } from "./bridge/kernel-bridge.js";
 export { RuntimeBridge } from "./bridge/runtime-bridge.js";
+export type {
+  DaemonDeepResearchCompositionInput,
+  DaemonDeepResearchOptions,
+  DaemonMemoryResearchSourceOptions,
+} from "./bridge/deep-research.js";
+export { createDaemonDeepResearchKernelOptions } from "./bridge/deep-research.js";
 
 export type { ChildProcessHandle, ProcessInfo } from "./lifecycle/process-manager.js";
 export { ProcessManager } from "./lifecycle/process-manager.js";

@@ -708,6 +708,9 @@ importers:
       '@kirakira/core':
         specifier: workspace:*
         version: link:../core
+      '@kirakira/deep-research':
+        specifier: workspace:*
+        version: link:../deep-research
       '@kirakira/event-store':
         specifier: workspace:*
         version: link:../event-store

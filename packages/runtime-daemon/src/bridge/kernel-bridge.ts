@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { ResolvedConfig } from "@kirakira/core";
 import {
   EventWriter,
   FsCheckpointRepository,
@@ -20,6 +21,10 @@ import {
   type DaemonDelegateRuntime,
   type DaemonDelegateRuntimeOptions,
 } from "./runtime-deps.js";
+import {
+  createDaemonDeepResearchKernelOptions,
+  type DaemonDeepResearchOptions,
+} from "./deep-research.js";
 
 type RunMode = RuntimeRunMode;
 type RunOptions = RuntimeRunOptions;
@@ -28,6 +33,8 @@ export interface KernelBridgeOptions {
   workspaceRoot?: string;
   mcpConfigPath?: string;
   enableDaemonSubagents?: boolean;
+  resolvedConfig?: Pick<ResolvedConfig, "agentToml">;
+  deepResearch?: DaemonDeepResearchOptions;
   kernelOptions?: Omit<OrchestratorKernelOptions, "subagentBridge">;
   delegateRuntimeFactory?: (
     options: DaemonDelegateRuntimeOptions,
@@ -51,15 +58,21 @@ export class KernelBridge {
     const basePath = resolveEventStoreBasePath(this.eventStoreBasePath);
     const writer = new EventWriter({ basePath });
     const kernelOptions = this.options.kernelOptions ?? {};
+    const workspaceRoot =
+      this.options.workspaceRoot ??
+      process.env.KIRAKIRA_WORKSPACE_ROOT ??
+      process.cwd();
+    const deepResearch = createDaemonDeepResearchKernelOptions({
+      resolvedConfig: this.options.resolvedConfig,
+      kernelDeepResearch: kernelOptions.deepResearch,
+      daemonDeepResearch: this.options.deepResearch,
+    });
     let subagentBridge: DelegateRunnerSubagentBridge | undefined;
     if (this.options.enableDaemonSubagents !== false) {
       const delegateRuntimeFactory =
         this.options.delegateRuntimeFactory ?? createDaemonDelegateRuntime;
       this.delegateRuntime = await delegateRuntimeFactory({
-        workspaceRoot:
-          this.options.workspaceRoot ??
-          process.env.KIRAKIRA_WORKSPACE_ROOT ??
-          process.cwd(),
+        workspaceRoot,
         ...(this.options.mcpConfigPath !== undefined
           ? { mcpConfigPath: this.options.mcpConfigPath }
           : {}),
@@ -73,6 +86,7 @@ export class KernelBridge {
     }
     this.kernel = new OrchestratorKernel(writer, {
       ...kernelOptions,
+      ...(deepResearch !== undefined ? { deepResearch } : {}),
       ...(subagentBridge !== undefined ? { subagentBridge } : {}),
       checkpointRepository:
         kernelOptions.checkpointRepository ??
