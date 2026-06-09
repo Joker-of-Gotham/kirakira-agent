@@ -110,6 +110,8 @@ export interface SubagentScopeRecord {
 
 export interface SubagentContractRecord {
   taskPreview?: string;
+  role?: string;
+  requestedLane?: string;
   modelPreference?: string;
   runtimePolicy?: Record<string, unknown>;
   policyCeiling?: Record<string, unknown>;
@@ -127,7 +129,9 @@ export interface SubagentRecord {
   parentTaskId?: string;
   parentWorkerId?: string;
   workerId?: string;
+  role?: string;
   lane?: string;
+  requestedLane?: string;
   traceId?: string;
   scope?: SubagentScopeRecord;
   contract?: SubagentContractRecord;

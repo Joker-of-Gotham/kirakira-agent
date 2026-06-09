@@ -101,6 +101,12 @@ function subagentMetadata(p: Record<string, unknown>): Partial<SubagentRecord> {
     ...(readString(p, "taskPreview") !== undefined
       ? { taskPreview: readString(p, "taskPreview") }
       : {}),
+    ...(readString(p, "role") !== undefined
+      ? { role: readString(p, "role") }
+      : {}),
+    ...(readString(p, "requestedLane") !== undefined
+      ? { requestedLane: readString(p, "requestedLane") }
+      : {}),
     ...(readString(p, "modelPreference") !== undefined
       ? { modelPreference: readString(p, "modelPreference") }
       : {}),
@@ -131,7 +137,11 @@ function subagentMetadata(p: Record<string, unknown>): Partial<SubagentRecord> {
       ? { parentWorkerId: readString(p, "parentWorkerId") }
       : {}),
     ...(readString(p, "workerId") !== undefined ? { workerId: readString(p, "workerId") } : {}),
+    ...(readString(p, "role") !== undefined ? { role: readString(p, "role") } : {}),
     ...(readString(p, "lane") !== undefined ? { lane: readString(p, "lane") } : {}),
+    ...(readString(p, "requestedLane") !== undefined
+      ? { requestedLane: readString(p, "requestedLane") }
+      : {}),
     ...(readString(p, "traceId") !== undefined ? { traceId: readString(p, "traceId") } : {}),
     ...(scope !== undefined ? { scope } : {}),
     ...(Object.keys(contract).length > 0 ? { contract } : {}),

@@ -7,6 +7,7 @@ export class LaneRouter {
     if (node.kind === "approval" && context.interactive) return "foreground";
     if (node.kind === "plan") return "foreground";
     if (node.kind === "research") return "background";
+    if (node.kind === "subagent" && node.spec.subagent?.lane) return node.spec.subagent.lane;
     if (context.interactive) return "foreground";
     if (node.kind === "subagent") return "delegated";
     if (node.kind === "tool" || node.kind === "skill-load") return "queued";

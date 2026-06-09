@@ -3,6 +3,7 @@ import { OrchestratorKernelError } from "../errors.js";
 import type {
   PlanContext,
   PlanStep,
+  LaneType,
   SubagentSpec,
   SubagentTaskContract,
   TaskNode,
@@ -12,6 +13,13 @@ const CAPABILITY_KINDS = new Set<SubagentCapability["kind"]>([
   "tool",
   "skill",
   "mcp",
+]);
+
+const LANE_TYPES = new Set<LaneType>([
+  "foreground",
+  "queued",
+  "background",
+  "delegated",
 ]);
 
 function stringArray(value: unknown): string[] | undefined {
@@ -99,6 +107,32 @@ function capabilitiesFromScopes(step: PlanStep): SubagentCapability[] {
   ];
 }
 
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0
+    ? value.trim()
+    : undefined;
+}
+
+function normalizeLane(value: unknown): LaneType | undefined {
+  return typeof value === "string" && LANE_TYPES.has(value as LaneType)
+    ? value as LaneType
+    : undefined;
+}
+
+function topologyRole(context: PlanContext, role: string | undefined) {
+  if (!role) return undefined;
+  const roles = context.orchestration?.roles;
+  if (!roles || roles.length === 0) return undefined;
+  const match = roles.find((candidate) => candidate.id === role);
+  if (!match) {
+    throw new OrchestratorKernelError(
+      "SUBAGENT_ROLE",
+      `Unknown subagent topology role: ${role}`,
+    );
+  }
+  return match;
+}
+
 export function normalizeSubagentTaskContract(
   step: PlanStep,
   context: PlanContext,
@@ -114,9 +148,27 @@ export function normalizeSubagentTaskContract(
     : undefined;
   const capabilities = explicitCapabilities ?? capabilitiesFromScopes(step);
   assertCapabilitiesKnown(capabilities, context);
+  const role = nonEmptyString(raw.role);
+  const roleDefaults = topologyRole(context, role);
+  const requestedLane = normalizeLane(raw.lane);
+  if (requestedLane !== undefined && context.orchestration?.roles?.length && !roleDefaults) {
+    throw new OrchestratorKernelError(
+      "SUBAGENT_LANE",
+      "Subagent lane must resolve through a known topology role",
+    );
+  }
+  if (requestedLane !== undefined && roleDefaults?.lane !== undefined && requestedLane !== roleDefaults.lane) {
+    throw new OrchestratorKernelError(
+      "SUBAGENT_LANE",
+      `Subagent lane ${requestedLane} conflicts with topology role ${role} lane ${roleDefaults.lane}`,
+    );
+  }
+  const lane = roleDefaults?.lane ?? requestedLane;
   return {
     taskBrief,
     capabilities,
+    ...(role !== undefined ? { role } : {}),
+    ...(lane !== undefined ? { lane } : {}),
     ...(raw.modelPreference !== undefined
       ? { modelPreference: raw.modelPreference }
       : step.model !== undefined
@@ -138,6 +190,8 @@ export function parseSubagentTaskContract(value: unknown): Partial<SubagentTaskC
   return {
     ...(typeof raw.taskBrief === "string" ? { taskBrief: raw.taskBrief } : {}),
     ...(capabilities !== undefined ? { capabilities } : {}),
+    ...(nonEmptyString(raw.role) !== undefined ? { role: nonEmptyString(raw.role) } : {}),
+    ...(normalizeLane(raw.lane) !== undefined ? { lane: normalizeLane(raw.lane) } : {}),
     ...(typeof raw.modelPreference === "string" ? { modelPreference: raw.modelPreference } : {}),
     ...(raw.runtimePolicy && typeof raw.runtimePolicy === "object"
       ? { runtimePolicy: raw.runtimePolicy as SubagentTaskContract["runtimePolicy"] }
@@ -173,6 +227,8 @@ export function subagentSpecFromTaskNode(
   return {
     taskBrief: contract.taskBrief,
     capabilities: contract.capabilities,
+    ...(contract.role !== undefined ? { role: contract.role } : {}),
+    ...(contract.lane !== undefined ? { lane: contract.lane } : {}),
     ...(contract.modelPreference !== undefined
       ? { modelPreference: contract.modelPreference }
       : node.spec.model !== undefined

@@ -38,16 +38,16 @@ change, a validation command, and a pushed commit.
 
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
-| EAM mechanism parity | 45% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, and declarative swarm topology projection now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit closure; make swarm topology role-aware in routing/events/policy; connect memory retain/reflect/checkpoint. |
-| Web and Electron presentation | 45% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed visual system, design tokens, browser/desktop visual QA. |
-| Hardcoding, harness, SDK/API | 40% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, and topology-to-kernel lane compilation are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
-| Docker/local ecosystem | 43% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, and shared runtime topology projection exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
+| EAM mechanism parity | 47% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, and role-aware subagent lane routing/events now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit closure; feed topology roles into PEP/audit; connect memory retain/reflect/checkpoint. |
+| Web and Electron presentation | 46% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, and frontend-core now preserves subagent role/requested-lane metadata for graph and inspector projections. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed visual system, design tokens, browser/desktop visual QA. |
+| Hardcoding, harness, SDK/API | 41% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, and role-derived subagent routing are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
+| Docker/local ecosystem | 44% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, and daemon plan-context topology injection exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
 
 ## Gap Matrix
 
 | Area | EAM source | Kirakira current | Status | Next implementation slice |
 | --- | --- | --- | --- | --- |
-| Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts`, `configs/runtime/profiles.json`, `packages/config-resolver/src/resolved-state.ts`, `packages/runtime-daemon/src/bin/daemon-config.ts` | Advancing. Contracts, inheritance, delegate bridge, kernel events, public topology schema, resolved profile topology projection, runtime-profile launcher topology merge, and topology lane compilation into daemon kernel options exist. | Make `LaneRouter` and subagent contracts role-aware; project role/handoff/lineage metadata into events; feed topology roles into PEP/audit. |
+| Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts`, `configs/runtime/profiles.json`, `packages/config-resolver/src/resolved-state.ts`, `packages/runtime-daemon/src/bin/daemon-config.ts` | Advancing. Contracts, inheritance, delegate bridge, kernel events, public topology schema, resolved profile topology projection, runtime-profile launcher topology merge, topology lane compilation into daemon kernel options, and role-aware contract/routing/event projection exist. | Feed topology roles into PEP/audit; add role defaults for bounded model/context settings; add manifest/doctor topology checks and lineage IDs. |
 | Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`, structured memory runtime profile state | Advancing. Kernel research executor, daemon composition, lazy default daemon memory recall source, and profile-projected memory defaults exist. | Add gated Docker/local daemon integration coverage and connect retain/reflect/checkpoint events. |
 | MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, and delegate/direct daemon MCP dependency construction now share one factory. | Expose live tool health/discovery views in the workbench, route direct calls through gateway trust/audit/OTel, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
 | Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, and resolved memory profile contracts exist. | Reuse the contract from harnesses and connect retain/reflect/checkpoint to runs. |
@@ -66,9 +66,11 @@ Latest four-lane audit intake on 2026-06-09:
   declarative topology projection plus a profile-driven runtime dependency
   factory that composes MCP, PDP, audit, memory, subagent, and deep-research
   dependencies for daemon, CLI, web, and desktop paths. Runtime topology now
-  has public schema, resolved profile projection, launcher merge, and daemon
-  lane-capacity compilation; remaining work is role-aware routing, event
-  lineage, policy roles, and audit closure.
+  has public schema, resolved profile projection, launcher merge, daemon
+  lane-capacity compilation, role-aware contract normalization, role-derived
+  lane routing, and role/requested-lane event projection. Remaining work is
+  bounded role defaults, event lineage IDs, policy roles, manifest/doctor
+  visibility, and audit closure.
 - **Presentation:** shells and gateway are usable, but `workbench.tsx` and
   `styles.css` are too large and event-log oriented. The next UI slice should
   model OpenHuman-style tool timeline entries, citation chips, and artifact
@@ -89,9 +91,11 @@ Latest four-lane audit intake on 2026-06-09:
   events. Delegate runtime and direct daemon MCP calls share one MCP dependency
   factory backed by resolved runtime profiles. Daemon memory now has a lazy
   runtime dependency factory that can inject a default memory recall source into
-  deep research from structured runtime memory profile state plus env. Next work
-  should target live MCP workbench views, gateway trust/audit/OTel convergence,
-  test-harness reuse of the memory contract, and per-service readiness.
+  deep research from structured runtime memory profile state plus env. Subagent
+  role/lane selection now comes from resolved topology contracts and rejects raw
+  lane hints once a role catalog exists. Next work should target live MCP
+  workbench views, gateway trust/audit/OTel convergence, test-harness reuse of
+  the memory/topology contracts, and per-service readiness.
 
 ## Execution Queue
 
@@ -115,9 +119,11 @@ Latest four-lane audit intake on 2026-06-09:
    and compile them into kernel lane capacities, child runtime policy, and
    lineage events.
    Public schema, runtime profile topology projection, runtime-profile launcher
-   merge, and daemon lane-capacity compilation are now wired. Remaining work:
-   child runtime policy defaults, role-aware `LaneRouter`, PEP role context, and
-   lineage/audit events.
+   merge, daemon lane-capacity compilation, role-aware contract normalization,
+   role-derived `LaneRouter` behavior, delegate request metadata, and
+   event-store/frontend role projection are now wired. Remaining work: child
+   runtime policy defaults, PEP role context, topology manifest/doctor
+   visibility, and lineage/audit events.
 5. **Workbench IA pass:** split `packages/frontend-app/src/workbench.tsx` into
    durable views: runs, graph, research, memory, MCP, approvals, artifacts,
    settings. First data-model slice: tool timeline entries, citation ledger,

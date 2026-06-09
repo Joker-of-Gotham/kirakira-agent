@@ -407,6 +407,8 @@ export class OrchestratorKernel {
         kind: node.kind,
         status: node.status,
         description: node.spec.description,
+        ...(node.spec.subagent?.role !== undefined ? { role: node.spec.subagent.role } : {}),
+        ...(node.spec.subagent?.lane !== undefined ? { requestedLane: node.spec.subagent.lane } : {}),
         ...(node.assignedWorkerId !== undefined ? { workerId: node.assignedWorkerId } : {}),
         ...(node.error !== undefined ? { error: node.error } : {}),
       })),
@@ -455,6 +457,8 @@ export class OrchestratorKernel {
       ...(contract !== undefined
         ? {
             taskPreview: contract.taskBrief,
+            role: contract.role,
+            requestedLane: contract.lane,
             capabilities: contract.capabilities,
             modelPreference: contract.modelPreference,
             runtimePolicy: contract.runtimePolicy,

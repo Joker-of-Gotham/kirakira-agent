@@ -42,7 +42,9 @@ export interface RunDashboardSubagent {
   parentTaskId?: string;
   parentWorkerId?: string;
   workerId?: string;
+  role?: string;
   lane?: string;
+  requestedLane?: string;
   traceId?: string;
   scope?: SubagentScopeRecord;
   contract?: SubagentContractRecord;
@@ -95,6 +97,8 @@ export interface RunDashboardGraphNode {
   phase: EntityPhase;
   kind?: string;
   description?: string;
+  role?: string;
+  requestedLane?: string;
   workerId?: string;
   error?: string;
   updatedAt?: string;
@@ -731,6 +735,12 @@ function subagentDetail(event: RunEvent): Partial<RunDashboardSubagent> {
     ...(firstString(event.payload, ["taskPreview"]) !== undefined
       ? { taskPreview: firstString(event.payload, ["taskPreview"]) }
       : {}),
+    ...(firstString(event.payload, ["role"]) !== undefined
+      ? { role: firstString(event.payload, ["role"]) }
+      : {}),
+    ...(firstString(event.payload, ["requestedLane"]) !== undefined
+      ? { requestedLane: firstString(event.payload, ["requestedLane"]) }
+      : {}),
     ...(firstString(event.payload, ["modelPreference"]) !== undefined
       ? { modelPreference: firstString(event.payload, ["modelPreference"]) }
       : {}),
@@ -765,8 +775,14 @@ function subagentDetail(event: RunEvent): Partial<RunDashboardSubagent> {
     ...(firstString(event.payload, ["workerId"]) !== undefined
       ? { workerId: firstString(event.payload, ["workerId"]) }
       : {}),
+    ...(firstString(event.payload, ["role"]) !== undefined
+      ? { role: firstString(event.payload, ["role"]) }
+      : {}),
     ...(firstString(event.payload, ["lane"]) !== undefined
       ? { lane: firstString(event.payload, ["lane"]) }
+      : {}),
+    ...(firstString(event.payload, ["requestedLane"]) !== undefined
+      ? { requestedLane: firstString(event.payload, ["requestedLane"]) }
       : {}),
     ...(firstString(event.payload, ["traceId"]) !== undefined
       ? { traceId: firstString(event.payload, ["traceId"]) }
@@ -882,6 +898,12 @@ function applyTaskToGraph(
     ...(firstString(event.payload, ["description"]) !== undefined
       ? { description: firstString(event.payload, ["description"]) }
       : {}),
+    ...(firstString(event.payload, ["role"]) !== undefined
+      ? { role: firstString(event.payload, ["role"]) }
+      : {}),
+    ...(firstString(event.payload, ["requestedLane"]) !== undefined
+      ? { requestedLane: firstString(event.payload, ["requestedLane"]) }
+      : {}),
     ...(firstString(event.payload, ["workerId"]) !== undefined
       ? { workerId: firstString(event.payload, ["workerId"]) }
       : {}),
@@ -922,6 +944,10 @@ function graphNodes(event: RunEvent): RunDashboardGraphNode[] | undefined {
         ...(firstString(raw, ["kind"]) !== undefined ? { kind: firstString(raw, ["kind"]) } : {}),
         ...(firstString(raw, ["description"]) !== undefined
           ? { description: firstString(raw, ["description"]) }
+          : {}),
+        ...(firstString(raw, ["role"]) !== undefined ? { role: firstString(raw, ["role"]) } : {}),
+        ...(firstString(raw, ["requestedLane"]) !== undefined
+          ? { requestedLane: firstString(raw, ["requestedLane"]) }
           : {}),
         ...(firstString(raw, ["workerId"]) !== undefined
           ? { workerId: firstString(raw, ["workerId"]) }

@@ -24,7 +24,9 @@ describe("RunStateProjector subagent events", () => {
           subagentId: "sg-1",
           parentTaskId: "task-parent",
           parentWorkerId: "worker-parent",
+          role: "implementer",
           lane: "delegated",
+          requestedLane: "delegated",
           traceId: "trace-1",
           taskPreview: "Inspect repo",
           capabilities: [{ kind: "tool", name: "repo.read" }],
@@ -54,7 +56,9 @@ describe("RunStateProjector subagent events", () => {
       parentTaskId: "task-parent",
       parentWorkerId: "worker-parent",
       workerId: "worker-child",
+      role: "implementer",
       lane: "delegated",
+      requestedLane: "delegated",
       traceId: "trace-1",
       scope: {
         capabilities: [{ kind: "tool", name: "repo.read" }],
@@ -62,6 +66,8 @@ describe("RunStateProjector subagent events", () => {
       },
       contract: {
         taskPreview: "Inspect repo",
+        role: "implementer",
+        requestedLane: "delegated",
         modelPreference: "openai:gpt-5.4",
         runtimePolicy: { maxTurns: 8 },
         policyCeiling: { network: "restricted" },

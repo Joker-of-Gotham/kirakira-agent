@@ -45,7 +45,9 @@ export interface DelegateRequest {
   subagentId: string;
   parentWorkerId: string;
   parentTaskId?: string;
+  role?: string;
   lane?: string;
+  requestedLane?: string;
   traceId?: string;
   parentConfig: ReactWorkerState["config"];
   runId: string;
@@ -406,7 +408,9 @@ ${execRes.stderr}`;
       const capabilities = delegateCapabilities(delegateAction);
       const modelPreference = stringArg(delegateAction, "modelPreference", "model");
       const parentTaskId = stringArg(delegateAction, "parentTaskId", "taskId");
+      const role = stringArg(delegateAction, "role");
       const lane = stringArg(delegateAction, "lane");
+      const requestedLane = stringArg(delegateAction, "requestedLane");
       const traceId = stringArg(delegateAction, "traceId");
       const runtimePolicy = objectArg<SubagentRuntimePolicy>(delegateAction, "runtimePolicy");
       const policyCeiling = objectArg<SandboxPolicyCeiling>(delegateAction, "policyCeiling");
@@ -416,7 +420,9 @@ ${execRes.stderr}`;
         subagentId,
         parentWorkerId: state.config.id,
         ...(parentTaskId !== undefined ? { parentTaskId } : {}),
+        ...(role !== undefined ? { role } : {}),
         ...(lane !== undefined ? { lane } : {}),
+        ...(requestedLane !== undefined ? { requestedLane } : {}),
         ...(traceId !== undefined ? { traceId } : {}),
         ...(capabilities !== undefined ? { capabilities } : {}),
         ...(modelPreference !== undefined ? { modelPreference } : {}),
@@ -479,7 +485,9 @@ ${execRes.stderr}`;
           subagentId,
           parentWorkerId: state.config.id,
           ...(parentTaskId !== undefined ? { parentTaskId } : {}),
+          ...(role !== undefined ? { role } : {}),
           ...(lane !== undefined ? { lane } : {}),
+          ...(requestedLane !== undefined ? { requestedLane } : {}),
           ...(traceId !== undefined ? { traceId } : {}),
           parentConfig: state.config,
           runId: state.config.runId,

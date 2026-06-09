@@ -589,6 +589,70 @@ describe("orchestrator task executor", () => {
     });
   });
 
+  it("routes subagents through normalized topology lane hints", async () => {
+    const bridgeRequests: RuntimeSubagentBridgeRequest[] = [];
+    const executor = new SubagentTaskExecutor({
+      bridge: {
+        async run(request) {
+          bridgeRequests.push(request);
+          return { output: "background child" };
+        },
+      },
+      getContext: () => ({
+        runId: "run-1",
+        parentWorkerId: "worker-parent",
+        parentConfig: parentConfig(),
+        workspaceRoot: "C:/workspace",
+      }),
+      fallback: fallbackExecutor(),
+    });
+    const loop = new KernelLoop(kernelExecutorDeps(executor));
+    const events = [];
+
+    for await (const event of loop.run(
+      "run-1",
+      basePlan({
+        context: {
+          ...context,
+          orchestration: {
+            roles: [{ id: "researcher", lane: "background" }],
+          },
+        },
+        steps: [
+          {
+            id: "research-worker",
+            kind: "subagent",
+            description: "Collect evidence",
+            dependsOn: [],
+            canParallelize: true,
+            toolScope: ["repo.read"],
+            subagent: {
+              role: "researcher",
+              taskBrief: "Collect evidence",
+            },
+          },
+        ],
+      }),
+    )) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual({
+      kind: "task_started",
+      nodeId: "research-worker",
+      lane: "background",
+      workerId: expect.any(String),
+    });
+    expect(bridgeRequests[0]).toMatchObject({
+      parentTaskId: "research-worker",
+      lane: "background",
+      spec: {
+        role: "researcher",
+        lane: "background",
+      },
+    });
+  });
+
   it("saves async checkpoints at superstep boundaries", async () => {
     const saved = new Map<string, CheckpointEnvelope>();
     const deps = kernelExecutorDeps(fallbackExecutor());

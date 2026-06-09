@@ -22,6 +22,8 @@ export class DelegateRunnerSubagentBridge implements RuntimeSubagentBridge {
       runId: request.runId,
       task: request.spec.taskBrief,
       capabilities: request.spec.capabilities,
+      ...(request.spec.role !== undefined ? { role: request.spec.role } : {}),
+      ...(request.spec.lane !== undefined ? { requestedLane: request.spec.lane } : {}),
       ...(request.spec.modelPreference !== undefined
         ? { modelPreference: request.spec.modelPreference }
         : {}),
@@ -38,6 +40,8 @@ export class DelegateRunnerSubagentBridge implements RuntimeSubagentBridge {
         args: {
           task: request.spec.taskBrief,
           parentTaskId: request.parentTaskId,
+          ...(request.spec.role !== undefined ? { role: request.spec.role } : {}),
+          ...(request.spec.lane !== undefined ? { requestedLane: request.spec.lane } : {}),
           lane: request.lane,
           ...(request.spec.traceId !== undefined ? { traceId: request.spec.traceId } : {}),
           capabilities: request.spec.capabilities,

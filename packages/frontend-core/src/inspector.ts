@@ -319,7 +319,9 @@ function subagentFocus(subagent: RunDashboardSubagent): RunInspectorFocus {
     ...detail("Worker", subagent.workerId),
     ...detail("Parent task", subagent.parentTaskId),
     ...detail("Parent worker", subagent.parentWorkerId),
+    ...detail("Role", subagent.role),
     ...detail("Lane", subagent.lane),
+    ...detail("Requested lane", subagent.requestedLane),
     ...detail("Trace", subagent.traceId),
     ...detail("Capabilities", listValue(capabilitySummary)),
     ...detail("Model", subagent.contract?.modelPreference),
@@ -334,6 +336,7 @@ function subagentFocus(subagent: RunDashboardSubagent): RunInspectorFocus {
     summary:
       subagent.result?.preview ??
       subagent.contract?.taskPreview ??
+      subagent.role ??
       subagent.lane ??
       "Delegated worker",
     updatedAt: subagent.updatedAt,

@@ -145,6 +145,13 @@ describe("runtime daemon env config", () => {
           "filesystem-artifact",
           "memory",
         ]),
+        orchestration: {
+          handoff_mode: "swarm",
+          default_role: "supervisor",
+          roles: expect.arrayContaining([
+            expect.objectContaining({ id: "implementer", lane: "delegated" }),
+          ]),
+        },
       });
       expect(config.kernel?.memory?.env).toMatchObject({
         KIRAKIRA_WORKSPACE_ROOT: workspaceRoot,

@@ -42,6 +42,9 @@ describe("frontend-core run inspector projection", () => {
         "subagent.spawned",
         {
           subagentId: "agent-a",
+          role: "implementer",
+          lane: "delegated",
+          requestedLane: "delegated",
           taskPreview: "Review runtime UI",
           capabilities: [{ kind: "skill", name: "frontend-ui-engineering" }],
         },
@@ -99,6 +102,12 @@ describe("frontend-core run inspector projection", () => {
         "approval:approval-a",
       ]),
     );
+    expect(inspector.focusItems.find((item) => item.id === "subagent:agent-a")?.details)
+      .toEqual(expect.arrayContaining([
+        { label: "Role", value: "implementer" },
+        { label: "Lane", value: "delegated" },
+        { label: "Requested lane", value: "delegated" },
+      ]));
   });
 
   it("falls back to lifecycle focus when the selected item is unavailable", () => {

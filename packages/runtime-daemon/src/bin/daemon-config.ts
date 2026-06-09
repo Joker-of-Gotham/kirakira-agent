@@ -129,6 +129,7 @@ export function kernelOptionsFromResolvedConfig(
     planContext: {
       workspace,
       ...(mcpServerNames.length > 0 ? { availableMcpServers: mcpServerNames } : {}),
+      ...(topology !== undefined ? { orchestration: topology } : {}),
     },
     ...(Object.keys(laneCapacities).length > 0
       ? { laneCapacities }

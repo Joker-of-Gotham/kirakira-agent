@@ -73,7 +73,9 @@ describe("frontend-core run dashboard projection", () => {
           subagentId: "agent-a",
           parentTaskId: "task-parent",
           parentWorkerId: "worker-parent",
+          role: "implementer",
           lane: "delegated",
+          requestedLane: "delegated",
           traceId: "trace-1",
           taskPreview: "Inspect repo",
           capabilities: [
@@ -109,7 +111,9 @@ describe("frontend-core run dashboard projection", () => {
       parentTaskId: "task-parent",
       parentWorkerId: "worker-parent",
       workerId: "worker-child",
+      role: "implementer",
       lane: "delegated",
+      requestedLane: "delegated",
       traceId: "trace-1",
       scope: {
         capabilities: [
@@ -123,6 +127,8 @@ describe("frontend-core run dashboard projection", () => {
       },
       contract: {
         taskPreview: "Inspect repo",
+        role: "implementer",
+        requestedLane: "delegated",
         modelPreference: "openai:gpt-5.4",
         runtimePolicy: { maxTurns: 8 },
         policyCeiling: { network: "restricted" },
@@ -295,7 +301,14 @@ describe("frontend-core run dashboard projection", () => {
           failedNodes: 0,
           nodes: [
             { id: "root", kind: "synthesize", status: "pending", description: "Root" },
-            { id: "research", kind: "subagent", status: "pending", description: "Research" },
+            {
+              id: "research",
+              kind: "subagent",
+              status: "pending",
+              description: "Research",
+              role: "researcher",
+              requestedLane: "background",
+            },
             { id: "write", kind: "synthesize", status: "pending", description: "Write" },
           ],
           edges: [
@@ -347,6 +360,8 @@ describe("frontend-core run dashboard projection", () => {
       phase: "completed",
       kind: "subagent",
       description: "Research",
+      role: "researcher",
+      requestedLane: "background",
       workerId: "worker-1",
     });
     expect(projection.entities.tasks.research).toBe("completed");

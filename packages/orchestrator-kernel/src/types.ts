@@ -4,6 +4,7 @@ import type {
   SubagentRuntimePolicy,
   WorkerConfig,
 } from "@kirakira/agent-runtime";
+import type { ResolvedRuntimeOrchestrationState } from "@kirakira/core";
 import type {
   DeepResearchConfig,
   ResearchSourceKind,
@@ -104,6 +105,7 @@ export interface PlanContext {
   availableTools: string[];
   availableSkills: string[];
   availableMcpServers?: string[];
+  orchestration?: ResolvedRuntimeOrchestrationState;
   previousArtifacts?: string[];
   constraints?: string[];
 }
@@ -111,6 +113,8 @@ export interface PlanContext {
 export interface SubagentTaskContract {
   taskBrief: string;
   capabilities: SubagentCapability[];
+  role?: string;
+  lane?: LaneType;
   modelPreference?: string;
   runtimePolicy?: SubagentRuntimePolicy;
   policyCeiling?: WorkerConfig["policyCeiling"];
@@ -346,6 +350,8 @@ export interface MergeResult {
 export interface SubagentSpec {
   taskBrief: string;
   capabilities: SubagentCapability[];
+  role?: string;
+  lane?: LaneType;
   modelPreference?: string;
   runtimePolicy?: SubagentRuntimePolicy;
   parentWorkerId: string;

@@ -20,6 +20,19 @@ const context: PlanContext = {
   availableMcpServers: ["filesystem"],
 };
 
+const topologyContext: PlanContext = {
+  ...context,
+  orchestration: {
+    handoff_mode: "swarm",
+    default_role: "supervisor",
+    roles: [
+      { id: "researcher", lane: "background" },
+      { id: "implementer", lane: "delegated" },
+    ],
+    handoffs: [{ from: "supervisor", to: "implementer", mode: "tool" }],
+  },
+};
+
 function basePlan(overrides: Partial<RunPlan> = {}): RunPlan {
   return {
     id: "plan-1",
@@ -142,6 +155,107 @@ describe("orchestrator subagent contract", () => {
     );
   });
 
+  it("normalizes topology role metadata and role-derived lane without granting capabilities", () => {
+    const graph = new PlanNormalizer().normalize(
+      basePlan({
+        context: topologyContext,
+        steps: [
+          {
+            id: "step-a",
+            kind: "subagent",
+            description: "Collect evidence",
+            dependsOn: [],
+            canParallelize: true,
+            toolScope: ["repo.read"],
+            subagent: {
+              taskBrief: "Research local evidence",
+              role: "researcher",
+            },
+          },
+        ],
+      }),
+      "run-1",
+    );
+
+    expect(graph.nodes.get("step-a")?.spec.subagent).toMatchObject({
+      role: "researcher",
+      lane: "background",
+      capabilities: [{ kind: "tool", name: "repo.read" }],
+    });
+  });
+
+  it("rejects unknown topology roles when a role catalog is available", () => {
+    expect(() =>
+      new PlanNormalizer().normalize(
+        basePlan({
+          context: topologyContext,
+          steps: [
+            {
+              id: "step-a",
+              kind: "subagent",
+              description: "Escalate",
+              dependsOn: [],
+              canParallelize: true,
+              subagent: {
+                role: "admin",
+              },
+            },
+          ],
+        }),
+        "run-1",
+      ),
+    ).toThrow(/Unknown subagent topology role/);
+  });
+
+  it("rejects planner lane hints that do not resolve through topology roles", () => {
+    expect(() =>
+      new PlanNormalizer().normalize(
+        basePlan({
+          context: topologyContext,
+          steps: [
+            {
+              id: "step-a",
+              kind: "subagent",
+              description: "Jump queue",
+              dependsOn: [],
+              canParallelize: true,
+              subagent: {
+                taskBrief: "Jump queue",
+                lane: "foreground",
+              },
+            },
+          ],
+        }),
+        "run-1",
+      ),
+    ).toThrow(/lane must resolve through a known topology role/);
+  });
+
+  it("rejects planner lane hints that conflict with the selected topology role", () => {
+    expect(() =>
+      new PlanNormalizer().normalize(
+        basePlan({
+          context: topologyContext,
+          steps: [
+            {
+              id: "step-a",
+              kind: "subagent",
+              description: "Misroute researcher",
+              dependsOn: [],
+              canParallelize: true,
+              subagent: {
+                taskBrief: "Misroute researcher",
+                role: "researcher",
+                lane: "foreground",
+              },
+            },
+          ],
+        }),
+        "run-1",
+      ),
+    ).toThrow(/conflicts with topology role/);
+  });
+
   it("hydrates planner subagent fields instead of dropping them", async () => {
     const compiler = new GoalCompiler({
       async completeText() {
@@ -160,6 +274,8 @@ describe("orchestrator subagent contract", () => {
               inputArtifactRefs: ["artifact-source"],
               subagent: {
                 taskBrief: "Research with citations",
+                role: "researcher",
+                lane: "background",
                 capabilities: [{ kind: "tool", name: "web.search" }],
                 modelPreference: "openai:gpt-5.4",
                 outputSchema: {
@@ -184,6 +300,8 @@ describe("orchestrator subagent contract", () => {
       inputArtifactRefs: ["artifact-source"],
       subagent: {
         taskBrief: "Research with citations",
+        role: "researcher",
+        lane: "background",
         capabilities: [{ kind: "tool", name: "web.search" }],
         modelPreference: "openai:gpt-5.4",
         outputSchema: {
@@ -290,6 +408,8 @@ describe("orchestrator subagent contract", () => {
     const spec: SubagentSpec = {
       taskBrief: "Inspect repo architecture",
       capabilities: [{ kind: "tool", name: "repo.read" }],
+      role: "implementer",
+      lane: "delegated",
       modelPreference: "openai:gpt-5.4",
       runtimePolicy: { maxTurns: 4 },
       parentWorkerId: "worker-parent",
@@ -305,7 +425,9 @@ describe("orchestrator subagent contract", () => {
       expect(request).toMatchObject({
         parentTaskId: "step-a",
         parentWorkerId: "worker-parent",
+        role: "implementer",
         lane: "delegated",
+        requestedLane: "delegated",
         traceId: "trace-1",
         task: "Inspect repo architecture",
         capabilities: [{ kind: "tool", name: "repo.read" }],
