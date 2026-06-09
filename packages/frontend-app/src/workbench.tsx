@@ -28,6 +28,7 @@ import {
   type RuntimeConnectionState,
   type RuntimeTransport,
   type RuntimeTransportEvent,
+  type RuntimeTransportStatus,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -102,17 +103,33 @@ export function KirakiraWorkbench({
   const [prompt, setPrompt] = useState(initialPrompt);
   const [mode, setMode] = useState<RuntimeRunMode>("interactive");
   const [error, setError] = useState<string | undefined>();
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeTransportStatus | undefined>();
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
 
   useEffect(() => {
     let disposed = false;
+    setRuntimeStatus(undefined);
     setConnection("connecting");
     runtime
       .connect()
-      .then(() => {
+      .then(async () => {
         if (!disposed) setConnection("connected");
+        const status = runtime.getStatus
+          ? await runtime.getStatus().catch((err: unknown) => ({
+              mode: runtime.mode,
+              state: "unknown" as const,
+              label: "Runtime status",
+              detail: err instanceof Error ? err.message : String(err),
+            }))
+          : {
+              mode: runtime.mode,
+              state: "unknown" as const,
+              label: "Runtime status",
+              detail: "No status provider",
+            };
+        if (!disposed) setRuntimeStatus(status);
       })
       .catch((err: unknown) => {
         if (!disposed) {
@@ -508,6 +525,14 @@ export function KirakiraWorkbench({
             <div>
               <dt>Transport</dt>
               <dd>{runtime.mode}</dd>
+            </div>
+            <div>
+              <dt>Health</dt>
+              <dd>
+                {runtimeStatus
+                  ? `${runtimeStatus.state}, ${runtimeStatus.label}`
+                  : "checking"}
+              </dd>
             </div>
             <div>
               <dt>Run</dt>

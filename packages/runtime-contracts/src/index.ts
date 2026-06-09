@@ -71,6 +71,21 @@ export {
   stringifyRuntimeServerMessage,
 } from "./protocol.js";
 export type {
+  RuntimeBrowserGatewayHealth,
+  RuntimeBrowserGatewayServiceHealth,
+  RuntimeDaemonHealth,
+  RuntimeHealthState,
+  RuntimeServiceHealth,
+  RuntimeSocketHealth,
+} from "./status.js";
+export {
+  isRuntimeBrowserGatewayHealth,
+  isRuntimeDaemonHealth,
+  runtimeBrowserGatewayHealth,
+  runtimeDaemonHealth,
+  runtimeServiceHealth,
+} from "./status.js";
+export type {
   ApprovalSummary,
   CostInfo,
   RunStateSnapshot,

@@ -1,5 +1,11 @@
 import { EventReader } from "@kirakira/event-store";
-import type { ControlMessage, EventFilter, RunEvent } from "@kirakira/runtime-contracts";
+import {
+  runtimeDaemonHealth,
+  type ControlMessage,
+  type EventFilter,
+  type RunEvent,
+  type RuntimeDaemonHealth,
+} from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
 import { KernelBridge } from "../bridge/kernel-bridge.js";
@@ -25,14 +31,7 @@ export interface DaemonConfig {
   shutdownTimeoutMs?: number;
 }
 
-export interface HealthStatus {
-  ok: boolean;
-  gateway: boolean;
-  kernel: boolean;
-  socket: boolean;
-  browserGateway: boolean;
-  details?: Record<string, unknown>;
-}
+export type HealthStatus = RuntimeDaemonHealth;
 
 export class DaemonLifecycle {
   private readonly sessions = new SessionManager();
@@ -309,19 +308,20 @@ export class DaemonLifecycle {
     const gw = this.gateway ? await this.gateway.isHealthy().catch(() => false) : false;
     const kernel = this.kernelBridge !== null;
     const socket = this._running && this.uds !== null;
-    const browserGateway = this._running && this.browserGateway !== null;
-    const ok = gw && kernel && socket;
-    return {
-      ok,
+    return runtimeDaemonHealth({
       gateway: gw,
       kernel,
       socket,
-      browserGateway,
-      details: {
-        socketPath: this.socketPath,
-        browserGateway: this.browserGatewayInfo,
-      },
-    };
+      socketPath: this.socketPath,
+      ...(this._running && this.browserGatewayInfo
+        ? {
+            browserGateway: {
+              endpoint: this.browserGatewayInfo.endpoint,
+              tokenRequired: this.browserGatewayInfo.tokenRequired,
+            },
+          }
+        : {}),
+    });
   }
 
   async stop(): Promise<void> {

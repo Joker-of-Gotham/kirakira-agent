@@ -4,7 +4,10 @@ import {
   BrowserGatewayServer,
   type BrowserGatewayListenInfo,
 } from "../../../packages/runtime-daemon/src/index.js";
-import { DEFAULT_BROWSER_GATEWAY_ENDPOINT } from "../../../packages/runtime-contracts/src/index.js";
+import {
+  DEFAULT_BROWSER_GATEWAY_ENDPOINT,
+  isRuntimeBrowserGatewayHealth,
+} from "../../../packages/runtime-contracts/src/index.js";
 
 const waitOpen = (ws: WebSocket) =>
   new Promise<void>((resolve, reject) => {
@@ -46,6 +49,15 @@ describe("BrowserGatewayServer", () => {
       expect(info.url).toBe(`ws://127.0.0.1:${info.port}/runtime`);
       const health = await fetch(`http://${info.host}:${info.port}/healthz`);
       expect(health.ok).toBe(true);
+      const payload: unknown = await health.json();
+      expect(isRuntimeBrowserGatewayHealth(payload)).toBe(true);
+      expect(payload).toMatchObject({
+        schemaVersion: 1,
+        ok: true,
+        transport: "browser-gateway",
+        endpoint: info.endpoint,
+        tokenRequired: false,
+      });
 
       const ws = new WebSocket(info.url, {
         headers: { Origin: "http://127.0.0.1:5179" },
@@ -57,6 +69,31 @@ describe("BrowserGatewayServer", () => {
         messageId: "msg-1",
       });
       ws.close();
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("reports token-required gateway health without leaking the token", async () => {
+    const server = new BrowserGatewayServer({
+      async onMessage() {},
+    });
+    const info = await server.start({
+      port: 0,
+      token: "secret-token",
+    });
+
+    try {
+      const health = await fetch(`http://${info.host}:${info.port}/healthz`);
+      const text = await health.text();
+      const payload: unknown = JSON.parse(text);
+
+      expect(isRuntimeBrowserGatewayHealth(payload)).toBe(true);
+      expect(payload).toMatchObject({
+        endpoint: info.endpoint,
+        tokenRequired: true,
+      });
+      expect(text).not.toContain("secret-token");
     } finally {
       await server.stop();
     }

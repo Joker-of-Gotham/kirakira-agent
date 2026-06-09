@@ -5,6 +5,8 @@ import {
   isLoopbackRuntimeHost,
   normalizeRuntimePath,
   renderRuntimeEndpoint,
+  runtimeBrowserGatewayHealth,
+  type RuntimeEndpointParts,
 } from "@kirakira/runtime-contracts";
 import { WebSocketServer } from "ws";
 import type { ServerMessage } from "./protocol.js";
@@ -28,6 +30,7 @@ export interface BrowserGatewayListenInfo {
   port: number;
   path: string;
   url: string;
+  endpoint: RuntimeEndpointParts;
   tokenRequired: boolean;
 }
 
@@ -87,7 +90,22 @@ export class BrowserGatewayServer {
     const server = createServer((request, response) => {
       if (request.method === "GET" && request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json" });
-        response.end(JSON.stringify({ ok: true, transport: "browser-gateway" }));
+        const endpoint =
+          this.listenInfo?.endpoint ??
+          renderRuntimeEndpoint({
+            protocol: DEFAULT_BROWSER_GATEWAY_ENDPOINT.protocol,
+            host,
+            port,
+            path,
+          });
+        response.end(
+          JSON.stringify(
+            runtimeBrowserGatewayHealth({
+              endpoint,
+              tokenRequired: Boolean(config.token),
+            }),
+          ),
+        );
         return;
       }
       response.writeHead(404, { "content-type": "text/plain" });
@@ -129,16 +147,18 @@ export class BrowserGatewayServer {
     const address = server.address();
     const actualPort =
       address && typeof address === "object" ? address.port : port;
+    const endpoint = renderRuntimeEndpoint({
+      protocol: DEFAULT_BROWSER_GATEWAY_ENDPOINT.protocol,
+      host,
+      port: actualPort,
+      path,
+    });
     this.listenInfo = {
       host,
       port: actualPort,
       path,
-      url: renderRuntimeEndpoint({
-        protocol: DEFAULT_BROWSER_GATEWAY_ENDPOINT.protocol,
-        host,
-        port: actualPort,
-        path,
-      }).url,
+      url: endpoint.url,
+      endpoint,
       tokenRequired: Boolean(config.token),
     };
     return this.listenInfo;

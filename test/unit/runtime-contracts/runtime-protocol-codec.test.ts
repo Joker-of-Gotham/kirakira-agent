@@ -43,6 +43,16 @@ describe("runtime protocol codec", () => {
       ok: false,
       error: { code: "invalid_filter", messageId: "sub-1" },
     });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "get_status",
+        messageId: "status-1",
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_message", messageId: "status-1" },
+    });
   });
 
   it("validates server messages and builds correlated protocol errors", () => {

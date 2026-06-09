@@ -9,6 +9,7 @@ import {
   parseRuntimeServerMessage,
   parseWebSocketRuntimeEndpoint,
 } from "@kirakira/runtime-contracts";
+import { fetchBrowserGatewayHealth } from "./browser-gateway-health.js";
 import type {
   ApprovalDecision,
   RuntimeTransport,
@@ -41,9 +42,10 @@ const defaultIdFactory = () =>
   globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}-${Math.random()}`;
 
 const appendToken = (endpoint: string, token: string | undefined): string => {
-  if (!token) return endpoint;
+  const normalizedToken = token?.trim();
+  if (!normalizedToken) return endpoint;
   const url = new URL(endpoint, globalThis.location?.href ?? "http://127.0.0.1");
-  url.searchParams.set("token", token);
+  url.searchParams.set("token", normalizedToken);
   return url.toString();
 };
 
@@ -228,6 +230,24 @@ export function createBrowserGatewayTransport(
       socket = null;
       subscriptions.clear();
       pendingSubscribeMessages.clear();
+    },
+    async getStatus() {
+      try {
+        const health = await fetchBrowserGatewayHealth({ endpoint: gatewayUrl });
+        return {
+          mode: "browser-gateway",
+          state: "healthy",
+          label: "Browser gateway",
+          health,
+        };
+      } catch (error) {
+        return {
+          mode: "browser-gateway",
+          state: "unavailable",
+          label: "Browser gateway",
+          detail: error instanceof Error ? error.message : String(error),
+        };
+      }
     },
     async submitPrompt(input: SubmitPromptRequest) {
       const mode: RuntimeRunMode = input.mode ?? "interactive";

@@ -5,12 +5,19 @@ export type {
   RuntimeTransportEvent,
   RuntimeTransportMode,
   RuntimeTransportSnapshot,
+  RuntimeTransportStatus,
+  RuntimeTransportStatusState,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
 } from "./transport.js";
 export type { BrowserGatewayTransportOptions } from "./browser-gateway-transport.js";
 export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";
+export type { BrowserGatewayHealthOptions } from "./browser-gateway-health.js";
+export {
+  browserGatewayHealthUrl,
+  fetchBrowserGatewayHealth,
+} from "./browser-gateway-health.js";
 
 export { createRunInspector } from "./inspector.js";
 

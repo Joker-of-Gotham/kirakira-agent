@@ -83,6 +83,25 @@ describe("browser gateway runtime transport", () => {
     );
   });
 
+  it("does not append blank tokens to socket URLs", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      token: "   ",
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    expect(socket?.url).toBe("ws://127.0.0.1:17373/runtime");
+  });
+
   it("submits prompts through the runtime protocol and resolves ack run ids", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;

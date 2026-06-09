@@ -1,6 +1,8 @@
 import type {
   EventFilter,
   RunEvent,
+  RuntimeBrowserGatewayHealth,
+  RuntimeDaemonHealth,
   RuntimeRunMode,
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
@@ -33,6 +35,16 @@ export interface RuntimeTransportSnapshot {
   state: unknown;
 }
 
+export type RuntimeTransportStatusState = "healthy" | "unavailable" | "unknown";
+
+export interface RuntimeTransportStatus {
+  mode: RuntimeTransportMode;
+  state: RuntimeTransportStatusState;
+  label: string;
+  detail?: string;
+  health?: RuntimeBrowserGatewayHealth | RuntimeDaemonHealth;
+}
+
 export type RuntimeTransportEvent =
   | { type: "connection"; state: RuntimeConnectionState; detail?: string }
   | { type: "event"; event: RunEvent }
@@ -47,6 +59,7 @@ export interface RuntimeTransport {
   readonly mode: RuntimeTransportMode;
   connect(): Promise<void>;
   disconnect(): void;
+  getStatus?(): Promise<RuntimeTransportStatus>;
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<RuntimeTransportSnapshot>;
   subscribeRun(

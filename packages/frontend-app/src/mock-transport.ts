@@ -265,6 +265,14 @@ export function createMockRuntimeTransport(): RuntimeTransport {
       timers.clear();
       listenersByRun.clear();
     },
+    async getStatus() {
+      return {
+        mode: "mock",
+        state: "healthy",
+        label: "Mock preview",
+        detail: connected ? "Connected" : "Idle",
+      };
+    },
     async submitPrompt(request) {
       if (!connected) {
         throw new Error("Mock runtime is not connected");
