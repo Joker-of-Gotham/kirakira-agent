@@ -25,26 +25,23 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After memory-store closure, the highest-leverage remaining mechanism gap is
-`runtime-daemon-profile-composition-dedup`: finish centralizing runtime-profile
-selection and daemon dependency composition so profile-selected OTel, MCP,
-memory, topology, and lifecycle adapters consume one profile-derived source of
-truth.
+After runtime-daemon profile composition closure, the highest-leverage remaining
+mechanism gap is `orchestrator-kernel-live-source-adapter-validation`: expand
+behavior validation from injected adapters to live daemon source adapters where
+practical.
 
 Evidence:
 
-- `packages/runtime-daemon/src/bridge/runtime-profile.ts`
-- `packages/runtime-daemon/src/bin/daemon-config.ts`
-- `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`
-- `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`
-- `test/unit/runtime-daemon/daemon-config.test.ts`
-- `test/unit/runtime-daemon/mcp-runtime.test.ts`
-- `test/unit/runtime-daemon/memory-runtime-deps.test.ts`
+- `packages/orchestrator-kernel/src/research/research-task-executor.ts`
+- `packages/orchestrator-kernel/src/research/event-bridge.ts`
+- `packages/runtime-daemon/src/bridge/deep-research.ts`
+- `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
+- `test/unit/orchestrator-kernel/task-executor.test.ts`
 
 Focused validation command:
 
 ```powershell
-pnpm exec vitest run test/unit/runtime-daemon/daemon-config.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts
+pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts
 ```
 
 ## External Behavior Constraints
@@ -70,7 +67,7 @@ pnpm exec vitest run test/unit/runtime-daemon/daemon-config.test.ts test/unit/ru
 | `mcp-adapter` | Intentional Kirakira extension | Covered | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, profile/env-selected recorder plans, SDK/OTLP factory selection, daemon-hosted SDK export injection, tool-result errors with `isError`, and live stdio/HTTP daemon-owned propagation smoke coverage. | None. |
 | `memory-store` | Intentional Kirakira extension | Covered | Daemon checkpoint repository selection, checkpoint envelope compatibility, daemon retain/reflect service bridge contracts, reflect runtime event kinds, reflect started/completed/failed event emission, and the isolated `test-host` live gate are covered. `node scripts/memory-persistence-smoke.mjs --profile test-host --live` passed unit checkpoint/retain contracts plus live checkpoint, retain/recall, reflect observation, belief, and outbox persistence tests; durable evidence is in `docs/upgrade/gates/memory-persistence-smoke.json`. | None. |
 | `orchestrator-kernel` | Intentional Kirakira extension | Partial | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, async checkpoint events, and top-level agent-runtime delegate metadata fields. Runtime-daemon kernel bridge coverage now exercises the daemon-owned memory research source path and verifies bounded recall runtime events. | Expand behavior validation from injected adapters to live daemon source adapters where practical. |
-| `runtime-daemon` | Intentional Kirakira extension | Partial | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway, profile-selected MCP OTel recorder plans are injected into daemon MCP dependencies, SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory, and retain/reflect memory operations share the daemon memory service path with typed runtime events. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json`. | Final runtime-profile selection and daemon dependency composition deduplication remain. |
+| `runtime-daemon` | Intentional Kirakira extension | Covered | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway; `runtimeProfileComposition` now feeds daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults; SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory; retain/reflect memory operations share the daemon memory service path with typed runtime events. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json`. | None. |
 
 ## Extra Target Entries
 
@@ -88,7 +85,9 @@ parity failures:
 
 File-level parity no longer blocks on unknown drift: all eight drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
-continue to warn while two rows remain `partial`, because the remaining work is
-live validation or integration closure rather than source inventory repair.
-The readiness report also expands these partial rows into machine-readable open
-work items so the high structural score is not mistaken for final completion.
+keep the file-drift classification as an advisory warning, while counting only
+the remaining `partial` behavior row as actionable open work. This separates the
+global evidence warning from remaining live validation or integration closure,
+so the high structural score is not mistaken for final completion and the open
+work count is not inflated by source inventory drift that already has behavior
+classification evidence.

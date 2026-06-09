@@ -16,7 +16,7 @@ import type {
   DaemonMemoryResearchSourceOptions,
   DaemonRunEventSink,
 } from "./deep-research.js";
-import { activeRuntimeProfile } from "./runtime-profile.js";
+import { runtimeProfileComposition } from "./runtime-profile.js";
 
 export type DaemonMemoryEnv = Record<string, string | undefined>;
 
@@ -234,7 +234,7 @@ function endpointHostPort(
 function activeRuntimeMemory(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
 ): ResolvedRuntimeMemoryState | undefined {
-  return activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName)?.memory;
+  return runtimeProfileComposition(options).memory;
 }
 
 function memoryServiceEnv(
@@ -313,20 +313,22 @@ function memoryProfileHasService(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
   name: string,
 ): boolean {
-  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
-  const memory = profile?.memory;
+  const composition = runtimeProfileComposition(options);
+  const memory = composition.memory;
   if (memory?.enabled === false) return false;
-  return (memory?.services ?? profile?.services ?? []).some((service) => service.name === name);
+  return (memory?.services ?? composition.profile?.services ?? []).some(
+    (service) => service.name === name,
+  );
 }
 
 function memoryProfileHasBackingServices(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
 ): boolean {
-  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
-  const memory = profile?.memory;
+  const composition = runtimeProfileComposition(options);
+  const memory = composition.memory;
   if (memory?.enabled === false) return false;
   const serviceNames = new Set(
-    (memory?.services ?? profile?.services ?? []).map((service) => service.name),
+    (memory?.services ?? composition.profile?.services ?? []).map((service) => service.name),
   );
   return [...MEMORY_SERVICE_NAMES].some((name) => serviceNames.has(name));
 }
@@ -665,7 +667,7 @@ function defaultWorkspaceId(
   options: DaemonMemoryDependencyOptions,
   env: DaemonMemoryEnv,
 ): string {
-  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
+  const profile = runtimeProfileComposition(options).profile;
   return (
     envFirst(env, "KIRAKIRA_MEMORY_WORKSPACE_ID", "KIRAKIRA_WORKSPACE_ID") ??
     profile?.workspace_root ??

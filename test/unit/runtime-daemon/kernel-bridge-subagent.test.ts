@@ -334,8 +334,12 @@ describe("runtime daemon subagent bridge", () => {
           service: memory,
           tenantId: ({ runId }) => `tenant-${runId}`,
           workspaceId: ({ workspaceRoot: taskWorkspaceRoot }) => taskWorkspaceRoot,
+          namespace: "agent",
+          kinds: ["fact", "observation"],
+          sessionId: ({ runId, node }) => `session-${runId}-${node.id}`,
           tokenBudget: 512,
           limit: 3,
+          includeRedacted: true,
         },
       },
       kernelOptions: {
@@ -392,13 +396,18 @@ describe("runtime daemon subagent bridge", () => {
         workspaceId: workspaceRoot,
         query: "What daemon evidence is available?",
         runId,
+        sessionId: `session-${runId}-research`,
+        namespace: "agent",
+        kinds: ["fact", "observation"],
         tokenBudget: 512,
         limit: 3,
         level: "L3",
-        includeRedacted: false,
+        includeRedacted: true,
       });
       expect(seen.map((event) => event.kind)).toEqual(
         expect.arrayContaining([
+          "memory.recall.started",
+          "memory.recall.completed",
           "research.started",
           "research.plan.created",
           "research.citation.added",
@@ -407,6 +416,54 @@ describe("runtime daemon subagent bridge", () => {
           "run.completed",
         ]),
       );
+      const recallStarted = seen.find((event) => event.kind === "memory.recall.started");
+      const recallCompleted = seen.find((event) => event.kind === "memory.recall.completed");
+      expect(recallStarted?.runId).toBe(runId);
+      expect(recallStarted?.payload).toMatchObject({
+        operation: "recall",
+        sourceKind: "memory",
+        runId,
+        researchRunId: `${runId}:research:research`,
+        researchTaskId: expect.any(String),
+        parentTaskId: "research",
+        nodeId: "research",
+        tenantId: `tenant-${runId}`,
+        workspaceId: workspaceRoot,
+        namespace: "agent",
+        kinds: ["fact", "observation"],
+        sessionId: `session-${runId}-research`,
+        tokenBudget: 512,
+        limit: 3,
+        level: "L3",
+        includeRedacted: true,
+        requireCitations: true,
+        limits: expect.objectContaining({
+          maxDepth: 1,
+          maxBreadth: 1,
+          maxToolCalls: 2,
+          tokenBudget: 512,
+          limit: 3,
+        }),
+      });
+      expect(recallStarted?.payload.queryHash).toEqual(expect.any(String));
+      expect(recallStarted?.payload.queryPreview).toBe("What daemon evidence is available?");
+      expect(recallCompleted?.payload).toMatchObject({
+        operation: "recall",
+        sourceKind: "memory",
+        runId,
+        bundleId: "bundle-1",
+        queryId: "query-1",
+        retrievalTraceId: "trace-1",
+        routeNames: ["vector"],
+        selectedRecordIds: ["rec-1"],
+        recordIds: ["rec-1"],
+        totalTokens: 128,
+        budgetLevel: "L3",
+        routeCount: 1,
+        candidateCount: 1,
+        evidenceCount: 1,
+        citationCount: 1,
+      });
       const taskCompleted = seen.find(
         (event) => event.kind === "task.completed" && event.payload.taskId === "research",
       );

@@ -27,7 +27,7 @@ import {
   type AuditWriter,
 } from "@kirakira/policy-engine";
 import { createDaemonMcpOtelSdkFactory } from "./mcp-otel-sdk-factory.js";
-import { activeRuntimeProfile } from "./runtime-profile.js";
+import { runtimeProfileComposition } from "./runtime-profile.js";
 export { activeRuntimeProfile } from "./runtime-profile.js";
 
 export interface DaemonMcpDependencyOptions {
@@ -102,8 +102,11 @@ export function registerResolvedProfileServers(
   manager: McpClientManager,
   options: Pick<DaemonMcpDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
 ): void {
-  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
-  for (const server of profile?.mcp_servers ?? []) {
+  const composition = runtimeProfileComposition({
+    resolvedConfig: options.resolvedConfig,
+    runtimeProfileName: options.runtimeProfileName,
+  });
+  for (const server of composition.mcpServers) {
     manager.registerServer(mcpServerConfigFromResolved(server));
   }
 }
@@ -115,8 +118,12 @@ export function buildDaemonMcpOtelRecorderPlan(
   >,
 ): McpOtelRecorderPlan {
   if (options.mcpOtelRecorderPlan !== undefined) return options.mcpOtelRecorderPlan;
+  const profile = runtimeProfileComposition({
+    resolvedConfig: options.resolvedConfig,
+    runtimeProfileName: options.runtimeProfileName,
+  }).profile;
   return buildMcpOtelRecorderPlan({
-    profile: activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName),
+    profile,
     ...(options.mcpOtelEnv !== undefined ? { env: options.mcpOtelEnv } : {}),
   });
 }

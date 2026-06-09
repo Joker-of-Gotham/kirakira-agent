@@ -1,6 +1,8 @@
 import type {
   OrchestrationTopologyConfig,
   ResolvedConfig,
+  ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
 } from "@kirakira/core";
@@ -14,13 +16,16 @@ export type RuntimeProfileTopology =
   | OrchestrationTopologyConfig;
 
 export interface RuntimeProfileCompositionInput {
-  resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+  resolvedConfig?: Pick<ResolvedConfig, "runtimeState"> &
+    Partial<Pick<ResolvedConfig, "agentToml">>;
   runtimeProfileName?: string;
 }
 
 export interface RuntimeProfileComposition {
   profile?: ResolvedRuntimeProfileState;
+  mcpServers: ResolvedRuntimeMcpServerState[];
   mcpServerNames: string[];
+  memory?: ResolvedRuntimeMemoryState;
   topology?: RuntimeProfileTopology;
   mcpManifest?: RuntimeMcpManifest;
   orchestrationManifest?: RuntimeOrchestrationManifest;
@@ -116,7 +121,9 @@ export function runtimeProfileComposition(
     input.runtimeProfileName,
   );
   const topology =
-    profile?.orchestration ?? input.resolvedConfig?.agentToml.orchestration?.topology;
+    profile?.orchestration ?? input.resolvedConfig?.agentToml?.orchestration?.topology;
+  const mcpServers = profile?.mcp_servers ?? [];
+  const memory = profile?.memory;
   const mcpManifest = runtimeMcpManifest(
     profile,
     input.resolvedConfig?.runtimeState?.mcp_catalog,
@@ -124,7 +131,9 @@ export function runtimeProfileComposition(
   const orchestrationManifest = runtimeOrchestrationManifest(profile);
   return {
     ...(profile ? { profile } : {}),
-    mcpServerNames: profile?.mcp_servers?.map((server) => server.name) ?? [],
+    mcpServers,
+    mcpServerNames: mcpServers.map((server) => server.name),
+    ...(memory ? { memory } : {}),
     ...(topology ? { topology } : {}),
     ...(mcpManifest ? { mcpManifest } : {}),
     ...(orchestrationManifest ? { orchestrationManifest } : {}),

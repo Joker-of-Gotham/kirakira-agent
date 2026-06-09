@@ -22,44 +22,36 @@
     }
   ],
   "nextMechanismGap": {
-    "id": "runtime-daemon-profile-composition-dedup",
-    "targetName": "runtime-daemon",
+    "id": "orchestrator-kernel-live-source-adapter-validation",
+    "targetName": "orchestrator-kernel",
     "priority": "high",
     "status": "partial",
-    "gap": "Finish centralizing runtime-profile selection and daemon dependency composition so profile-selected OTel, MCP, memory, topology, and lifecycle adapters consume one profile-derived source of truth.",
-    "rationale": "Memory-store closure removed the durable persistence blocker; runtime-daemon now owns the widest remaining partial drift row and the most shared startup/runtime coupling.",
+    "gap": "Expand behavior validation from injected adapters to live daemon source adapters where practical.",
+    "rationale": "Runtime-daemon profile composition now routes MCP, memory, topology, OTel, and lifecycle dependency selection through one composition helper; the remaining partial drift row is live source-adapter validation in orchestrator-kernel.",
     "evidence": [
       {
         "kind": "source",
-        "path": "packages/runtime-daemon/src/bridge/runtime-profile.ts"
+        "path": "packages/orchestrator-kernel/src/research/research-task-executor.ts"
       },
       {
         "kind": "source",
-        "path": "packages/runtime-daemon/src/bin/daemon-config.ts"
+        "path": "packages/orchestrator-kernel/src/research/event-bridge.ts"
       },
       {
         "kind": "source",
-        "path": "packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts"
-      },
-      {
-        "kind": "source",
-        "path": "packages/runtime-daemon/src/bridge/memory-runtime-deps.ts"
+        "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
       },
       {
         "kind": "test",
-        "path": "test/unit/runtime-daemon/daemon-config.test.ts"
+        "path": "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
       },
       {
         "kind": "test",
-        "path": "test/unit/runtime-daemon/mcp-runtime.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/runtime-daemon/memory-runtime-deps.test.ts"
+        "path": "test/unit/orchestrator-kernel/task-executor.test.ts"
       }
     ],
     "commands": [
-      "pnpm exec vitest run test/unit/runtime-daemon/daemon-config.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts",
+      "pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts",
       "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
     ]
   },
@@ -391,6 +383,10 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-runtime-presentation-smoke-gates.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-profile-composition-and-presentation-qa.md"
         }
       ],
       "remainingGaps": [
@@ -402,8 +398,8 @@
       "sourceName": "runtime-daemon",
       "targetName": "runtime-daemon",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira adds daemon config, shared MCP and memory dependency factories, deep-research composition, socket resolution, browser gateway, and runtime socket surfaces on top of the EAM daemon baseline.",
+      "status": "covered",
+      "behavior": "Kirakira adds daemon config, shared MCP and memory dependency factories, deep-research composition, socket resolution, browser gateway, and runtime socket surfaces on top of the EAM daemon baseline. Runtime profile selection is centralized through runtimeProfileComposition for daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults.",
       "extensionFiles": [
         "packages/runtime-daemon/src/bin/daemon-config.ts",
         "packages/runtime-daemon/src/bin/kirakira-runtime-daemon.ts",
@@ -442,6 +438,18 @@
           "command": "pnpm exec vitest run test/unit/runtime-daemon/daemon-config.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts"
         },
         {
+          "kind": "source",
+          "path": "packages/runtime-daemon/src/bridge/runtime-profile.ts"
+        },
+        {
+          "kind": "source",
+          "path": "packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts"
+        },
+        {
+          "kind": "source",
+          "path": "packages/runtime-daemon/src/bridge/memory-runtime-deps.ts"
+        },
+        {
           "kind": "test",
           "path": "test/contract/runtime/workbench-smoke-gate.test.ts",
           "command": "pnpm exec vitest run test/unit/scripts/workbench-smoke.test.ts test/contract/runtime/workbench-smoke-gate.test.ts"
@@ -474,11 +482,13 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-runtime-presentation-smoke-gates.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-profile-composition-and-presentation-qa.md"
         }
       ],
-      "remainingGaps": [
-        "Finish centralizing runtime-profile selection and daemon dependency composition so profile-selected OTel, MCP, memory, topology, and lifecycle adapters consume one profile-derived source of truth."
-      ]
+      "remainingGaps": []
     }
   ],
   "extraTargetEntries": [

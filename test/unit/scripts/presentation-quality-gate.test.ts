@@ -58,6 +58,7 @@ describe("presentation quality gate", () => {
       "workbench-a11y-anchors",
       "desktop-smoke-content-contract",
       "multi-view-ia-density",
+      "visual-design-review-artifact",
       "visual-qa-hooks",
       "presentation-contract-doc",
     ]);
@@ -70,6 +71,31 @@ describe("presentation quality gate", () => {
       "createWorkbenchInspectorView",
       "createWorkbenchDetailViews",
     ]);
+    expect(report.designReview.summary).toEqual({
+      status: "pass",
+      passed: 7,
+      total: 7,
+    });
+    expect(report.designReview.viewports.map((viewport) => viewport.id)).toEqual([
+      "mobile",
+      "tablet",
+      "desktop",
+    ]);
+    expect(report.designReview.scorecard.map((dimension) => dimension.id)).toEqual([
+      "layout",
+      "typography",
+      "spacing",
+      "color",
+      "hierarchy",
+      "consistency",
+      "interaction-responsive",
+    ]);
+    expect(report.designReview.sourceSignals).toMatchObject({
+      responsiveBreakpoints: expect.any(Number),
+      focusVisibleRules: expect.any(Number),
+      ariaLabels: expect.any(Number),
+      emptyStates: expect.any(Number),
+    });
   });
 
   it("renders markdown and json reports for readiness tooling", () => {
@@ -83,10 +109,13 @@ describe("presentation quality gate", () => {
     expect(markdown).toContain("Status: pass");
     expect(markdown).toContain("presentation:web=http://127.0.0.1:5183/");
     expect(markdown).toContain("IA density: 4 nav views, 4 inspector tabs");
+    expect(markdown).toContain("Visual review: pass (7/7 dimensions passed)");
+    expect(markdown).toContain("| Visual Dimension | Status | Evidence |");
 
     const parsed = JSON.parse(renderPresentationQualityReport(report, "json"));
     expect(parsed.summary.status).toBe("pass");
     expect(parsed.readiness.desktopTarget).toBe("http://127.0.0.1:5174/");
+    expect(parsed.designReview.summary.status).toBe("pass");
   });
 
   it("writes a renderer-safe QA result artifact", () => {
@@ -107,5 +136,7 @@ describe("presentation quality gate", () => {
     expect(artifact.summary.status).toBe("pass");
     expect(artifact.artifacts.reportPath).toBe(artifactPath);
     expect(artifact.iaDensity.navigationViews).toHaveLength(4);
+    expect(artifact.designReview.viewports).toHaveLength(3);
+    expect(artifact.designReview.scorecard).toHaveLength(7);
   });
 });

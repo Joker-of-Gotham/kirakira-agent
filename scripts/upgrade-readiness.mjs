@@ -81,6 +81,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     ecosystemTrack(context),
   ].map(scoreTrack);
   const openWork = buildOpenWork(tracks, parity);
+  const advisories = buildAdvisoryWarnings(tracks);
   const totals = tracks.reduce(
     (summary, track) => {
       summary.pass += track.summary.pass;
@@ -101,11 +102,13 @@ export function buildUpgradeReadinessReport(options = {}) {
       score: scoreFromCounts(totals),
       status: totals.fail > 0 ? "fail" : totals.warn > 0 ? "warn" : "pass",
       openWork: openWork.length,
+      advisoryWarnings: advisories.length,
     },
     tracks,
     gates: {
       memoryPersistence: memoryPersistenceSmoke,
     },
+    advisoryWarnings: advisories,
     openWork,
   };
 }
@@ -126,8 +129,21 @@ export function renderUpgradeReadinessReport(report, format = "markdown") {
     `- Score: ${report.summary.score}%`,
     `- Checks: ${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail`,
     `- Open work items: ${report.summary.openWork}`,
+    `- Advisory warnings: ${report.summary.advisoryWarnings}`,
     "",
   ];
+
+  if (report.advisoryWarnings.length > 0) {
+    lines.push("## Advisory Warnings", "");
+    lines.push("| Track | Status | Item | Evidence |");
+    lines.push("| --- | --- | --- | --- |");
+    for (const item of report.advisoryWarnings) {
+      lines.push(
+        `| ${escapeTableCell(item.track)} | ${item.status} | ${escapeTableCell(item.item)} | ${escapeTableCell(item.evidence)} |`,
+      );
+    }
+    lines.push("");
+  }
 
   if (report.openWork.length > 0) {
     lines.push("## Open Work", "");
@@ -160,6 +176,7 @@ function buildOpenWork(tracks, parity) {
   const readinessItems = tracks.flatMap((track) =>
     track.checks
       .filter((check) => check.status !== "pass")
+      .filter((check) => check.actionable !== false)
       .map((check) => ({
         track: track.title,
         status: check.status,
@@ -186,6 +203,20 @@ function buildOpenWork(tracks, parity) {
   return [...readinessItems, ...behaviorItems];
 }
 
+function buildAdvisoryWarnings(tracks) {
+  return tracks.flatMap((track) =>
+    track.checks
+      .filter((check) => check.status !== "pass")
+      .filter((check) => check.actionable === false)
+      .map((check) => ({
+        track: track.title,
+        status: check.status,
+        item: check.label,
+        evidence: check.evidence,
+      })),
+  );
+}
+
 function eamMechanismTrack({ workspaceRoot, parity }) {
   return {
     id: "eam-mechanism-parity",
@@ -201,7 +232,7 @@ function eamMechanismTrack({ workspaceRoot, parity }) {
         parity.summary.missing === 0,
         `missing=${parity.summary.missing}, drift=${parity.summary.drift}, extra=${parity.summary.extra}`,
       ),
-      warnIf(
+      advisoryWarnIf(
         "File-level mechanism drift has behavior classifications",
         parity.summary.drift === 0 || behaviorDriftClosed(parity.behaviorParity),
         behaviorParityEvidence(parity),
@@ -421,6 +452,15 @@ function warnIf(label, condition, evidence) {
     label,
     status: condition ? "pass" : "warn",
     evidence,
+  };
+}
+
+function advisoryWarnIf(label, condition, evidence) {
+  return {
+    label,
+    status: condition ? "pass" : "warn",
+    evidence,
+    ...(!condition ? { actionable: false } : {}),
   };
 }
 

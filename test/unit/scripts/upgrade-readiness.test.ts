@@ -34,8 +34,24 @@ describe("upgrade readiness gate", () => {
     ]);
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
-    expect(report.summary.openWork).toBeGreaterThan(0);
-    expect(report.openWork.some((item) => item.item.includes("profile-selected OTel"))).toBe(true);
+    expect(report.summary.openWork).toBe(1);
+    expect(report.summary.advisoryWarnings).toBe(1);
+    expect(report.advisoryWarnings).toContainEqual(
+      expect.objectContaining({
+        item: "File-level mechanism drift has behavior classifications",
+        status: "warn",
+      }),
+    );
+    expect(
+      report.openWork.some((item) =>
+        item.item.includes("File-level mechanism drift has behavior classifications"),
+      ),
+    ).toBe(false);
+    expect(
+      report.openWork.some((item) =>
+        item.item.includes("live daemon source adapters"),
+      ),
+    ).toBe(true);
     expect(report.gates.memoryPersistence.profile).toBe("test-host");
     expect(report.tracks).toContainEqual(
       expect.objectContaining({
@@ -70,9 +86,11 @@ describe("upgrade readiness gate", () => {
     const json = JSON.parse(renderUpgradeReadinessReport(report, "json"));
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
+    expect(markdown).toContain("## Advisory Warnings");
     expect(markdown).toContain("## Open Work");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
     expect(json.openWork.length).toBe(report.openWork.length);
+    expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
   });
 });

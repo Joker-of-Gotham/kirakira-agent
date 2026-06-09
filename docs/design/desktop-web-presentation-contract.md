@@ -63,7 +63,10 @@ pnpm exec vitest run test/unit/desktop/startup-manifest.test.ts test/unit/deskto
 
 The presentation gate is browser-safe: it resolves the runtime profile, checks
 the shared renderer contract, validates multi-view IA density, and can write a
-JSON QA artifact without starting Web, Electron, Docker, or local services.
+JSON QA artifact without starting Web, Electron, Docker, or local services. The
+artifact also carries a seven-dimension visual review scorecard and mobile,
+tablet, and desktop viewport targets so design QA has an archiveable record
+before screenshot automation is available.
 
 Remaining design work:
 

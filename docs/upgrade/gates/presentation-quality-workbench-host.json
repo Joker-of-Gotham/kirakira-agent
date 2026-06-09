@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-06-09T20:53:34.244Z",
+  "generatedAt": "2026-06-09T21:11:31.569Z",
   "workspaceRoot": "C:\\technical-development\\kirakira-agent",
   "profile": "workbench-host",
   "readiness": {
@@ -64,14 +64,113 @@
       "createWorkbenchDetailViews"
     ]
   },
+  "designReview": {
+    "method": "browser-safe source review",
+    "viewports": [
+      {
+        "id": "mobile",
+        "width": 375,
+        "height": 812,
+        "surface": "narrow web and desktop renderer"
+      },
+      {
+        "id": "tablet",
+        "width": 768,
+        "height": 1024,
+        "surface": "single-column workbench transition"
+      },
+      {
+        "id": "desktop",
+        "width": 1440,
+        "height": 900,
+        "surface": "three-pane workbench"
+      }
+    ],
+    "sourceSignals": {
+      "responsiveBreakpoints": 4,
+      "focusVisibleRules": 5,
+      "tokenReferences": 433,
+      "colorTokenDefinitions": 103,
+      "spacingTokenDefinitions": 20,
+      "radiusTokenDefinitions": 16,
+      "shadowReferences": 8,
+      "fontFamilyRules": 4,
+      "lineHeightRules": 16,
+      "letterSpacingRules": 8,
+      "overflowGuards": 86,
+      "motionPreferenceRules": 1,
+      "ariaLabels": 49,
+      "liveRegions": 6,
+      "alertRegions": 2,
+      "disabledControls": 6,
+      "emptyStates": 30
+    },
+    "scorecard": [
+      {
+        "id": "layout",
+        "label": "Layout",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "breakpoints=4; nav=4; inspector=4"
+      },
+      {
+        "id": "typography",
+        "label": "Typography",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "fontFamily=4; lineHeight=16; letterSpacingZero=8"
+      },
+      {
+        "id": "spacing",
+        "label": "Spacing",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "spaceTokens=20; tokenRefs=433"
+      },
+      {
+        "id": "color",
+        "label": "Color",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "colorTokens=103; tokenRefs=433"
+      },
+      {
+        "id": "hierarchy",
+        "label": "Hierarchy",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "entrypoints=3; detailMetrics=9; inspectorMetrics=12"
+      },
+      {
+        "id": "consistency",
+        "label": "Consistency",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "radiusTokens=16; shadows=8; ariaLabels=49"
+      },
+      {
+        "id": "interaction-responsive",
+        "label": "Interaction and Responsive",
+        "status": "pass",
+        "severity": "none",
+        "evidence": "focus=5; live=6; empty=30; overflow=86; motion=1"
+      }
+    ],
+    "summary": {
+      "status": "pass",
+      "passed": 7,
+      "total": 7
+    },
+    "followUp": "Capture screenshots for the same viewport targets once renderer screenshot automation is available."
+  },
   "artifacts": {
     "reportPath": "C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-quality-workbench-host.json"
   },
   "summary": {
     "status": "pass",
-    "passed": 8,
+    "passed": 9,
     "failed": 0,
-    "total": 8
+    "total": 9
   },
   "checks": [
     {
@@ -109,6 +208,12 @@
       "label": "shared renderer exposes dense multi-view navigation, inspector, and detail surfaces",
       "status": "pass",
       "evidence": "nav=4; inspector=4; detailMetrics=9; inspectorMetrics=12"
+    },
+    {
+      "id": "visual-design-review-artifact",
+      "label": "QA artifact includes a browser-safe seven-dimension visual review scorecard",
+      "status": "pass",
+      "evidence": "dimensions=7/7; viewports=mobile,tablet,desktop"
     },
     {
       "id": "visual-qa-hooks",

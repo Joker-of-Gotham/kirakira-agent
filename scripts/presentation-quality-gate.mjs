@@ -39,6 +39,11 @@ const MIN_NAVIGATION_VIEW_COUNT = 4;
 const MIN_INSPECTOR_TAB_COUNT = 4;
 const MIN_DETAIL_METRIC_COUNT = 9;
 const MIN_INSPECTOR_METRIC_COUNT = 12;
+const VISUAL_REVIEW_VIEWPORTS = Object.freeze([
+  { id: "mobile", width: 375, height: 812, surface: "narrow web and desktop renderer" },
+  { id: "tablet", width: 768, height: 1024, surface: "single-column workbench transition" },
+  { id: "desktop", width: 1440, height: 900, surface: "three-pane workbench" },
+]);
 
 function isMainModule() {
   return process.argv[1]
@@ -73,6 +78,113 @@ function extractStringUnion(source, typeName) {
 
 function extractMetricLabels(source) {
   return [...source.matchAll(/metric\("([^"]+)"/gu)].map((match) => match[1]);
+}
+
+function countMatches(source, pattern) {
+  return source.match(pattern)?.length ?? 0;
+}
+
+function reviewDimension(id, label, passed, evidence) {
+  return {
+    id,
+    label,
+    status: passed ? "pass" : "review",
+    severity: passed ? "none" : "medium",
+    evidence,
+  };
+}
+
+function buildDesignReview(sources, iaDensity) {
+  const styles = sources.styles.text;
+  const workbench = sources.workbench.text;
+  const sourceSignals = {
+    responsiveBreakpoints: countMatches(styles, /@media\s*\(/gu),
+    focusVisibleRules: countMatches(styles, /:focus-visible/gu),
+    tokenReferences: countMatches(styles, /var\(--kk-/gu),
+    colorTokenDefinitions: countMatches(styles, /--kk-color-/gu),
+    spacingTokenDefinitions: countMatches(styles, /--kk-space-/gu),
+    radiusTokenDefinitions: countMatches(styles, /--kk-radius-/gu),
+    shadowReferences: countMatches(styles, /--kk-shadow/gu),
+    fontFamilyRules: countMatches(styles, /font-family:/gu),
+    lineHeightRules: countMatches(styles, /line-height:/gu),
+    letterSpacingRules: countMatches(styles, /letter-spacing:\s*0/gu),
+    overflowGuards: countMatches(styles, /overflow-wrap|text-overflow|minmax\(0/gu),
+    motionPreferenceRules: countMatches(styles, /prefers-reduced-motion/gu),
+    ariaLabels: countMatches(workbench, /aria-label=/gu),
+    liveRegions: countMatches(workbench, /aria-live=|role="status"/gu),
+    alertRegions: countMatches(workbench, /role="alert"/gu),
+    disabledControls: countMatches(workbench, /disabled=/gu),
+    emptyStates: countMatches(workbench, /kk-empty/gu),
+  };
+  const scorecard = [
+    reviewDimension(
+      "layout",
+      "Layout",
+      sourceSignals.responsiveBreakpoints >= 3
+        && iaDensity.navigationViews.length >= MIN_NAVIGATION_VIEW_COUNT
+        && iaDensity.inspectorTabs.length >= MIN_INSPECTOR_TAB_COUNT,
+      `breakpoints=${sourceSignals.responsiveBreakpoints}; nav=${iaDensity.navigationViews.length}; inspector=${iaDensity.inspectorTabs.length}`,
+    ),
+    reviewDimension(
+      "typography",
+      "Typography",
+      sourceSignals.fontFamilyRules > 0
+        && sourceSignals.lineHeightRules >= 8
+        && sourceSignals.letterSpacingRules >= 3,
+      `fontFamily=${sourceSignals.fontFamilyRules}; lineHeight=${sourceSignals.lineHeightRules}; letterSpacingZero=${sourceSignals.letterSpacingRules}`,
+    ),
+    reviewDimension(
+      "spacing",
+      "Spacing",
+      sourceSignals.spacingTokenDefinitions >= 5 && sourceSignals.tokenReferences >= 100,
+      `spaceTokens=${sourceSignals.spacingTokenDefinitions}; tokenRefs=${sourceSignals.tokenReferences}`,
+    ),
+    reviewDimension(
+      "color",
+      "Color",
+      sourceSignals.colorTokenDefinitions >= 16 && sourceSignals.tokenReferences >= 100,
+      `colorTokens=${sourceSignals.colorTokenDefinitions}; tokenRefs=${sourceSignals.tokenReferences}`,
+    ),
+    reviewDimension(
+      "hierarchy",
+      "Hierarchy",
+      iaDensity.rendererEntrypoints.length === 3
+        && iaDensity.detailMetricLabels.length >= MIN_DETAIL_METRIC_COUNT
+        && iaDensity.inspectorMetricLabels.length >= MIN_INSPECTOR_METRIC_COUNT,
+      `entrypoints=${iaDensity.rendererEntrypoints.length}; detailMetrics=${iaDensity.detailMetricLabels.length}; inspectorMetrics=${iaDensity.inspectorMetricLabels.length}`,
+    ),
+    reviewDimension(
+      "consistency",
+      "Consistency",
+      sourceSignals.radiusTokenDefinitions >= 3
+        && sourceSignals.shadowReferences >= 2
+        && sourceSignals.ariaLabels >= 30,
+      `radiusTokens=${sourceSignals.radiusTokenDefinitions}; shadows=${sourceSignals.shadowReferences}; ariaLabels=${sourceSignals.ariaLabels}`,
+    ),
+    reviewDimension(
+      "interaction-responsive",
+      "Interaction and Responsive",
+      sourceSignals.focusVisibleRules >= 3
+        && sourceSignals.liveRegions >= 3
+        && sourceSignals.emptyStates >= 12
+        && sourceSignals.motionPreferenceRules >= 1
+        && sourceSignals.overflowGuards >= 20,
+      `focus=${sourceSignals.focusVisibleRules}; live=${sourceSignals.liveRegions}; empty=${sourceSignals.emptyStates}; overflow=${sourceSignals.overflowGuards}; motion=${sourceSignals.motionPreferenceRules}`,
+    ),
+  ];
+  const passed = scorecard.filter((dimension) => dimension.status === "pass").length;
+  return {
+    method: "browser-safe source review",
+    viewports: VISUAL_REVIEW_VIEWPORTS,
+    sourceSignals,
+    scorecard,
+    summary: {
+      status: passed === scorecard.length ? "pass" : "review",
+      passed,
+      total: scorecard.length,
+    },
+    followUp: "Capture screenshots for the same viewport targets once renderer screenshot automation is available.",
+  };
 }
 
 function readinessTarget(readiness, checkName) {
@@ -176,6 +288,7 @@ export function buildPresentationQualityReport(options = {}) {
       "createWorkbenchDetailViews",
     ].filter((entrypoint) => sources.workbench.text.includes(entrypoint)),
   };
+  const designReview = buildDesignReview(sources, iaDensity);
 
   const checks = [
     checkResult(
@@ -238,6 +351,14 @@ export function buildPresentationQualityReport(options = {}) {
       `nav=${iaDensity.navigationViews.length}; inspector=${iaDensity.inspectorTabs.length}; detailMetrics=${iaDensity.detailMetricLabels.length}; inspectorMetrics=${iaDensity.inspectorMetricLabels.length}`,
     ),
     checkResult(
+      "visual-design-review-artifact",
+      "QA artifact includes a browser-safe seven-dimension visual review scorecard",
+      designReview.viewports.length === VISUAL_REVIEW_VIEWPORTS.length
+        && designReview.scorecard.length === 7
+        && designReview.summary.status === "pass",
+      `dimensions=${designReview.summary.passed}/${designReview.summary.total}; viewports=${designReview.viewports.map((viewport) => viewport.id).join(",")}`,
+    ),
+    checkResult(
       "visual-qa-hooks",
       "artifact visual-QA evidence is surfaced in shared web and desktop views",
       !sources.workbench.missing
@@ -279,6 +400,7 @@ export function buildPresentationQualityReport(options = {}) {
       checkNames: readiness.checks.map((check) => check.name),
     },
     iaDensity,
+    designReview,
     artifacts: {
       ...(artifactPath ? { reportPath: artifactPath } : {}),
     },
@@ -322,12 +444,17 @@ export function renderPresentationQualityReport(report, format = "markdown") {
     `Desktop target: ${report.readiness.desktopTarget ?? "missing"}`,
     ...(report.artifacts?.reportPath ? [`Artifact: ${report.artifacts.reportPath}`] : []),
     `IA density: ${report.iaDensity.navigationViews.length} nav views, ${report.iaDensity.inspectorTabs.length} inspector tabs`,
+    `Visual review: ${report.designReview.summary.status} (${report.designReview.summary.passed}/${report.designReview.summary.total} dimensions passed)`,
     "",
     "| Check | Status | Evidence |",
     "| --- | --- | --- |",
   ];
   for (const check of report.checks) {
     lines.push(`| ${check.label} | ${check.status} | ${check.evidence} |`);
+  }
+  lines.push("", "| Visual Dimension | Status | Evidence |", "| --- | --- | --- |");
+  for (const dimension of report.designReview.scorecard) {
+    lines.push(`| ${dimension.label} | ${dimension.status} | ${dimension.evidence} |`);
   }
   return `${lines.join("\n")}\n`;
 }

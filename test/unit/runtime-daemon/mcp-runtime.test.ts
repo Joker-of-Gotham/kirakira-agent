@@ -17,6 +17,7 @@ import {
   DaemonMcpRuntime,
   createDaemonMcpDependencies,
 } from "../../../packages/runtime-daemon/src/index.js";
+import { runtimeProfileComposition } from "../../../packages/runtime-daemon/src/bridge/runtime-profile.js";
 
 function decision(effect: "allow" | "deny" | "escalate"): EnforcementResult {
   return {
@@ -139,6 +140,47 @@ function resolvedRuntimeConfig(
 }
 
 describe("DaemonMcpRuntime", () => {
+  it("uses runtime profile composition with runtimeState-only MCP dependency config", () => {
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "quiet-host",
+          mode: "host",
+          mcp_servers: [{ name: "quiet-filesystem", command: "node" }],
+        },
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp_servers: [{ name: "profiled-filesystem", command: "node" }],
+          memory: {
+            enabled: true,
+            services: [{ name: "postgres", url_env: "PROFILE_DATABASE_URL" }],
+          },
+        },
+      ],
+      "quiet-host",
+    );
+
+    expect(
+      runtimeProfileComposition({
+        resolvedConfig,
+        runtimeProfileName: "profiled-host",
+      }),
+    ).toMatchObject({
+      profile: { name: "profiled-host" },
+      mcpServers: [{ name: "profiled-filesystem", command: "node" }],
+      mcpServerNames: ["profiled-filesystem"],
+      memory: {
+        enabled: true,
+        services: [{ name: "postgres", url_env: "PROFILE_DATABASE_URL" }],
+      },
+      mcpManifest: {
+        profileName: "profiled-host",
+        servers: [{ name: "profiled-filesystem", command: "node" }],
+      },
+    });
+  });
+
   it("registers resolved profile MCP servers through the shared dependency factory", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-deps-"));
     const manager = fakeManager({ content: [] });
