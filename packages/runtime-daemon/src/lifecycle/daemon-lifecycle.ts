@@ -54,7 +54,12 @@ function hasDeepResearchMemory(options: KernelBridgeOptions | undefined): boolea
 }
 
 function hasMcpRuntime(options: KernelBridgeOptions | undefined): boolean {
-  return Boolean(options?.mcpConfigPath);
+  return Boolean(
+    options?.mcpConfigPath ||
+      options?.resolvedConfig?.runtimeState?.profiles.some(
+        (profile) => (profile.mcp_servers?.length ?? 0) > 0,
+      ),
+  );
 }
 
 function daemonCapabilityOverrides(

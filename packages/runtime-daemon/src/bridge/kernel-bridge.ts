@@ -33,7 +33,7 @@ export interface KernelBridgeOptions {
   workspaceRoot?: string;
   mcpConfigPath?: string;
   enableDaemonSubagents?: boolean;
-  resolvedConfig?: Pick<ResolvedConfig, "agentToml">;
+  resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
   deepResearch?: DaemonDeepResearchOptions;
   kernelOptions?: Omit<OrchestratorKernelOptions, "subagentBridge">;
   delegateRuntimeFactory?: (

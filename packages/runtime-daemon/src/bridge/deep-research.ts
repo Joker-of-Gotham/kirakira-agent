@@ -32,7 +32,7 @@ export interface DaemonDeepResearchOptions extends DeepResearchKernelOptions {
 }
 
 export interface DaemonDeepResearchCompositionInput {
-  resolvedConfig?: Pick<ResolvedConfig, "agentToml">;
+  resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
   kernelDeepResearch?: DeepResearchKernelOptions;
   daemonDeepResearch?: DaemonDeepResearchOptions;
 }

@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@kirakira/core": "workspace:*",
+    "@kirakira/config-resolver": "workspace:*",
     "@kirakira/agent-runtime": "workspace:*",
     "@kirakira/deep-research": "workspace:*",
     "@kirakira/event-store": "workspace:*",

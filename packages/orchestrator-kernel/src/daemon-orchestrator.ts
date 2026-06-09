@@ -92,6 +92,12 @@ export interface OrchestratorKernelOptions {
   laneCapacities?: Partial<LaneCapacities>;
   routingContext?: Partial<RoutingContext>;
   deepResearch?: DeepResearchKernelOptions;
+  parentWorkerDefaults?: {
+    model?: string;
+    systemPrompt?: string;
+    maxTurns?: number;
+    contextBudget?: Partial<ReactWorkerConfig["contextBudget"]>;
+  };
   parentWorkerConfig?: (input: {
     runId: string;
     prompt: string;
@@ -158,6 +164,14 @@ const DEFAULT_BUDGETS: BudgetConfig = {
   sandboxSlotLimit: 8,
   mcpQpsLimit: 100,
   artifactIoLimit: 100,
+};
+
+const DEFAULT_PARENT_CONTEXT_BUDGET: ReactWorkerConfig["contextBudget"] = {
+  maxTokens: 16_384,
+  reservedForOutput: 2_048,
+  toolSchemaAllocation: 2_048,
+  skillHintAllocation: 2_048,
+  historyAllocation: 10_240,
 };
 
 const NOOP_CHECKPOINT_REPOSITORY: CheckpointRepository = {
@@ -290,20 +304,18 @@ export class OrchestratorKernel {
     if (this.options.parentWorkerConfig) {
       return this.options.parentWorkerConfig({ runId, prompt, mode, options });
     }
+    const defaults = this.options.parentWorkerDefaults;
     return {
       id: `${runId}-supervisor`,
       runId,
       workloadType: "supervisor",
-      model: "default",
-      systemPrompt: "Kirakira daemon supervisor",
+      model: defaults?.model ?? "default",
+      systemPrompt: defaults?.systemPrompt ?? "Kirakira daemon supervisor",
       contextBudget: {
-        maxTokens: 16_384,
-        reservedForOutput: 2_048,
-        toolSchemaAllocation: 2_048,
-        skillHintAllocation: 2_048,
-        historyAllocation: 10_240,
+        ...DEFAULT_PARENT_CONTEXT_BUDGET,
+        ...(defaults?.contextBudget ?? {}),
       },
-      maxTurns: 12,
+      maxTurns: defaults?.maxTurns ?? 12,
       ...(options?.budgetUsd !== undefined ? { costBudgetUsd: options.budgetUsd } : {}),
     };
   }

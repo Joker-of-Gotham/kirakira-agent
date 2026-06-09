@@ -69,4 +69,48 @@ describe("DaemonLifecycle health", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it("enables the MCP manifest capability from resolved runtime profile servers", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-daemon-mcp-manifest-"));
+    const daemon = new DaemonLifecycle();
+    await daemon.start({
+      eventStorePath: join(workspaceRoot, "events"),
+      socketPath: "\\\\.\\pipe\\kirakira-agent-mcp-manifest-test",
+      gateway: { disabled: true },
+      kernel: {
+        enableDaemonSubagents: false,
+        resolvedConfig: {
+          agentToml: {
+            deep_research: {
+              enabled: false,
+            },
+          },
+          runtimeState: {
+            default_profile: "workbench-host",
+            profiles: [
+              {
+                name: "workbench-host",
+                mode: "hybrid",
+                mcp_servers: [
+                  {
+                    name: "filesystem-core",
+                    command: "node",
+                  },
+                ],
+              },
+            ],
+          },
+        } as Pick<ResolvedConfig, "agentToml" | "runtimeState">,
+      },
+    });
+
+    try {
+      const health = await daemon.health();
+      expect(isRuntimeDaemonHealth(health)).toBe(true);
+      expect(health.details.manifest.capabilities.mcp.state).toBe("enabled");
+    } finally {
+      await daemon.stop();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
 });

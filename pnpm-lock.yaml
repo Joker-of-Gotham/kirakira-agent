@@ -708,6 +708,9 @@ importers:
       '@kirakira/core':
         specifier: workspace:*
         version: link:../core
+      '@kirakira/config-resolver':
+        specifier: workspace:*
+        version: link:../config-resolver
       '@kirakira/deep-research':
         specifier: workspace:*
         version: link:../deep-research
