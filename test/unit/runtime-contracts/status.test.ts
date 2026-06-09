@@ -66,6 +66,23 @@ describe("runtime status contract", () => {
         memory: { state: "enabled" },
         mcp: { state: "enabled" },
       },
+      mcp: {
+        profileName: "workbench-host",
+        serverGroups: ["workspace"],
+        servers: [
+          {
+            name: "filesystem-core",
+            command: "node",
+            args: ["packages/mcp-filesystem-core/dist/index.js", "."],
+            envKeys: ["KIRAKIRA_WORKSPACE_ROOT"],
+          },
+        ],
+        catalog: {
+          defaultServerGroups: ["workspace"],
+          groups: { workspace: ["filesystem-core"] },
+          servers: ["filesystem-core"],
+        },
+      },
     });
 
     const sanitized = sanitizeRuntimeManifest(manifest);
@@ -81,6 +98,13 @@ describe("runtime status contract", () => {
     expect(sanitized.capabilities.artifacts.clientMessageTypes).toContain("get_artifact");
     expect(sanitized.capabilities.artifacts.limits?.defaultPreviewBytes).toBe(65_536);
     expect(sanitized.capabilities.artifacts.limits?.hardMaxPreviewBytes).toBe(524_288);
+    expect(sanitized.mcp?.profileName).toBe("workbench-host");
+    expect(sanitized.mcp?.servers[0]).toEqual({
+      name: "filesystem-core",
+      command: "node",
+      args: ["packages/mcp-filesystem-core/dist/index.js", "."],
+      envKeys: ["KIRAKIRA_WORKSPACE_ROOT"],
+    });
     expect(sanitized.security.explicitToolConsentRequired).toBe(true);
     expect(JSON.stringify(sanitized)).not.toContain("secret-token");
     expect(collectKeys(sanitized)).not.toContain("token");

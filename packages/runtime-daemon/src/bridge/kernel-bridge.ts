@@ -32,6 +32,7 @@ type RunOptions = RuntimeRunOptions;
 export interface KernelBridgeOptions {
   workspaceRoot?: string;
   mcpConfigPath?: string;
+  runtimeProfileName?: string;
   enableDaemonSubagents?: boolean;
   resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
   deepResearch?: DaemonDeepResearchOptions;

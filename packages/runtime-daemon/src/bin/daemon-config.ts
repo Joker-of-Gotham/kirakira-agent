@@ -131,6 +131,11 @@ export function daemonConfigFromEnv(
   const kernel = env.KIRAKIRA_WORKSPACE_ROOT
     ? {
         workspaceRoot: env.KIRAKIRA_WORKSPACE_ROOT,
+        ...(resolvedConfig
+          ? {
+              runtimeProfileName: runtimeProfileFromResolvedConfig(resolvedConfig, env)?.name,
+            }
+          : {}),
         ...(mcpConfigPath
           ? { mcpConfigPath }
           : {}),

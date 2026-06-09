@@ -110,6 +110,8 @@ export type {
   RuntimeDaemonHealth,
   RuntimeHealthState,
   RuntimeManifest,
+  RuntimeMcpManifest,
+  RuntimeMcpServerManifest,
   RuntimeServiceHealth,
   RuntimeSocketHealth,
 } from "./status.js";

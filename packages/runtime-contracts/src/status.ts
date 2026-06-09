@@ -29,6 +29,24 @@ export interface RuntimeCapabilityRecord {
   limits?: Record<string, string | number | boolean>;
 }
 
+export interface RuntimeMcpServerManifest {
+  name: string;
+  command: string;
+  args?: string[];
+  envKeys?: string[];
+}
+
+export interface RuntimeMcpManifest {
+  profileName?: string;
+  serverGroups?: string[];
+  servers: RuntimeMcpServerManifest[];
+  catalog?: {
+    defaultServerGroups?: string[];
+    groups?: Record<string, string[]>;
+    servers?: string[];
+  };
+}
+
 export interface RuntimeManifest {
   schemaVersion: 1;
   runtime: "kirakira-agent";
@@ -44,6 +62,7 @@ export interface RuntimeManifest {
     };
   };
   capabilities: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>;
+  mcp?: RuntimeMcpManifest;
   security: {
     loopbackRecommended: true;
     secretsRedacted: true;
@@ -245,6 +264,7 @@ export function runtimeDaemonHealth(input: {
     tokenRequired: boolean;
   };
   capabilities?: RuntimeCapabilityOverrides;
+  mcp?: RuntimeMcpManifest;
 }): RuntimeDaemonHealth {
   const gateway = runtimeServiceHealth(input.gateway);
   const kernel = runtimeServiceHealth(input.kernel);
@@ -263,6 +283,7 @@ export function runtimeDaemonHealth(input: {
     socketPath: input.socketPath,
     browserGateway: input.browserGateway,
     capabilities: input.capabilities,
+    mcp: input.mcp,
   });
   return {
     schemaVersion: 1,
@@ -315,6 +336,48 @@ function sanitizeEndpointParts(endpoint: RuntimeEndpointParts): RuntimeEndpointP
   };
 }
 
+function stringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === "string");
+  return items.length > 0 ? items : undefined;
+}
+
+function sanitizeRuntimeMcpServer(server: RuntimeMcpServerManifest): RuntimeMcpServerManifest {
+  return {
+    name: server.name,
+    command: server.command,
+    ...(stringArray(server.args) ? { args: stringArray(server.args) } : {}),
+    ...(stringArray(server.envKeys) ? { envKeys: stringArray(server.envKeys) } : {}),
+  };
+}
+
+function sanitizeRuntimeMcpManifest(mcp: RuntimeMcpManifest): RuntimeMcpManifest {
+  return {
+    ...(typeof mcp.profileName === "string" ? { profileName: mcp.profileName } : {}),
+    ...(stringArray(mcp.serverGroups) ? { serverGroups: stringArray(mcp.serverGroups) } : {}),
+    servers: mcp.servers.map(sanitizeRuntimeMcpServer),
+    ...(mcp.catalog
+      ? {
+          catalog: {
+            ...(stringArray(mcp.catalog.defaultServerGroups)
+              ? { defaultServerGroups: stringArray(mcp.catalog.defaultServerGroups) }
+              : {}),
+            ...(mcp.catalog.groups
+              ? {
+                  groups: Object.fromEntries(
+                    Object.entries(mcp.catalog.groups)
+                      .map(([name, members]) => [name, stringArray(members)])
+                      .filter((entry): entry is [string, string[]] => Array.isArray(entry[1])),
+                  ),
+                }
+              : {}),
+            ...(stringArray(mcp.catalog.servers) ? { servers: stringArray(mcp.catalog.servers) } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 export function runtimeManifest(input: {
   socketPath?: string;
   browserGateway?: {
@@ -322,6 +385,7 @@ export function runtimeManifest(input: {
     tokenRequired: boolean;
   };
   capabilities?: RuntimeCapabilityOverrides;
+  mcp?: RuntimeMcpManifest;
 } = {}): RuntimeManifest {
   const capabilities = Object.fromEntries(
     Object.entries(DEFAULT_CAPABILITIES).map(([id, record]) => {
@@ -356,6 +420,7 @@ export function runtimeManifest(input: {
         : {}),
     },
     capabilities,
+    ...(input.mcp !== undefined ? { mcp: sanitizeRuntimeMcpManifest(input.mcp) } : {}),
     security: {
       loopbackRecommended: true,
       secretsRedacted: true,
@@ -426,6 +491,7 @@ export function sanitizeRuntimeManifest(manifest: RuntimeManifest): RuntimeManif
         : {}),
     },
     capabilities,
+    ...(manifest.mcp !== undefined ? { mcp: sanitizeRuntimeMcpManifest(manifest.mcp) } : {}),
     security: {
       loopbackRecommended: true,
       secretsRedacted: true,
@@ -518,6 +584,42 @@ const isRuntimeCapabilityRecord = (
   );
 };
 
+const isRuntimeMcpServerManifest = (value: unknown): value is RuntimeMcpServerManifest =>
+  isRecord(value) &&
+  typeof value.name === "string" &&
+  typeof value.command === "string" &&
+  (value.args === undefined ||
+    (Array.isArray(value.args) && value.args.every((arg) => typeof arg === "string"))) &&
+  (value.envKeys === undefined ||
+    (Array.isArray(value.envKeys) && value.envKeys.every((key) => typeof key === "string")));
+
+const isStringArrayRecord = (value: unknown): value is Record<string, string[]> =>
+  isRecord(value) &&
+  Object.values(value).every(
+    (members) => Array.isArray(members) && members.every((member) => typeof member === "string"),
+  );
+
+const isRuntimeMcpManifest = (value: unknown): value is RuntimeMcpManifest => {
+  if (!isRecord(value) || !Array.isArray(value.servers)) return false;
+  const catalog = value.catalog;
+  return (
+    (value.profileName === undefined || typeof value.profileName === "string") &&
+    (value.serverGroups === undefined ||
+      (Array.isArray(value.serverGroups) &&
+        value.serverGroups.every((group) => typeof group === "string"))) &&
+    value.servers.every(isRuntimeMcpServerManifest) &&
+    (catalog === undefined ||
+      (isRecord(catalog) &&
+        (catalog.defaultServerGroups === undefined ||
+          (Array.isArray(catalog.defaultServerGroups) &&
+            catalog.defaultServerGroups.every((group) => typeof group === "string"))) &&
+        (catalog.groups === undefined || isStringArrayRecord(catalog.groups)) &&
+        (catalog.servers === undefined ||
+          (Array.isArray(catalog.servers) &&
+            catalog.servers.every((server) => typeof server === "string")))))
+  );
+};
+
 export function isRuntimeManifest(value: unknown): value is RuntimeManifest {
   if (
     !isRecord(value) ||
@@ -547,6 +649,7 @@ export function isRuntimeManifest(value: unknown): value is RuntimeManifest {
     expectedIds.every((id) =>
       isRuntimeCapabilityRecord(capabilities[id], id),
     ) &&
+    (value.mcp === undefined || isRuntimeMcpManifest(value.mcp)) &&
     value.security.loopbackRecommended === true &&
     value.security.secretsRedacted === true &&
     value.security.explicitToolConsentRequired === true

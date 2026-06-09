@@ -39,6 +39,7 @@ describe("DaemonLifecycle health", () => {
       gateway: { disabled: true },
       kernel: {
         enableDaemonSubagents: false,
+        runtimeProfileName: "workbench-host",
         resolvedConfig: {
           agentToml: {
             deep_research: {
@@ -95,10 +96,19 @@ describe("DaemonLifecycle health", () => {
                   {
                     name: "filesystem-core",
                     command: "node",
+                    args: ["packages/mcp-filesystem-core/dist/index.js", "."],
+                    env: {
+                      KIRAKIRA_WORKSPACE_ROOT: workspaceRoot,
+                    },
                   },
                 ],
               },
             ],
+            mcp_catalog: {
+              default_server_groups: ["workspace"],
+              groups: { workspace: ["filesystem-core"] },
+              servers: ["filesystem-core"],
+            },
           },
         } as Pick<ResolvedConfig, "agentToml" | "runtimeState">,
       },
@@ -108,6 +118,23 @@ describe("DaemonLifecycle health", () => {
       const health = await daemon.health();
       expect(isRuntimeDaemonHealth(health)).toBe(true);
       expect(health.details.manifest.capabilities.mcp.state).toBe("enabled");
+      expect(health.details.manifest.mcp).toMatchObject({
+        profileName: "workbench-host",
+        servers: [
+          {
+            name: "filesystem-core",
+            command: "node",
+            args: ["packages/mcp-filesystem-core/dist/index.js", "."],
+            envKeys: ["KIRAKIRA_WORKSPACE_ROOT"],
+          },
+        ],
+        catalog: {
+          defaultServerGroups: ["workspace"],
+          groups: { workspace: ["filesystem-core"] },
+          servers: ["filesystem-core"],
+        },
+      });
+      expect(JSON.stringify(health.details.manifest.mcp)).not.toContain(workspaceRoot);
     } finally {
       await daemon.stop();
       await rm(workspaceRoot, { recursive: true, force: true });

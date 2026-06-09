@@ -8,6 +8,7 @@ import {
   type RuntimeCapabilityOverrides,
   type RuntimeDaemonHealth,
   type RuntimeManifest,
+  type RuntimeMcpManifest,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
@@ -62,6 +63,39 @@ function hasMcpRuntime(options: KernelBridgeOptions | undefined): boolean {
   );
 }
 
+function runtimeMcpManifest(
+  options: KernelBridgeOptions | undefined,
+): RuntimeMcpManifest | undefined {
+  const runtimeState = options?.resolvedConfig?.runtimeState;
+  const profiles = runtimeState?.profiles ?? [];
+  const profileName = options?.runtimeProfileName ?? runtimeState?.default_profile;
+  const profile = profiles.find((item) => item.name === profileName) ?? profiles[0];
+  const servers = profile?.mcp_servers ?? [];
+  const catalog = runtimeState?.mcp_catalog;
+  if (servers.length === 0 && !catalog) return undefined;
+  return {
+    ...(profile?.name ? { profileName: profile.name } : {}),
+    ...(profile?.mcp_server_groups ? { serverGroups: profile.mcp_server_groups } : {}),
+    servers: servers.map((server) => ({
+      name: server.name,
+      command: server.command,
+      ...(server.args ? { args: server.args } : {}),
+      ...(server.env ? { envKeys: Object.keys(server.env).sort() } : {}),
+    })),
+    ...(catalog
+      ? {
+          catalog: {
+            ...(catalog.default_server_groups
+              ? { defaultServerGroups: catalog.default_server_groups }
+              : {}),
+            ...(catalog.groups ? { groups: catalog.groups } : {}),
+            ...(catalog.servers ? { servers: catalog.servers } : {}),
+          },
+        }
+      : {}),
+  };
+}
+
 function daemonCapabilityOverrides(
   options: KernelBridgeOptions | undefined,
 ): RuntimeCapabilityOverrides {
@@ -104,6 +138,7 @@ export class DaemonLifecycle {
   private workspaceRoot = "";
   private shutdownTimeoutMs = 30_000;
   private capabilities: RuntimeCapabilityOverrides = {};
+  private mcpManifest: RuntimeMcpManifest | undefined;
 
   async start(config: DaemonConfig): Promise<void> {
     if (this._running) {
@@ -117,6 +152,7 @@ export class DaemonLifecycle {
       process.env.KIRAKIRA_WORKSPACE_ROOT ??
       process.cwd();
     this.capabilities = daemonCapabilityOverrides(config.kernel);
+    this.mcpManifest = runtimeMcpManifest(config.kernel);
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
     await this.gateway.start();
@@ -446,6 +482,7 @@ export class DaemonLifecycle {
       socket,
       socketPath: this.socketPath,
       capabilities: this.capabilities,
+      mcp: this.mcpManifest,
       ...(this._running && this.browserGatewayInfo
         ? {
             browserGateway: {
@@ -461,6 +498,7 @@ export class DaemonLifecycle {
     return runtimeManifest({
       socketPath: this.socketPath || undefined,
       capabilities: this.capabilities,
+      mcp: this.mcpManifest,
       ...(this._running && this.browserGatewayInfo
         ? {
             browserGateway: {
@@ -507,5 +545,6 @@ export class DaemonLifecycle {
     this.processes = null;
     this.subs.clear();
     this.capabilities = {};
+    this.mcpManifest = undefined;
   }
 }
