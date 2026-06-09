@@ -3,6 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { buildEamParityAudit } from "./eam-parity-audit.mjs";
+import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
 import {
   buildRuntimeProfileProjection,
@@ -67,7 +68,11 @@ export function buildUpgradeReadinessReport(options = {}) {
     { profileName: "test-host" },
     options.env ?? process.env,
   );
-  const deepResearchLiveAdapters = buildDeepResearchLiveAdapterGate(workspaceRoot);
+  const deepResearchLiveAdapters = buildDeepResearchLiveAdapterGate(
+    workspaceRoot,
+    profileName,
+    options.env ?? process.env,
+  );
   const presentationProjection = buildPresentationProjectionGate(projection);
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
@@ -265,7 +270,8 @@ function eamMechanismTrack({ workspaceRoot, parity, deepResearchLiveAdapters }) 
   };
 }
 
-function buildDeepResearchLiveAdapterGate(workspaceRoot) {
+function buildDeepResearchLiveAdapterGate(workspaceRoot, profileName, env) {
+  const command = buildDeepResearchLiveAdaptersCommand({ profileName }, env);
   const requiredSuites = [
     {
       name: "file",
@@ -302,10 +308,10 @@ function buildDeepResearchLiveAdapterGate(workspaceRoot) {
   });
   const coveredSuites = suites.filter((suite) => suite.covered).map((suite) => suite.name);
   const missingSuites = suites.filter((suite) => !suite.covered).map((suite) => suite.name);
-  const liveGatePath = "docs/upgrade/gates/deep-research-live-adapters.json";
-  const liveGate = readOptionalGateResult(join(workspaceRoot, liveGatePath));
-  const livePassed = liveGate.status === "passed";
-  const explicitFailed = liveGate.status === "failed" || liveGate.status === "malformed";
+  const resultStatus = command.evidence?.resultStatus;
+  const resultMatches = command.evidence?.resultMatches === true;
+  const livePassed = command.status === "passed" && resultMatches;
+  const explicitFailed = resultStatus !== undefined && !resultMatches;
   const status =
     missingSuites.length > 0 || explicitFailed
       ? "fail"
@@ -314,40 +320,27 @@ function buildDeepResearchLiveAdapterGate(workspaceRoot) {
         : "warn";
   return {
     status,
-    gate: "deep-research:live-adapters",
-    requiredSuites: requiredSuites.map((suite) => suite.name),
+    gate: command.gate,
+    profile: command.profile,
+    requiredSuites: command.requiredSuites,
     coveredSuites,
     missingSuites,
     suites,
     liveGate: {
-      resultPath: liveGatePath,
-      status: liveGate.status,
-      ...(liveGate.details !== undefined ? { details: liveGate.details } : {}),
+      resultPath: command.evidence?.resultPath ?? "docs/upgrade/gates/deep-research-live-adapters.json",
+      status: resultStatus ?? "missing",
+      resultMatches,
+      unitTests: command.unitContract.tests,
+      liveTests: command.liveGate.tests,
     },
     evidence: [
       `covered=${coveredSuites.join(",") || "none"}`,
       `missing=${missingSuites.join(",") || "none"}`,
-      `liveGate=${liveGate.status}`,
-      `result=${liveGatePath}`,
+      `liveGate=${resultStatus ?? "missing"}`,
+      `resultMatches=${String(resultMatches)}`,
+      `result=${command.evidence?.resultPath ?? "missing"}`,
     ].join("; "),
   };
-}
-
-function readOptionalGateResult(path) {
-  if (!existsSync(path)) return { status: "missing" };
-  try {
-    const payload = readJson(path);
-    const status = payload?.status;
-    if (status === "passed" || status === "failed") {
-      return { status, details: payload };
-    }
-    return { status: "malformed", details: { reason: "status must be passed or failed" } };
-  } catch (error) {
-    return {
-      status: "malformed",
-      details: { reason: error instanceof Error ? error.message : String(error) },
-    };
-  }
 }
 
 function deepResearchLiveAdapterCheck(gate) {

@@ -35,15 +35,8 @@ describe("upgrade readiness gate", () => {
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
     expect(report.summary.openWork).toBe(0);
-    expect(report.summary.advisoryWarnings).toBe(1);
-    expect(report.advisoryWarnings).toEqual([
-      expect.objectContaining({
-        track: "EAM Mechanism Parity",
-        item: "Deep research live adapter suites are evidenced",
-        status: "warn",
-        evidence: expect.stringContaining("liveGate=missing"),
-      }),
-    ]);
+    expect(report.summary.advisoryWarnings).toBe(0);
+    expect(report.advisoryWarnings).toEqual([]);
     expect(report.openWork).toEqual([]);
     expect(
       report.openWork.some((item) =>
@@ -76,14 +69,16 @@ describe("upgrade readiness gate", () => {
       resultMatches: true,
     });
     expect(report.gates.deepResearchLiveAdapters).toMatchObject({
-      status: "warn",
+      status: "pass",
       gate: "deep-research:live-adapters",
+      profile: "workbench-host",
       requiredSuites: ["file", "web", "mcp"],
       coveredSuites: ["file", "web", "mcp"],
       missingSuites: [],
       liveGate: {
         resultPath: "docs/upgrade/gates/deep-research-live-adapters.json",
-        status: "missing",
+        status: "passed",
+        resultMatches: true,
       },
     });
     expect(report.gates.presentationProjection).toMatchObject({
@@ -156,13 +151,14 @@ describe("upgrade readiness gate", () => {
     const json = JSON.parse(renderUpgradeReadinessReport(report, "json"));
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
-    expect(markdown).toContain("## Advisory Warnings");
+    expect(markdown).not.toContain("## Advisory Warnings");
     expect(markdown).not.toContain("## Open Work");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
     expect(json.openWork.length).toBe(report.openWork.length);
     expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
-    expect(json.gates.deepResearchLiveAdapters.status).toBe("warn");
+    expect(json.gates.deepResearchLiveAdapters.status).toBe("pass");
+    expect(json.gates.deepResearchLiveAdapters.liveGate.resultMatches).toBe(true);
     expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });

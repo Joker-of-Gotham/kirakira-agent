@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "gate": "deep-research:live-adapters",
+  "profile": "workbench-host",
+  "status": "passed",
+  "passedAt": "2026-06-09T22:50:24.060Z",
+  "requiredSuites": [
+    "file",
+    "web",
+    "mcp"
+  ],
+  "checks": [
+    "deep-research:file-source",
+    "deep-research:web-source",
+    "deep-research:mcp-runtime-source",
+    "deep-research:mcp-live-transports"
+  ],
+  "unitTests": [
+    "test/unit/deep-research/file.test.ts",
+    "test/unit/deep-research/web.test.ts",
+    "test/unit/deep-research/mcp.test.ts",
+    "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
+  ],
+  "liveTests": [
+    "test/smoke/deep-research/live-adapters-smoke.test.ts"
+  ],
+  "command": "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
+  "references": [
+    {
+      "title": "MCP Tools 2025-11-25",
+      "url": "https://modelcontextprotocol.io/specification/2025-11-25/server/tools"
+    },
+    {
+      "title": "OpenTelemetry MCP semantic conventions",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/"
+    }
+  ]
+}

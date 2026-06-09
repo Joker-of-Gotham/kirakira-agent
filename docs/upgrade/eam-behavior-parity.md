@@ -25,11 +25,11 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After runtime-daemon profile composition and orchestrator kernel bridge closure,
-the highest-leverage remaining mechanism gap is now product-level
-`deep-research-live-source-adapter-validation`: expand live source-adapter
-validation from provider-neutral file/web/MCP adapter suites into an end-to-end
-live MCP research gate.
+After the local live stdio/http MCP adapter gate, the highest-leverage remaining
+mechanism gap is now product-level
+`deep-research-kernel-mcp-live-research-events`: expand the adapter-level live
+evidence through `KernelBridge`, `ResearchTaskExecutor`, research event
+emission, citation events, and task completion.
 
 Evidence:
 
@@ -46,12 +46,16 @@ Evidence:
 - `test/unit/runtime-daemon/deep-research-mcp-source.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
+- `test/smoke/deep-research/live-adapters-smoke.test.ts`
+- `scripts/deep-research-live-adapters.mjs`
+- `docs/upgrade/gates/deep-research-live-adapters.json`
 
 Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/deep-research/mcp.test.ts test/unit/deep-research/web.test.ts test/unit/deep-research/file.test.ts test/unit/deep-research/planner.test.ts
 pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts
+node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
 ```
 
 ## External Behavior Constraints
@@ -60,6 +64,9 @@ pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts t
   `structuredContent`, and says tool-originated errors should be returned inside
   tool results with `isError: true` rather than as protocol-level JSON-RPC
   errors: <https://modelcontextprotocol.io/specification/2025-11-25/schema>.
+- MCP 2025-11-25 Tools defines `tools/list` and `tools/call` as the standard
+  server-side tool discovery and invocation methods used by the live MCP adapter
+  gate: <https://modelcontextprotocol.io/specification/2025-11-25/server/tools>.
 - OpenTelemetry MCP semantic conventions map MCP `tools/call` spans to
   `gen_ai.operation.name=execute_tool` and show `gen_ai.tool.name`,
   `jsonrpc.request.id`, `mcp.method.name`, and transport attributes as the
@@ -86,7 +93,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, and provider-neutral MCP tool-call evidence; the end-to-end live MCP research gate remains product roadmap work. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, and local live stdio/http MCP adapter execution; the remaining product gap is the full KernelBridge and ResearchTaskExecutor live MCP research event path. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
@@ -106,11 +113,11 @@ against `KIRAKIRA_WEB_URL` and `KIRAKIRA_DESKTOP_RENDERER_URL` from the runtime
 profile env fragment. This keeps presentation readiness tied to the profile
 projection instead of duplicating port-specific constants in the readiness gate.
 
-`gates.deepResearchLiveAdapters` now keeps the remaining live research gap
+`gates.deepResearchLiveAdapters` now keeps adapter-level live research evidence
 machine-visible. It requires unit-evidenced file, web, and MCP source adapter
-suites, and stays at advisory `warn` until
-`docs/upgrade/gates/deep-research-live-adapters.json` records an end-to-end live
-MCP research gate result.
+suites, then reads `docs/upgrade/gates/deep-research-live-adapters.json` and
+passes only when the profile, required suites, unit tests, live tests, and MCP
+checks match the current gate contract.
 
 ## Readiness Interpretation
 

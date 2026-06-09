@@ -20,6 +20,7 @@
     "e2e:workbench": "node scripts/kirakira-workbench-smoke.mjs",
     "e2e:workbench:gate": "node scripts/kirakira-workbench-smoke.mjs --gate presentation",
     "e2e:workbench:live": "node scripts/kirakira-workbench-smoke.mjs --gate presentation --live",
+    "e2e:deep-research:live": "node scripts/deep-research-live-adapters.mjs --live",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
     "runtime:doctor": "node scripts/runtime-doctor.mjs",
