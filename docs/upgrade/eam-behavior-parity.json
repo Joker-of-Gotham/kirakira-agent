@@ -33,6 +33,23 @@
         "runtime-profile-mcp-config"
       ],
       "expectation": "Each scope reports matchCount=0 so unrelated dev-server port 5173 cannot hide in runtime profile projection or startup evidence."
+    },
+    "presentationProjectionGate": {
+      "script": "scripts/upgrade-readiness.mjs",
+      "reportPath": "gates.presentationProjection",
+      "targets": [
+        {
+          "surface": "web",
+          "readinessName": "presentation:web",
+          "envName": "KIRAKIRA_WEB_URL"
+        },
+        {
+          "surface": "desktop",
+          "readinessName": "presentation:desktop",
+          "envName": "KIRAKIRA_DESKTOP_RENDERER_URL"
+        }
+      ],
+      "expectation": "Readiness presentation targets must match URLs projected from the same runtime profile env fragment instead of hardcoded readiness constants."
     }
   },
   "nextMechanismGap": {
@@ -40,12 +57,16 @@
     "targetName": "deep-research",
     "priority": "high",
     "status": "partial",
-    "gap": "Expand product-level live source-adapter validation from generic source-kind fanout into concrete file, web, and MCP adapter suites.",
-    "rationale": "EAM package drift rows are behavior-covered; shared adapter fanout is now centralized in deep-research, so remaining live source-adapter work belongs to Kirakira's standalone adapter suites rather than an EAM parity gap.",
+    "gap": "Expand product-level live source-adapter validation from generic source-kind fanout and default daemon file evidence into concrete web and MCP adapter suites.",
+    "rationale": "EAM package drift rows are behavior-covered; shared adapter fanout and workspace-bounded file evidence are now centralized in deep-research, so remaining live source-adapter work belongs to Kirakira's standalone web and MCP adapter suites rather than an EAM parity gap.",
     "evidence": [
       {
         "kind": "source",
         "path": "packages/deep-research/src"
+      },
+      {
+        "kind": "source",
+        "path": "packages/deep-research/src/file.ts"
       },
       {
         "kind": "source",
@@ -54,6 +75,10 @@
       {
         "kind": "source",
         "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
+      },
+      {
+        "kind": "test",
+        "path": "test/unit/deep-research/file.test.ts"
       },
       {
         "kind": "test",
@@ -74,6 +99,10 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-deep-research-source-adapter-fanout.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-deep-research-file-source-adapter.md"
       }
     ],
     "commands": [
@@ -528,7 +557,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout is covered, while concrete file, web, and MCP live adapter suites remain product roadmap work."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout and workspace-bounded file evidence are covered, while concrete web and MCP live adapter suites remain product roadmap work."
     },
     {
       "targetName": "frontend-app",

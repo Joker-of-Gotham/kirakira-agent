@@ -56,6 +56,7 @@ describe("presentation quality gate", () => {
       "profile-desktop-target",
       "shared-design-tokens",
       "workbench-a11y-anchors",
+      "presentation-surface-identity",
       "desktop-smoke-content-contract",
       "multi-view-ia-density",
       "visual-design-review-artifact",
@@ -71,6 +72,13 @@ describe("presentation quality gate", () => {
       "createWorkbenchInspectorView",
       "createWorkbenchDetailViews",
     ]);
+    expect(report.surfaceIdentity).toMatchObject({
+      attribute: "data-kk-presentation-surface",
+      surfaces: ["web", "desktop"],
+      web: { declared: true },
+      desktop: { declared: true },
+      sharedWorkbenchAttribute: true,
+    });
     expect(report.designReview.summary).toEqual({
       status: "pass",
       passed: 7,
@@ -108,6 +116,7 @@ describe("presentation quality gate", () => {
     expect(markdown).toContain("# Kirakira Presentation Quality Gate");
     expect(markdown).toContain("Status: pass");
     expect(markdown).toContain("presentation:web=http://127.0.0.1:5183/");
+    expect(markdown).toContain("Surfaces: web, desktop (data-kk-presentation-surface)");
     expect(markdown).toContain("IA density: 4 nav views, 4 inspector tabs");
     expect(markdown).toContain("Visual review: pass (7/7 dimensions passed)");
     expect(markdown).toContain("| Visual Dimension | Status | Evidence |");
@@ -136,6 +145,7 @@ describe("presentation quality gate", () => {
     expect(artifact.summary.status).toBe("pass");
     expect(artifact.artifacts.reportPath).toBe(artifactPath);
     expect(artifact.iaDensity.navigationViews).toHaveLength(4);
+    expect(artifact.surfaceIdentity.surfaces).toEqual(["web", "desktop"]);
     expect(artifact.designReview.viewports).toHaveLength(3);
     expect(artifact.designReview.scorecard).toHaveLength(7);
   });

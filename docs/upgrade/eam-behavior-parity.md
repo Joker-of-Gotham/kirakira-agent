@@ -28,14 +28,16 @@ runtime validation before upgrade readiness can treat them as closed?
 After runtime-daemon profile composition and orchestrator kernel bridge closure,
 the highest-leverage remaining mechanism gap is now product-level
 `deep-research-live-source-adapter-validation`: expand live source-adapter
-validation from generic source-kind fanout into concrete file, web, and MCP
-adapter suites.
+validation from generic source-kind fanout and default daemon file evidence into
+concrete web and MCP adapter suites.
 
 Evidence:
 
 - `packages/deep-research/src`
+- `packages/deep-research/src/file.ts`
 - `packages/deep-research/src/source-adapters.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
+- `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/planner.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
@@ -78,7 +80,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, and generic same-kind source adapter fanout; concrete file, web, and MCP live adapter suites remain product roadmap work. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, and workspace-bounded file evidence through the daemon default source path; concrete web and MCP live adapter suites remain product roadmap work. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
@@ -91,6 +93,12 @@ records `forbiddenPort=5173` and per-scope match counts for the runtime profile
 projection, startup fragment, readiness fragment, and MCP config fragment.
 Readiness should treat nonzero matches in any scope as an actionable Harness /
 SDK / API contract failure instead of relying on a prose assertion.
+
+The same readiness report also emits `gates.presentationProjection`, which
+cross-checks `presentation:web` and `presentation:desktop` readiness targets
+against `KIRAKIRA_WEB_URL` and `KIRAKIRA_DESKTOP_RENDERER_URL` from the runtime
+profile env fragment. This keeps presentation readiness tied to the profile
+projection instead of duplicating port-specific constants in the readiness gate.
 
 ## Readiness Interpretation
 

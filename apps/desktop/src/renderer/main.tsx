@@ -14,6 +14,7 @@ createRoot(root).render(
   <StrictMode>
     <KirakiraWorkbench
       environmentLabel="Desktop IPC"
+      presentationSurface="desktop"
       transport={createDesktopRuntimeTransport() ?? undefined}
     />
   </StrictMode>,

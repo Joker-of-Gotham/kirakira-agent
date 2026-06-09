@@ -1,7 +1,9 @@
 import { sha256Hex, type DeepResearchConfig, type ResolvedConfig } from "@kirakira/core";
 import {
   composeResearchSourceAdapters,
+  fileProviderFromWorkspace,
   memoryProviderFromService,
+  type FileSourceAdapterOptions,
   type MemoryRecallPort,
   type MemorySourceAdapterOptions,
   type ResearchSourceAdapter,
@@ -18,6 +20,13 @@ type DynamicValue<T> = T | ((input: ResearchTaskKernelInput) => T | undefined);
 
 type AdapterSource = NonNullable<DeepResearchKernelOptions["sourceAdapters"]>;
 type ConfigSource = NonNullable<DeepResearchKernelOptions["config"]>;
+type DaemonFileResearchSourceOptions =
+  | boolean
+  | Omit<FileSourceAdapterOptions, "workspaceRoot">
+  | ((input: ResearchTaskKernelInput) =>
+      | boolean
+      | Omit<FileSourceAdapterOptions, "workspaceRoot">
+      | undefined);
 
 export interface DaemonMemoryResearchSourceOptions
   extends Omit<
@@ -34,6 +43,7 @@ export interface DaemonMemoryResearchSourceOptions
 export type DaemonRunEventSink = (event: RunEvent) => void | Promise<void>;
 
 export interface DaemonDeepResearchOptions extends DeepResearchKernelOptions {
+  file?: DaemonFileResearchSourceOptions;
   memory?: DaemonMemoryResearchSourceOptions | readonly DaemonMemoryResearchSourceOptions[];
   eventSink?: DaemonRunEventSink;
 }
@@ -58,12 +68,19 @@ export function createDaemonDeepResearchKernelOptions(
     input.daemonDeepResearch?.sourceAdapters,
   ].filter((source): source is AdapterSource => source !== undefined);
   const memorySources = normalizeMemorySources(input.daemonDeepResearch?.memory);
+  const includeFileSource = shouldIncludeFileSource(
+    input.daemonDeepResearch?.file,
+    configSources.length > 0,
+    adapterSources.length > 0,
+    memorySources.length > 0,
+  );
   const planner = input.daemonDeepResearch?.planner ?? input.kernelDeepResearch?.planner;
   const eventSink = input.daemonDeepResearch?.eventSink ?? input.eventSink;
 
   if (
     configSources.length === 0 &&
     adapterSources.length === 0 &&
+    !includeFileSource &&
     memorySources.length === 0 &&
     planner === undefined
   ) {
@@ -79,10 +96,15 @@ export function createDaemonDeepResearchKernelOptions(
             ),
         }
       : {}),
-    ...(adapterSources.length > 0 || memorySources.length > 0
+    ...(adapterSources.length > 0 || includeFileSource || memorySources.length > 0
       ? {
           sourceAdapters: (taskInput) =>
             composeResearchSourceAdapters([
+              ...fileSourceAdapters(
+                input.daemonDeepResearch?.file,
+                taskInput,
+                includeFileSource,
+              ),
               ...adapterSources.flatMap((source) => resolveAdapterSource(source, taskInput)),
               ...memorySources.map((source) => memorySourceAdapter(source, taskInput, eventSink)),
             ]),
@@ -90,6 +112,17 @@ export function createDaemonDeepResearchKernelOptions(
       : {}),
     ...(planner !== undefined ? { planner } : {}),
   };
+}
+
+function shouldIncludeFileSource(
+  source: DaemonFileResearchSourceOptions | undefined,
+  hasConfig: boolean,
+  hasAdapterSources: boolean,
+  hasMemorySources: boolean,
+): boolean {
+  if (source === false) return false;
+  if (source !== undefined) return true;
+  return hasConfig && !hasAdapterSources && !hasMemorySources;
 }
 
 function normalizeMemorySources(
@@ -123,6 +156,28 @@ function resolveAdapterSource(
 ): ResearchSourceAdapter[] {
   const adapters = typeof source === "function" ? source(input) : source;
   return [...(adapters ?? [])];
+}
+
+function fileSourceAdapters(
+  source: DaemonFileResearchSourceOptions | undefined,
+  input: ResearchTaskKernelInput,
+  includeDefault: boolean,
+): ResearchSourceAdapter[] {
+  const resolved =
+    typeof source === "function"
+      ? source(input)
+      : source;
+  if (resolved === false || (!includeDefault && resolved === undefined)) return [];
+  const options =
+    resolved && resolved !== true
+      ? resolved
+      : {};
+  return [
+    fileProviderFromWorkspace({
+      ...options,
+      workspaceRoot: input.workspaceRoot,
+    }),
+  ];
 }
 
 function mergeDeepResearchConfig(

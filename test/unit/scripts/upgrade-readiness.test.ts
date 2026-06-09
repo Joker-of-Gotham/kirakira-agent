@@ -68,6 +68,29 @@ describe("upgrade readiness gate", () => {
       resultPath: "docs/upgrade/gates/memory-persistence-smoke.json",
       resultMatches: true,
     });
+    expect(report.gates.presentationProjection).toMatchObject({
+      status: "pass",
+      source: "runtime-profile-projection",
+      failures: 0,
+    });
+    expect(report.gates.presentationProjection.targets).toEqual([
+      expect.objectContaining({
+        surface: "web",
+        readinessName: "presentation:web",
+        envName: "KIRAKIRA_WEB_URL",
+        readinessTarget: "http://127.0.0.1:5183/",
+        envTarget: "http://127.0.0.1:5183/",
+        status: "pass",
+      }),
+      expect.objectContaining({
+        surface: "desktop",
+        readinessName: "presentation:desktop",
+        envName: "KIRAKIRA_DESKTOP_RENDERER_URL",
+        readinessTarget: "http://127.0.0.1:5174/",
+        envTarget: "http://127.0.0.1:5174/",
+        status: "pass",
+      }),
+    ]);
     expect(report.gates.harnessHardcoding).toMatchObject({
       status: "pass",
       forbiddenPort: 5173,
@@ -121,6 +144,7 @@ describe("upgrade readiness gate", () => {
     expect(json.summary.status).toBe(report.summary.status);
     expect(json.openWork.length).toBe(report.openWork.length);
     expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
+    expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });
 });

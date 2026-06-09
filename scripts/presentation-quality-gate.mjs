@@ -273,6 +273,8 @@ export function buildPresentationQualityReport(options = {}) {
     navigation: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-navigation.ts"),
     inspector: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-inspector.ts"),
     details: readWorkspaceText(workspaceRoot, "packages/frontend-core/src/workbench-details.ts"),
+    webEntrypoint: readWorkspaceText(workspaceRoot, "apps/web/src/main.tsx"),
+    desktopRenderer: readWorkspaceText(workspaceRoot, "apps/desktop/src/renderer/main.tsx"),
     manifest: readWorkspaceText(workspaceRoot, "apps/desktop/src/main/startup-manifest.ts"),
     smoke: readWorkspaceText(workspaceRoot, "apps/desktop/src/main/electron-smoke.ts"),
     contract: readWorkspaceText(workspaceRoot, "docs/design/desktop-web-presentation-contract.md"),
@@ -289,6 +291,19 @@ export function buildPresentationQualityReport(options = {}) {
     ].filter((entrypoint) => sources.workbench.text.includes(entrypoint)),
   };
   const designReview = buildDesignReview(sources, iaDensity);
+  const surfaceIdentity = {
+    attribute: "data-kk-presentation-surface",
+    surfaces: ["web", "desktop"],
+    web: {
+      entrypoint: sources.webEntrypoint.relativePath,
+      declared: sources.webEntrypoint.text.includes('presentationSurface="web"'),
+    },
+    desktop: {
+      entrypoint: sources.desktopRenderer.relativePath,
+      declared: sources.desktopRenderer.text.includes('presentationSurface="desktop"'),
+    },
+    sharedWorkbenchAttribute: sources.workbench.text.includes("data-kk-presentation-surface"),
+  };
 
   const checks = [
     checkResult(
@@ -319,8 +334,19 @@ export function buildPresentationQualityReport(options = {}) {
           "kk-shell",
           'aria-label="Run navigation"',
           'aria-label="Runtime workspace"',
+          "data-kk-presentation-surface",
         ]),
-      "anchors=kk-shell, Run navigation, Runtime workspace",
+      "anchors=kk-shell, Run navigation, Runtime workspace, presentation surface",
+    ),
+    checkResult(
+      "presentation-surface-identity",
+      "web and desktop renderer entrypoints declare distinct shared workbench surfaces",
+      !sources.webEntrypoint.missing
+        && !sources.desktopRenderer.missing
+        && surfaceIdentity.sharedWorkbenchAttribute
+        && surfaceIdentity.web.declared
+        && surfaceIdentity.desktop.declared,
+      `surfaces=${surfaceIdentity.surfaces.join(",")}; attr=${surfaceIdentity.attribute}`,
     ),
     checkResult(
       "desktop-smoke-content-contract",
@@ -401,6 +427,7 @@ export function buildPresentationQualityReport(options = {}) {
     },
     iaDensity,
     designReview,
+    surfaceIdentity,
     artifacts: {
       ...(artifactPath ? { reportPath: artifactPath } : {}),
     },
@@ -443,6 +470,7 @@ export function renderPresentationQualityReport(report, format = "markdown") {
     `Web target: ${report.readiness.webTarget ?? "missing"}`,
     `Desktop target: ${report.readiness.desktopTarget ?? "missing"}`,
     ...(report.artifacts?.reportPath ? [`Artifact: ${report.artifacts.reportPath}`] : []),
+    `Surfaces: ${report.surfaceIdentity.surfaces.join(", ")} (${report.surfaceIdentity.attribute})`,
     `IA density: ${report.iaDensity.navigationViews.length} nav views, ${report.iaDensity.inspectorTabs.length} inspector tabs`,
     `Visual review: ${report.designReview.summary.status} (${report.designReview.summary.passed}/${report.designReview.summary.total} dimensions passed)`,
     "",

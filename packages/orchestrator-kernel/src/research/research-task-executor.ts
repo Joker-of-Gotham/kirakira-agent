@@ -54,6 +54,7 @@ export class ResearchTaskExecutor implements TaskExecutor {
       availableSourceKinds: uniqueSourceKinds(sourceAdapters),
     });
     const question = researchQuestion(node, lane);
+    const requiredSourceKinds = question.requiredSourceKinds ?? options.requiredSourceKinds;
     const researchRunId = `${context.runId}:${node.id}:research`;
     const bridge = new ResearchEventBridge(
       {
@@ -64,7 +65,7 @@ export class ResearchTaskExecutor implements TaskExecutor {
         traceId: context.traceId,
         question: question.prompt,
         sourcePolicy: options.sourcePolicy,
-        requiredSourceKinds: options.requiredSourceKinds,
+        requiredSourceKinds,
         requireCitations: options.requireCitations,
         verificationRequired: options.verificationRequired,
         workspaceDirRelative: options.workspaceDirRelative,
@@ -142,7 +143,7 @@ function researchOutput(
     status: result.status,
     planId: result.plan.id,
     sourcePolicy: options.sourcePolicy,
-    requiredSourceKinds: options.requiredSourceKinds,
+    requiredSourceKinds: result.plan.requiredSourceKinds,
     requireCitations: options.requireCitations,
     verificationRequired: options.verificationRequired,
     workspaceDirRelative: options.workspaceDirRelative,

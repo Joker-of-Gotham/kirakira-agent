@@ -54,6 +54,10 @@ Renderer:
   `packages/frontend-core/src/workbench-navigation.ts`; Web and Electron should
   use the shared `workbench-view-*` selectors, ARIA labels, and empty-state copy
   instead of inventing per-surface labels.
+- Marks the shared root with `data-kk-presentation-surface="web"` or
+  `data-kk-presentation-surface="desktop"` so smoke tests and visual QA can
+  distinguish browser and Electron captures without relying on window title or
+  environment copy.
 
 ## QA Entry Points
 

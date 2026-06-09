@@ -29,8 +29,8 @@ pnpm.cmd --filter @kirakira/deep-research typecheck
 pnpm.cmd --filter @kirakira/runtime-daemon typecheck
 ```
 
-Remaining roadmap work:
+Remaining roadmap work after the later file-source slice:
 
-- Concrete live adapter suites for file, web, and MCP source kinds.
-- End-to-end live research gates that run those adapters through daemon and
-  workbench surfaces.
+- Concrete live adapter suites for web and MCP source kinds.
+- End-to-end live research gates that run file, web, and MCP adapters through
+  daemon and workbench surfaces.

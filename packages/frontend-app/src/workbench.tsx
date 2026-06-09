@@ -75,8 +75,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RunEvent, RuntimeRunMode } from "@kirakira/runtime-contracts";
 import { createMockRuntimeTransport } from "./mock-transport.js";
 
+export type KirakiraPresentationSurface = "web" | "desktop";
+
 export interface KirakiraWorkbenchProps {
   transport?: RuntimeTransport;
+  presentationSurface?: KirakiraPresentationSurface;
   productName?: string;
   environmentLabel?: string;
   initialPrompt?: string;
@@ -153,6 +156,7 @@ const textValue = (value: unknown): string | undefined =>
 
 export function KirakiraWorkbench({
   transport,
+  presentationSurface = "web",
   productName = "Kirakira Agent",
   environmentLabel = "Local runtime",
   initialPrompt = defaultPrompt,
@@ -584,7 +588,11 @@ export function KirakiraWorkbench({
   ]);
 
   return (
-    <main className="kk-shell" data-kk-workbench-view={activeNavigationSelector}>
+    <main
+      className="kk-shell"
+      data-kk-presentation-surface={presentationSurface}
+      data-kk-workbench-view={activeNavigationSelector}
+    >
       <aside className="kk-sidebar" aria-label="Run navigation">
         <div className="kk-brand">
           <div className="kk-brand-mark" aria-hidden="true">

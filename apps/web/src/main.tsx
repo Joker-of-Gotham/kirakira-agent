@@ -25,6 +25,7 @@ createRoot(root).render(
     ) : (
       <KirakiraWorkbench
         environmentLabel={runtimeConfig.environmentLabel}
+        presentationSurface="web"
         transport={runtimeConfig.transport}
       />
     )}

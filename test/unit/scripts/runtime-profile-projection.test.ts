@@ -13,6 +13,10 @@ function checkByName(plan, name) {
   return new Map((plan.checks ?? []).map((check) => [check.name, check])).get(name);
 }
 
+function servicesFrom(plan) {
+  return (plan.services ?? []).map((service) => service.name);
+}
+
 describe("runtime profile projection", () => {
   it("threads resolved profile composition into readiness, startup, and MCP fragments", () => {
     const cases = [
@@ -173,5 +177,56 @@ describe("runtime profile projection", () => {
       name: "desktop-shell",
       waitFor: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
     });
+  });
+
+  it("threads memory stack evidence into startup, readiness, and service projection", () => {
+    const config = clonedRuntimeProfiles();
+
+    for (const profileName of ["container", "test-host", "workbench-host"]) {
+      const profile = resolveRuntimeProfile(profileName, config, {});
+      const projection = buildRuntimeProfileProjection(profile, { config });
+      const { readiness, memoryStack, startup } = projection.fragments;
+      const memoryServices = servicesFrom(memoryStack);
+
+      expect(memoryStack).toMatchObject({
+        profile: profileName,
+        mode: profile.mode,
+        enabled: true,
+      });
+      expect(memoryServices).toEqual(["postgres", "redis", "qdrant", "neo4j", "minio"]);
+      expect(startup.memory).toEqual({
+        enabled: true,
+        services: memoryServices,
+        compose: memoryStack.compose,
+        env: memoryStack.env.map((entry) => entry.name),
+      });
+      expect(memoryStack.compose?.files).toEqual(projection.fragments.compose.files);
+      expect(memoryStack.compose?.profiles).toEqual(projection.fragments.compose.profiles);
+      expect(memoryStack.checks.map((check) => check.name))
+        .toEqual(memoryServices.map((service) => `service:${service}`));
+
+      for (const serviceName of memoryServices) {
+        const readinessCheck = checkByName(readiness, `service:${serviceName}`);
+        const memoryCheck = checkByName(memoryStack, `service:${serviceName}`);
+        const projectedService = projection.services.find((service) => service.name === serviceName);
+
+        expect(readinessCheck).toMatchObject({
+          type: "compose-service",
+          service: serviceName,
+        });
+        expect(memoryCheck).toEqual(readinessCheck);
+        expect(projectedService).toMatchObject({
+          sources: expect.arrayContaining(["readiness", "memory-stack"]),
+          readiness: {
+            name: `service:${serviceName}`,
+            type: "compose-service",
+          },
+          memoryStack: {
+            enabled: true,
+            source: "memory.services",
+          },
+        });
+      }
+    }
   });
 });

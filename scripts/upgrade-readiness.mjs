@@ -67,6 +67,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     { profileName: "test-host" },
     options.env ?? process.env,
   );
+  const presentationProjection = buildPresentationProjectionGate(projection);
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
     workspaceRoot,
@@ -81,6 +82,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     projection,
     parity,
     memoryPersistenceSmoke,
+    presentationProjection,
     harnessHardcoding,
   };
   const tracks = [
@@ -116,6 +118,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     tracks,
     gates: {
       memoryPersistence: memoryPersistenceSmoke,
+      presentationProjection,
       harnessHardcoding,
     },
     advisoryWarnings: advisories,
@@ -285,7 +288,11 @@ function behaviorParityEvidence(parity) {
   ].join(", ");
 }
 
-function presentationTrack({ workspaceRoot, packageJson, projection }) {
+function presentationTrack({ workspaceRoot, packageJson, presentationProjection }) {
+  const webTarget = presentationProjection.targets.find((target) => target.surface === "web");
+  const desktopTarget = presentationProjection.targets.find(
+    (target) => target.surface === "desktop",
+  );
   return {
     id: "web-electron-presentation",
     title: "Web + Electron Presentation",
@@ -308,13 +315,13 @@ function presentationTrack({ workspaceRoot, packageJson, projection }) {
       ),
       passFail(
         "Profile owns Kirakira web URL",
-        readinessTarget(projection, "presentation:web") === "http://127.0.0.1:5183/",
-        `presentation:web=${readinessTarget(projection, "presentation:web") ?? "missing"}`,
+        webTarget?.status === "pass",
+        presentationTargetEvidence(webTarget),
       ),
       passFail(
         "Profile owns desktop renderer URL",
-        readinessTarget(projection, "presentation:desktop") === "http://127.0.0.1:5174/",
-        `presentation:desktop=${readinessTarget(projection, "presentation:desktop") ?? "missing"}`,
+        desktopTarget?.status === "pass",
+        presentationTargetEvidence(desktopTarget),
       ),
       passFail(
         "Root workbench scripts exist",
@@ -323,6 +330,58 @@ function presentationTrack({ workspaceRoot, packageJson, projection }) {
       ),
     ],
   };
+}
+
+function buildPresentationProjectionGate(projection) {
+  const targets = [
+    {
+      surface: "web",
+      readinessName: "presentation:web",
+      envName: "KIRAKIRA_WEB_URL",
+    },
+    {
+      surface: "desktop",
+      readinessName: "presentation:desktop",
+      envName: "KIRAKIRA_DESKTOP_RENDERER_URL",
+    },
+  ].map((target) => {
+    const readiness = readinessTarget(projection, target.readinessName);
+    const env = runtimeProfileEnvValue(projection, target.envName);
+    return {
+      ...target,
+      readinessTarget: readiness ?? null,
+      envTarget: env ?? null,
+      status:
+        readiness && env && normalizedUrl(readiness) === normalizedUrl(env)
+          ? "pass"
+          : "fail",
+    };
+  });
+  const failures = targets.filter((target) => target.status !== "pass").length;
+  return {
+    status: failures === 0 ? "pass" : "fail",
+    source: "runtime-profile-projection",
+    failures,
+    targets,
+    evidence: targets.map(presentationTargetEvidence).join("; "),
+  };
+}
+
+function runtimeProfileEnvValue(projection, name) {
+  return projection.fragments?.env?.values?.[name];
+}
+
+function normalizedUrl(value) {
+  return String(value).replace(/\/+$/, "");
+}
+
+function presentationTargetEvidence(target) {
+  if (!target) return "target=missing";
+  return [
+    `${target.readinessName}=${target.readinessTarget ?? "missing"}`,
+    `${target.envName}=${target.envTarget ?? "missing"}`,
+    `status=${target.status}`,
+  ].join(", ");
 }
 
 function buildHarnessHardcodingGate(projection) {

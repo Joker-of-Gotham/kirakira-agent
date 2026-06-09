@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -718,6 +718,315 @@ describe("runtime daemon subagent bridge", () => {
     } finally {
       await bridge.destroy();
       await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("surfaces partial daemon memory source fanout failures through KernelBridge events", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-research-array-fail-"));
+    const eventStorePath = join(workspaceRoot, "events");
+    const seen: RunEvent[] = [];
+    const recallCalls: Array<{ source: string; request: RecallRequest }> = [];
+    const primary: Pick<MemoryService, "recall" | "explainRetrieval"> = {
+      async recall(request) {
+        recallCalls.push({ source: "primary", request });
+        return memoryBundle("primary", "rec-primary");
+      },
+      async explainRetrieval() {
+        return trace;
+      },
+    };
+    const secondary: Pick<MemoryService, "recall" | "explainRetrieval"> = {
+      async recall(request) {
+        recallCalls.push({ source: "secondary", request });
+        throw new Error("secondary daemon memory recall unavailable");
+      },
+      async explainRetrieval() {
+        return trace;
+      },
+    };
+    const resolvedConfig = {
+      agentToml: {
+        deep_research: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 1,
+          max_tool_calls: 2,
+          require_citations: true,
+        },
+      },
+    } as Pick<ResolvedConfig, "agentToml">;
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      deepResearch: {
+        memory: [
+          {
+            service: primary,
+            tenantId: "tenant-primary",
+            workspaceId: ({ workspaceRoot: taskWorkspaceRoot }) => `${taskWorkspaceRoot}:primary`,
+            namespace: "project",
+            sessionId: ({ runId, node }) => `session-primary-${runId}-${node.id}`,
+            tokenBudget: 256,
+            limit: 1,
+          },
+          {
+            service: secondary,
+            tenantId: ({ runId }) => `tenant-secondary-${runId}`,
+            workspaceId: "workspace-secondary",
+            kinds: ["belief"],
+            sessionId: ({ runId, node }) => `session-secondary-${runId}-${node.id}`,
+            tokenBudget: 128,
+            limit: 2,
+          },
+        ],
+      },
+      kernelOptions: {
+        planContext: {
+          workspace: workspaceRoot,
+          availableTools: [],
+          availableSkills: [],
+          availableMcpServers: [],
+        },
+        planner: {
+          async completeText() {
+            return JSON.stringify({
+              goal: "Collect daemon research from partially failing memory sources",
+              steps: [
+                {
+                  id: "research",
+                  description: "Collect daemon memory evidence from partially failing sources",
+                  kind: "research",
+                  dependsOn: [],
+                  canParallelize: false,
+                  research: {
+                    question: "Which daemon memory source fails during fanout?",
+                    requiredSourceKinds: ["memory"],
+                  },
+                },
+              ],
+              estimatedComplexity: "moderate",
+              requiresSubagents: false,
+            });
+          },
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      const unsubscribe = bridge.onEvent((event) => {
+        seen.push(event);
+      });
+      const completed = waitForBridgeEvent(
+        bridge,
+        (event) => event.kind === "run.completed",
+      );
+
+      const runId = await bridge.submitRun(
+        "Collect daemon research from partially failing memory sources",
+        "headless",
+        { workspaceRoot },
+      );
+      await completed;
+      unsubscribe();
+
+      expect(recallCalls.map((call) => call.source)).toEqual(["primary", "secondary"]);
+      expect(recallCalls[0]?.request).toMatchObject({
+        tenantId: "tenant-primary",
+        workspaceId: `${workspaceRoot}:primary`,
+        query: "Which daemon memory source fails during fanout?",
+        namespace: "project",
+        sessionId: `session-primary-${runId}-research`,
+        runId,
+        tokenBudget: 256,
+        limit: 1,
+        level: "L3",
+        includeRedacted: false,
+      });
+      expect(recallCalls[1]?.request).toMatchObject({
+        tenantId: `tenant-secondary-${runId}`,
+        workspaceId: "workspace-secondary",
+        query: "Which daemon memory source fails during fanout?",
+        kinds: ["belief"],
+        sessionId: `session-secondary-${runId}-research`,
+        runId,
+        tokenBudget: 128,
+        limit: 2,
+        level: "L3",
+        includeRedacted: false,
+      });
+
+      expect(seen.map((event) => event.kind)).toEqual(
+        expect.arrayContaining([
+          "memory.recall.started",
+          "memory.recall.completed",
+          "memory.recall.failed",
+          "research.source.failed",
+          "research.task.failed",
+          "research.failed",
+          "task.failed",
+          "run.completed",
+        ]),
+      );
+      const recallStarted = seen.filter((event) => event.kind === "memory.recall.started");
+      const recallCompleted = seen.filter((event) => event.kind === "memory.recall.completed");
+      const recallFailed = seen.filter((event) => event.kind === "memory.recall.failed");
+      expect(recallStarted.map((event) => event.payload.tenantId)).toEqual([
+        "tenant-primary",
+        `tenant-secondary-${runId}`,
+      ]);
+      expect(recallCompleted).toHaveLength(1);
+      expect(recallCompleted[0]?.payload).toMatchObject({
+        tenantId: "tenant-primary",
+        bundleId: "primary",
+        queryId: "query-primary",
+        retrievalTraceId: "trace-primary",
+        selectedRecordIds: ["rec-primary"],
+        recordIds: ["rec-primary"],
+      });
+      expect(recallFailed).toHaveLength(1);
+      expect(recallFailed[0]?.payload).toMatchObject({
+        tenantId: `tenant-secondary-${runId}`,
+        workspaceId: "workspace-secondary",
+        sessionId: `session-secondary-${runId}-research`,
+        error: "secondary daemon memory recall unavailable",
+      });
+      const sourceFailed = seen.find((event) => event.kind === "research.source.failed");
+      expect(sourceFailed?.payload).toMatchObject({
+        nodeId: "research",
+        parentTaskId: "research",
+        sourceKind: "memory",
+        sourceCallId: expect.any(String),
+        errorCode: "Error",
+        message: "secondary daemon memory recall unavailable",
+      });
+      const taskFailed = seen.find((event) => event.kind === "task.failed");
+      expect(taskFailed?.payload).toMatchObject({
+        taskId: "research",
+        nodeId: "research",
+        kind: "research",
+        error: "secondary daemon memory recall unavailable",
+      });
+      expect(seen.some((event) => event.kind === "research.completed")).toBe(false);
+      const serializedEvents = JSON.stringify(seen);
+      expect(serializedEvents).not.toContain("SAFE SUMMARY primary");
+      expect(serializedEvents).not.toContain("Memory citation excerpt primary");
+      expect(serializedEvents).not.toContain("rawSpan");
+    } finally {
+      await bridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("injects a default daemon file research source from the task workspace", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-file-research-"));
+    const eventStoreRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-file-events-"));
+    await mkdir(join(workspaceRoot, "docs"), { recursive: true });
+    await writeFile(
+      join(workspaceRoot, "docs", "runtime.md"),
+      "Default daemon file evidence proves workspace bounded research.",
+    );
+    const eventStorePath = join(eventStoreRoot, "events");
+    const seen: RunEvent[] = [];
+    const resolvedConfig = {
+      agentToml: {
+        deep_research: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 2,
+          max_tool_calls: 2,
+          require_citations: true,
+        },
+      },
+    } as Pick<ResolvedConfig, "agentToml">;
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      kernelOptions: {
+        planContext: {
+          workspace: workspaceRoot,
+          availableTools: [],
+          availableSkills: [],
+          availableMcpServers: [],
+        },
+        planner: {
+          async completeText() {
+            return JSON.stringify({
+              goal: "Collect default daemon file evidence",
+              steps: [
+                {
+                  id: "research",
+                  description: "Collect default daemon file evidence",
+                  kind: "research",
+                  dependsOn: [],
+                  canParallelize: false,
+                  research: {
+                    question: "Where is default daemon file evidence?",
+                    requiredSourceKinds: ["file"],
+                  },
+                },
+              ],
+              estimatedComplexity: "moderate",
+              requiresSubagents: false,
+            });
+          },
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      const unsubscribe = bridge.onEvent((event) => {
+        seen.push(event);
+      });
+      const completed = waitForBridgeEvent(
+        bridge,
+        (event) => event.kind === "run.completed",
+      );
+
+      await bridge.submitRun("Collect default daemon file evidence", "headless", {
+        workspaceRoot,
+      });
+      await completed;
+      unsubscribe();
+
+      const taskCompleted = seen.find(
+        (event) => event.kind === "task.completed" && event.payload.taskId === "research",
+      );
+      expect(taskCompleted?.payload.result).toMatchObject({
+        output: {
+          status: "evidence_collected",
+          sourcePolicy: "workspace",
+          requiredSourceKinds: ["file"],
+          evidenceCount: 1,
+          citationCount: 1,
+          toolCalls: 1,
+          evidence: [
+            expect.objectContaining({
+              sourceKind: "file",
+              title: "docs/runtime.md",
+              citationIds: expect.arrayContaining([
+                expect.stringMatching(/^file:/),
+              ]),
+            }),
+          ],
+          citations: [
+            expect.objectContaining({
+              sourceKind: "file",
+              uri: "workspace://docs/runtime.md",
+              artifactPointer: "docs/runtime.md#L1",
+            }),
+          ],
+        },
+      });
+    } finally {
+      await bridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+      await rm(eventStoreRoot, { recursive: true, force: true });
     }
   });
 
