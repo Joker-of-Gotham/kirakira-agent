@@ -5,4 +5,5 @@ export * from "./options.js";
 export * from "./planner.js";
 export * from "./runner.js";
 export * from "./source-adapters.js";
+export * from "./web.js";
 export type * from "./types.js";

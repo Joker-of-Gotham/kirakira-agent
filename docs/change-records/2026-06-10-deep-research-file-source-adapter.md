@@ -33,8 +33,8 @@ pnpm.cmd --filter @kirakira/orchestrator-kernel typecheck
 pnpm.cmd --filter @kirakira/runtime-daemon typecheck
 ```
 
-Remaining roadmap work:
+Remaining roadmap work after the later web-source slice:
 
-- Concrete live adapter suites for web and MCP source kinds.
+- Concrete live adapter suite for MCP source kind.
 - End-to-end live research gates that run file, web, and MCP adapters through
   daemon and workbench surfaces.

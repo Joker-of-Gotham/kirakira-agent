@@ -28,17 +28,19 @@ runtime validation before upgrade readiness can treat them as closed?
 After runtime-daemon profile composition and orchestrator kernel bridge closure,
 the highest-leverage remaining mechanism gap is now product-level
 `deep-research-live-source-adapter-validation`: expand live source-adapter
-validation from generic source-kind fanout and default daemon file evidence into
-concrete web and MCP adapter suites.
+validation from generic source-kind fanout plus concrete file/web evidence into
+the MCP adapter suite and end-to-end live gates.
 
 Evidence:
 
 - `packages/deep-research/src`
 - `packages/deep-research/src/file.ts`
 - `packages/deep-research/src/source-adapters.ts`
+- `packages/deep-research/src/web.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
 - `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/planner.test.ts`
+- `test/unit/deep-research/web.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 
@@ -80,7 +82,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, and workspace-bounded file evidence through the daemon default source path; concrete web and MCP live adapter suites remain product roadmap work. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, and configurable HTTPS-first web evidence; the concrete MCP live adapter suite and end-to-end live research gates remain product roadmap work. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
