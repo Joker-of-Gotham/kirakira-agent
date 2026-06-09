@@ -6,6 +6,7 @@ import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
 import {
   buildWorkbenchSmokePlan,
   profileFromOptions,
+  readinessPlanForCheckNames,
   runWorkbenchSmokePlan,
 } from "./kirakira-workbench.mjs";
 
@@ -113,11 +114,13 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
     skipInfra: options.skipInfra,
     skipDaemon: options.skipDaemon,
   });
+  const readinessPlan = readinessPlanForCheckNames(plan.readiness, plan.smoke?.checks ?? []);
   return {
     live: liveRequested(options, env),
     profile,
     plan,
-    checks: plan.smoke?.checks ?? [],
+    readinessPlan,
+    checks: readinessPlan.checks.map((check) => check.name),
     readiness: {
       timeoutMs: options.timeoutMs ?? DEFAULT_SMOKE_TIMEOUT_MS,
       intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
@@ -148,6 +151,7 @@ async function main(argv) {
     checks: smokePlan.checks,
     stepOverrides: smokePlan.plan.smoke?.stepOverrides ?? [],
     readiness: smokePlan.readiness,
+    readinessPlan: smokePlan.readinessPlan,
     steps: smokePlan.plan.steps.map((step) => ({
       name: step.name,
       mode: step.mode,

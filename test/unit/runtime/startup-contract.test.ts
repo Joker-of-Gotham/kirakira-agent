@@ -30,8 +30,11 @@ describe("startup contract", () => {
       readFileSync(resolve(repoRoot, "apps/desktop/package.json"), "utf8"),
     );
     expect(desktopPkg.scripts["dev:renderer"]).toBe("vite --config vite.renderer.config.ts");
-    expect(desktopPkg.scripts["dev:electron"]).toBe("pnpm run build:main && electron .");
+    expect(desktopPkg.scripts["dev:electron"]).toBe(
+      "pnpm run build:main && pnpm run build:preload && electron .",
+    );
     expect(desktopPkg.scripts["build:main"]).toBe("tsc -p tsconfig.main.json");
+    expect(desktopPkg.scripts["build:preload"]).toBe("vite build --config vite.preload.config.ts");
   });
 
   it("keeps workbench web, desktop, and gateway ports in the runtime profile", () => {

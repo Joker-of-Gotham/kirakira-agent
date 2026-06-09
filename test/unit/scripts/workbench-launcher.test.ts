@@ -79,6 +79,23 @@ describe("workbench launcher plan", () => {
     expect(JSON.stringify(plan)).not.toContain("5173");
   });
 
+  it("drives infra startup from the readiness compose service plan", () => {
+    const config = JSON.parse(JSON.stringify(loadRuntimeProfiles()));
+    config.serviceCatalog.services.postgres.composeService = "db";
+    const profile = resolveRuntimeProfile("workbench-host", config, {});
+    const plan = buildWorkbenchPlan(profile, "web", { config });
+
+    expect(plan.readiness.compose?.services).toContain("db");
+    expect(plan.readiness.compose?.services).not.toContain("postgres");
+    expect(plan.steps[0]).toMatchObject({
+      name: "infra",
+      command: plan.readiness.compose?.command,
+      args: plan.readiness.compose?.args,
+    });
+    expect(plan.steps[0]?.args).toContain("db");
+    expect(plan.steps[0]?.args).not.toContain("postgres");
+  });
+
   it("plans daemon, renderer, and Electron shell for the desktop surface", () => {
     const config = loadRuntimeProfiles();
     const profile = resolveRuntimeProfile("workbench-host", config, {});

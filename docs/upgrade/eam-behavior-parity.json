@@ -70,6 +70,7 @@
         "packages/cli/src/gateway/provider-catalog.ts",
         "packages/cli/src/runtime/runtime-doctor-command.ts",
         "packages/cli/src/runtime/runtime-profile-command.ts",
+        "packages/cli/src/runtime/runtime-script-registry.ts",
         "packages/cli/src/runtime/runtime-script-command.ts",
         "packages/cli/src/tui/HomeScreen.tsx",
         "packages/cli/src/tui/hooks/useTicker.ts",
@@ -93,7 +94,7 @@
         }
       ],
       "remainingGaps": [
-        "Replace remaining CLI MCP setup duplication with the resolved runtime profile projection where command behavior permits.",
+        "Replace remaining CLI MCP setup duplication with the resolved runtime profile projection where command behavior permits; runtime script names are now centralized behind a typed registry.",
         "Keep provider setup and home-screen UI covered by focused TUI tests when the workbench IA changes."
       ]
     },
@@ -162,13 +163,18 @@
       "extensionFiles": [
         "packages/mcp-adapter/src/alias-catalog.ts",
         "packages/mcp-adapter/src/gateway-context.ts",
-        "packages/mcp-adapter/src/otel-bridge.ts"
+        "packages/mcp-adapter/src/otel-bridge.ts",
+        "packages/mcp-adapter/src/otel-profile.ts"
       ],
       "evidence": [
         {
           "kind": "test",
           "path": "test/unit/mcp-adapter/gateway-context.test.ts",
-          "command": "pnpm exec vitest run test/unit/mcp-adapter/gateway-context.test.ts test/unit/mcp-adapter/otel-bridge.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts"
+          "command": "pnpm exec vitest run test/unit/mcp-adapter/gateway-context.test.ts test/unit/mcp-adapter/otel-bridge.test.ts test/unit/mcp-adapter/otel-profile.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/mcp-adapter/otel-profile.test.ts"
         },
         {
           "kind": "test",
@@ -188,7 +194,7 @@
         }
       ],
       "remainingGaps": [
-        "Wire configured OpenTelemetry SDK or exporter construction from runtime profiles.",
+        "Inject the profile-selected MCP OTel recorder into daemon-owned transports and configure a real OTLP/OpenTelemetry SDK exporter when required.",
         "Add live propagation smoke coverage across daemon-owned MCP transports.",
         "Ensure direct browser and desktop tool actions continue returning tool-originated failures as MCP tool results with isError true."
       ]
@@ -237,7 +243,8 @@
         "packages/orchestrator-kernel/src/research/event-bridge.ts",
         "packages/orchestrator-kernel/src/research/research-task-executor.ts",
         "packages/orchestrator-kernel/src/subagent/contract.ts",
-        "packages/orchestrator-kernel/src/subagent/runtime-bridge.ts"
+        "packages/orchestrator-kernel/src/subagent/runtime-bridge.ts",
+        "packages/orchestrator-kernel/src/subagent/topology.ts"
       ],
       "evidence": [
         {
@@ -255,8 +262,7 @@
         }
       ],
       "remainingGaps": [
-        "Add topology lineage IDs and handoff edge IDs to subagent lifecycle events.",
-        "Add bounded role defaults for model, context, and child runtime policy.",
+        "Promote lineage, topology, and permission metadata from delegate action args into top-level agent-runtime DelegateRequest fields.",
         "Expand behavior validation from injected adapters to live daemon source adapters where practical."
       ]
     },
@@ -270,6 +276,7 @@
       "extensionFiles": [
         "packages/runtime-daemon/src/bin/daemon-config.ts",
         "packages/runtime-daemon/src/bin/kirakira-runtime-daemon.ts",
+        "packages/runtime-daemon/src/bridge/agent-mcp-tool-gateway.ts",
         "packages/runtime-daemon/src/bridge/deep-research.ts",
         "packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts",
         "packages/runtime-daemon/src/bridge/mcp-runtime.ts",
@@ -281,6 +288,11 @@
         "packages/runtime-daemon/src/server/runtime-socket.ts"
       ],
       "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/agent-mcp-tool-gateway.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-daemon/agent-mcp-tool-gateway.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
+        },
         {
           "kind": "test",
           "path": "test/unit/runtime-daemon/mcp-runtime.test.ts",
@@ -301,7 +313,7 @@
       ],
       "remainingGaps": [
         "Run regular live Docker/local web and desktop smoke gates outside focused unit tests.",
-        "Unify OTel exporter construction, audit bridge wiring, memory, and topology dependencies through one profile-derived composition path.",
+        "Wire the profile-selected MCP OTel recorder, audit bridge, memory, and topology dependencies through one profile-derived composition path.",
         "Reduce remaining daemon lifecycle and runtime-profile projection duplication."
       ]
     }

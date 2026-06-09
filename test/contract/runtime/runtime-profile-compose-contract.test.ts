@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRuntimeReadinessPlan,
+  expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderRuntimeEnv,
   resolveRuntimeProfile,
@@ -65,6 +66,17 @@ function healthcheckCommandText(compose: ReturnType<typeof loadComposeFile>, ser
   return JSON.stringify(service.healthcheck?.test ?? "");
 }
 
+function dependsOnCondition(
+  service: ReturnType<typeof composeService>,
+  dependency: string,
+): string | undefined {
+  const dependsOn = (service as { depends_on?: unknown }).depends_on;
+  if (!dependsOn || typeof dependsOn !== "object" || Array.isArray(dependsOn)) return undefined;
+  const entry = (dependsOn as Record<string, unknown>)[dependency];
+  if (!entry || typeof entry !== "object" || Array.isArray(entry)) return undefined;
+  return (entry as { condition?: string }).condition;
+}
+
 describe("runtime profile compose contracts", () => {
   it("keeps readiness compose services aligned with catalog mappings and healthchecks", () => {
     const config = loadRuntimeProfiles();
@@ -111,6 +123,23 @@ describe("runtime profile compose contracts", () => {
     ]) {
       expect(text).toContain("/dev/tcp/127.0.0.1/6333");
       expect(text).not.toMatch(/\b(curl|wget)\b/u);
+    }
+  });
+
+  it("keeps container runtime dependencies gated on compose service health", () => {
+    const config = loadRuntimeProfiles();
+    const baseCompose = loadComposeFile("docker-compose.yml", import.meta.url);
+    const runtimeServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
+    const agentService = composeService(baseCompose, "kirakira-agent");
+
+    for (const serviceName of runtimeServices) {
+      const catalogService = runtimeServiceCatalog(config)[serviceName];
+      const composeName = typeof catalogService?.composeService === "string"
+        ? catalogService.composeService
+        : serviceName;
+      expect(dependsOnCondition(agentService, composeName)).toBe("service_healthy");
+      expect((composeService(baseCompose, composeName) as { healthcheck?: unknown }).healthcheck)
+        .toBeTruthy();
     }
   });
 

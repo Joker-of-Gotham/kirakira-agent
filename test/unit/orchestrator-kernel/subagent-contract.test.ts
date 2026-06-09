@@ -26,10 +26,44 @@ const topologyContext: PlanContext = {
     handoff_mode: "swarm",
     default_role: "supervisor",
     roles: [
-      { id: "researcher", lane: "background" },
-      { id: "implementer", lane: "delegated" },
+      {
+        id: "researcher",
+        lane: "background",
+        model: "openai:gpt-5.4-research",
+        max_turns: 5,
+        system_preamble: "Collect concise source-backed evidence.",
+        context: "filtered",
+        tool_scope: ["web.search"],
+        permissions: ["workspace-read"],
+      },
+      {
+        id: "implementer",
+        lane: "delegated",
+        model: "openai:gpt-5.4-code",
+        max_turns: 6,
+        context: "isolated",
+        tool_scope: ["repo.read"],
+        skill_scope: ["review"],
+        mcp_servers: ["filesystem"],
+        permissions: ["workspace-write-gated"],
+      },
     ],
-    handoffs: [{ from: "supervisor", to: "implementer", mode: "tool" }],
+    handoffs: [
+      {
+        from: "supervisor",
+        to: "researcher",
+        mode: "swarm",
+        input_filter: "research-brief",
+      },
+      {
+        from: "supervisor",
+        to: "implementer",
+        mode: "tool",
+        input_filter: "implementation-brief",
+        approval_required: true,
+        conditions: ["workspace-write"],
+      },
+    ],
   },
 };
 
@@ -181,6 +215,81 @@ describe("orchestrator subagent contract", () => {
       role: "researcher",
       lane: "background",
       capabilities: [{ kind: "tool", name: "repo.read" }],
+      modelPreference: "openai:gpt-5.4-research",
+      runtimePolicy: {
+        maxTurns: 5,
+        systemPreamble: "Collect concise source-backed evidence.",
+        contextMode: "filtered",
+      },
+      permissions: ["workspace-read"],
+      topology: {
+        parentRole: "supervisor",
+        handoffEdgeId: "handoff:supervisor:researcher:swarm:0",
+        handoff: {
+          id: "handoff:supervisor:researcher:swarm:0",
+          from: "supervisor",
+          to: "researcher",
+          mode: "swarm",
+          inputFilter: "research-brief",
+        },
+      },
+    });
+  });
+
+  it("uses topology role capability and permission defaults when task scopes are omitted", () => {
+    const graph = new PlanNormalizer().normalize(
+      basePlan({
+        context: topologyContext,
+        steps: [
+          {
+            id: "step-a",
+            kind: "subagent",
+            description: "Implement a bounded change",
+            dependsOn: [],
+            canParallelize: true,
+            subagent: {
+              taskBrief: "Implement a bounded change",
+              role: "implementer",
+            },
+          },
+        ],
+      }),
+      "run-1",
+    );
+
+    expect(graph.nodes.get("step-a")?.spec).toMatchObject({
+      approvalRequired: true,
+      subagent: {
+        role: "implementer",
+        lane: "delegated",
+        modelPreference: "openai:gpt-5.4-code",
+        capabilities: [
+          { kind: "tool", name: "repo.read" },
+          { kind: "skill", name: "review" },
+          { kind: "mcp", name: "filesystem" },
+        ],
+        runtimePolicy: { maxTurns: 6, contextMode: "isolated" },
+        permissions: ["workspace-write-gated"],
+        topology: {
+          parentRole: "supervisor",
+          handoffEdgeId: "handoff:supervisor:implementer:tool:1",
+          handoff: {
+            id: "handoff:supervisor:implementer:tool:1",
+            from: "supervisor",
+            to: "implementer",
+            mode: "tool",
+            inputFilter: "implementation-brief",
+            approvalRequired: true,
+            conditions: ["workspace-write"],
+          },
+        },
+      },
+    });
+    expect(graph.edges).toContainEqual({
+      from: "step-a",
+      to: "step-a",
+      kind: "blocks_on_approval",
+      metadata: { self: true },
     });
   });
 
@@ -278,6 +387,7 @@ describe("orchestrator subagent contract", () => {
                 lane: "background",
                 capabilities: [{ kind: "tool", name: "web.search" }],
                 modelPreference: "openai:gpt-5.4",
+                permissions: ["network-docs-only"],
                 outputSchema: {
                   type: "object",
                   properties: { sources: { type: "array" } },
@@ -304,6 +414,7 @@ describe("orchestrator subagent contract", () => {
         lane: "background",
         capabilities: [{ kind: "tool", name: "web.search" }],
         modelPreference: "openai:gpt-5.4",
+        permissions: ["network-docs-only"],
         outputSchema: {
           type: "object",
           properties: { sources: { type: "array" } },
@@ -401,6 +512,11 @@ describe("orchestrator subagent contract", () => {
       runId: "run-1",
       workspaceRoot: "C:/workspace",
       traceId: "trace-1",
+      lineage: {
+        rootLineageId: "run-1",
+        parentLineageId: "run-1:worker:worker-parent",
+        lineageId: "run-1:task:step-a:subagent",
+      },
     });
   });
 
@@ -418,6 +534,22 @@ describe("orchestrator subagent contract", () => {
       traceId: "trace-1",
       workspaceRoot: "C:/workspace",
       policyCeiling: { network: "restricted" },
+      permissions: ["workspace-write-gated"],
+      topology: {
+        parentRole: "supervisor",
+        handoffEdgeId: "handoff:supervisor:implementer:tool:0",
+        handoff: {
+          id: "handoff:supervisor:implementer:tool:0",
+          from: "supervisor",
+          to: "implementer",
+          mode: "tool",
+        },
+      },
+      lineage: {
+        rootLineageId: "run-1",
+        parentLineageId: "run-1:worker:worker-parent",
+        lineageId: "run-1:task:step-a:subagent",
+      },
       inputArtifactRefs: ["artifact-source"],
       outputSchema: { type: "object" },
     };
@@ -436,6 +568,21 @@ describe("orchestrator subagent contract", () => {
         policyCeiling: { network: "restricted" },
         inputArtifactRefs: ["artifact-source"],
         outputSchema: { type: "object" },
+        action: {
+          args: {
+            permissions: ["workspace-write-gated"],
+            handoffEdgeId: "handoff:supervisor:implementer:tool:0",
+            topology: {
+              parentRole: "supervisor",
+              handoffEdgeId: "handoff:supervisor:implementer:tool:0",
+            },
+            lineage: {
+              rootLineageId: "run-1",
+              parentLineageId: "run-1:worker:worker-parent",
+              lineageId: "run-1:task:step-a:subagent",
+            },
+          },
+        },
       });
       return {
         success: true,

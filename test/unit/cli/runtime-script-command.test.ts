@@ -6,9 +6,20 @@ import {
   buildRuntimeScriptInvocation,
   resolveKirakiraRepoRoot,
   runRuntimeScriptInvocation,
+  type RuntimeScriptInvocation,
 } from "../../../packages/cli/src/runtime/runtime-script-command.js";
+import {
+  getRuntimeScriptDefinition,
+  runtimeScriptRegistry,
+} from "../../../packages/cli/src/runtime/runtime-script-registry.js";
 
 describe("runtime script command bridge", () => {
+  it("keeps shared runtime scripts behind a typed registry", () => {
+    expect(getRuntimeScriptDefinition("profile").scriptName).toBe("runtime-profile.mjs");
+    expect(getRuntimeScriptDefinition("doctor").scriptName).toBe("runtime-doctor.mjs");
+    expect(JSON.stringify(runtimeScriptRegistry)).not.toContain("5173");
+  });
+
   it("uses process.execPath and argv tokens instead of shell command strings", () => {
     const repoRoot = mkdtempSync(join(tmpdir(), "kirakira runtime bridge "));
     mkdirSync(join(repoRoot, "scripts"));
@@ -17,7 +28,7 @@ describe("runtime script command bridge", () => {
 
     const invocation = buildRuntimeScriptInvocation(
       {
-        scriptName: "runtime-profile.mjs",
+        scriptId: "profile",
         args: ["show", "foo & echo bad"],
       },
       { KIRAKIRA_REPO_ROOT: repoRoot },
@@ -48,7 +59,7 @@ describe("runtime script command bridge", () => {
     expect(() =>
       buildRuntimeScriptInvocation(
         {
-          scriptName: "runtime-profile.mjs",
+          scriptId: "profile",
         },
         { KIRAKIRA_REPO_ROOT: repoRoot },
       ),
@@ -61,12 +72,11 @@ describe("runtime script command bridge", () => {
     writeFileSync(join(repoRoot, "pnpm-workspace.yaml"), "packages: []\n", "utf8");
     writeFileSync(join(repoRoot, "scripts", "exit-code.mjs"), "process.exit(7);\n", "utf8");
 
-    const invocation = buildRuntimeScriptInvocation(
-      {
-        scriptName: "exit-code.mjs",
-      },
-      { KIRAKIRA_REPO_ROOT: repoRoot },
-    );
+    const invocation: RuntimeScriptInvocation = {
+      command: process.execPath,
+      args: [join(repoRoot, "scripts", "exit-code.mjs")],
+      cwd: repoRoot,
+    };
 
     await expect(runRuntimeScriptInvocation(invocation)).resolves.toBe(7);
   });

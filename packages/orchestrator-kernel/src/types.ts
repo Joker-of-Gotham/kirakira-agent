@@ -118,6 +118,8 @@ export interface SubagentTaskContract {
   modelPreference?: string;
   runtimePolicy?: SubagentRuntimePolicy;
   policyCeiling?: WorkerConfig["policyCeiling"];
+  permissions?: string[];
+  topology?: SubagentTopologyMetadata;
   inputArtifactRefs?: string[];
   outputSchema?: Record<string, unknown>;
 }
@@ -347,6 +349,30 @@ export interface MergeResult {
   strategy: MergeStrategy;
 }
 
+type RuntimeHandoffConfig = NonNullable<ResolvedRuntimeOrchestrationState["handoffs"]>[number];
+
+export interface SubagentHandoffMetadata {
+  id: string;
+  from: string;
+  to: string;
+  mode?: RuntimeHandoffConfig["mode"];
+  inputFilter?: string;
+  approvalRequired?: boolean;
+  conditions?: string[];
+}
+
+export interface SubagentTopologyMetadata {
+  parentRole?: string;
+  handoffEdgeId?: string;
+  handoff?: SubagentHandoffMetadata;
+}
+
+export interface SubagentLineageMetadata {
+  rootLineageId: string;
+  parentLineageId: string;
+  lineageId: string;
+}
+
 export interface SubagentSpec {
   taskBrief: string;
   capabilities: SubagentCapability[];
@@ -360,6 +386,9 @@ export interface SubagentSpec {
   traceId?: string;
   workspaceRoot: string;
   policyCeiling?: WorkerConfig["policyCeiling"];
+  permissions?: string[];
+  topology?: SubagentTopologyMetadata;
+  lineage?: SubagentLineageMetadata;
   inputArtifactRefs?: string[];
   outputSchema?: Record<string, unknown>;
 }

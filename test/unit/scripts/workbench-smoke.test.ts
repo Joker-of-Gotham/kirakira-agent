@@ -52,8 +52,72 @@ describe("workbench smoke gate", () => {
       ["web", "background"],
     ]);
     expect(smoke.checks).toEqual(["daemon:browser-gateway", "presentation:web"]);
+    expect(smoke.checks).toEqual(smoke.readinessPlan.checks.map((check) => check.name));
+    expect(smoke.readinessPlan.checks).toContainEqual(
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        target: "http://127.0.0.1:17373/healthz",
+      }),
+    );
+    expect(smoke.readinessPlan.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:web",
+        target: "http://127.0.0.1:5183/",
+      }),
+    );
     expect(smoke.readiness.timeoutMs).toBe(120_000);
     expect(JSON.stringify(smoke)).not.toContain("5173");
+  });
+
+  it("exposes resolved smoke readiness targets from profile endpoint overrides", () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "web",
+        skipInfra: true,
+      },
+      {
+        KIRAKIRA_WEB_PORT: "5199",
+        KIRAKIRA_BROWSER_GATEWAY_PORT: "17399",
+      },
+    );
+
+    expect(smoke.checks).toEqual(["daemon:browser-gateway", "presentation:web"]);
+    expect(smoke.readinessPlan.compose).toBeUndefined();
+    expect(smoke.readinessPlan.checks).toEqual([
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        target: "http://127.0.0.1:17399/healthz",
+        endpoint: "ws://127.0.0.1:17399/runtime",
+      }),
+      expect.objectContaining({
+        name: "presentation:web",
+        target: "http://127.0.0.1:5199/",
+      }),
+    ]);
+    expect(JSON.stringify(smoke)).not.toContain("5183");
+    expect(JSON.stringify(smoke)).not.toContain("17373");
+  });
+
+  it("keeps full live smoke compose services in the selected readiness plan", () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "web",
+      },
+      {},
+    );
+
+    expect(smoke.readinessPlan.compose).toEqual(smoke.plan.readiness.compose);
+    expect(smoke.readinessPlan.compose?.args).toEqual(smoke.plan.steps[0]?.args);
+    expect(smoke.readinessPlan.compose?.services).toEqual([
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad",
+    ]);
   });
 
   it("uses environment opt-in for live E2E runs", () => {

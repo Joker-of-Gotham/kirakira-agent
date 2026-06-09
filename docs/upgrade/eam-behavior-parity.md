@@ -40,13 +40,13 @@ runtime validation before upgrade readiness can treat them as closed?
 | Drift row | Classification | Behavior status | Behavior evidence | Remaining gap |
 | --- | --- | --- | --- | --- |
 | `agent-runtime` | Intentional Kirakira extension | Partial | Runtime capability scoping and delegate runner are covered by `test/unit/agent-runtime/capability-scope.test.ts`, `react-loop-delegate.test.ts`, and `tool-executor-scope.test.ts`. | Concrete forked child runtime dependencies still need to replace parent dependency reuse where possible. |
-| `cli` | Intentional Kirakira extension | Partial | Runtime profile/doctor command bridge is covered by unit and contract CLI tests; TUI additions have layout-stability coverage. | CLI MCP setup duplication should move to resolved profile projection where command behavior permits. |
+| `cli` | Intentional Kirakira extension | Partial | Runtime profile/doctor command bridge is covered by unit and contract CLI tests; runtime script names now sit behind a typed registry; TUI additions have layout-stability coverage. | CLI MCP setup duplication should move to resolved profile projection where command behavior permits. |
 | `config-resolver` | Intentional Kirakira extension | Covered | `runtime-projection.ts` is covered by resolved-state, schema, and runtime-profile tests. | Caller migration remains sequencing work, not a parity gap in the projection behavior. |
 | `eamd -> kirakirad` | Intentional Kirakira extension | Covered | The rename rule maps EAM daemon files to `kirakirad`; only `go.sum` is extra. | None. |
-| `mcp-adapter` | Intentional Kirakira extension | Partial | Gateway context and OTel bridge tests cover trust/policy/audit metadata, W3C trace metadata, and MCP `tools/call` span fields. Runtime MCP tests cover tool-result errors with `isError`. | Runtime-profile-driven OTel exporter construction and live propagation smoke coverage remain. |
+| `mcp-adapter` | Intentional Kirakira extension | Partial | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, and profile/env-selected recorder plans. Runtime MCP tests cover tool-result errors with `isError`. | Daemon injection of the profile-selected recorder, real OTLP exporter construction, and live propagation smoke coverage remain. |
 | `memory-store` | Intentional Kirakira extension | Partial | Daemon checkpoint repository selection and checkpoint envelope compatibility have focused tests. | Live Docker/local checkpoint persistence and retain/reflect event wiring remain. |
-| `orchestrator-kernel` | Intentional Kirakira extension | Partial | Task executor tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, and async checkpoint events. | Topology lineage IDs, role defaults, and live daemon adapter validation remain. |
-| `runtime-daemon` | Intentional Kirakira extension | Partial | MCP runtime, memory runtime deps, daemon config, socket path, browser gateway, and lifecycle tests cover the new composition surfaces. | Regular live Docker/local web and desktop smoke gates plus unified OTel/audit/memory/topology composition remain. |
+| `orchestrator-kernel` | Intentional Kirakira extension | Partial | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, and async checkpoint events. | Promote lineage/topology/permission metadata into first-class agent-runtime delegate request fields and expand live daemon adapter validation where practical. |
+| `runtime-daemon` | Intentional Kirakira extension | Partial | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, and lifecycle tests cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway rather than direct PEP+manager construction. | Regular live Docker/local web and desktop smoke gates plus profile-selected OTel/audit/memory/topology composition remain. |
 
 ## Extra Target Entries
 
@@ -65,4 +65,4 @@ parity failures:
 File-level parity no longer blocks on unknown drift: all eight drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
 continue to warn while six rows remain `partial`, because the remaining work is
-behavior validation or integration closure rather than source inventory repair.
+live validation or integration closure rather than source inventory repair.

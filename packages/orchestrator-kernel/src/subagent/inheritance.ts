@@ -52,6 +52,12 @@ function clampCeiling(
 
 export function inheritFromParent(parentConfig: WorkerConfig, childSpec: SubagentSpec): WorkerConfig {
   const ceiling = clampCeiling(parentConfig.policyCeiling, childSpec.policyCeiling);
+  const extra = {
+    ...(childSpec.runtimePolicy !== undefined ? { runtimePolicy: childSpec.runtimePolicy } : {}),
+    ...(childSpec.permissions !== undefined ? { permissions: childSpec.permissions } : {}),
+    ...(childSpec.topology !== undefined ? { topology: childSpec.topology } : {}),
+    ...(childSpec.lineage !== undefined ? { lineage: childSpec.lineage } : {}),
+  };
   return {
     workerId: ulid(),
     workspaceRoot: parentConfig.workspaceRoot,
@@ -65,6 +71,7 @@ export function inheritFromParent(parentConfig: WorkerConfig, childSpec: Subagen
     mcpServerAllowlist: childSpec.capabilities.filter((c) => c.kind === "mcp").map((c) => c.name),
     skillAllowlist: childSpec.capabilities.filter((c) => c.kind === "skill").map((c) => c.name),
     ...(ceiling !== undefined && Object.keys(ceiling).length > 0 ? { policyCeiling: ceiling } : {}),
+    ...(Object.keys(extra).length > 0 ? { extra } : {}),
   };
 }
 

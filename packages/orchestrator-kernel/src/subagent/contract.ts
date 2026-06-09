@@ -1,5 +1,10 @@
 import type { SubagentCapability, WorkerConfig } from "@kirakira/agent-runtime";
 import { OrchestratorKernelError } from "../errors.js";
+import {
+  inferSubagentRoleFromTopology,
+  resolveSubagentTopology,
+  subagentLineageMetadata,
+} from "./topology.js";
 import type {
   PlanContext,
   PlanStep,
@@ -107,6 +112,27 @@ function capabilitiesFromScopes(step: PlanStep): SubagentCapability[] {
   ];
 }
 
+function hasStepCapabilityScope(step: PlanStep): boolean {
+  return step.toolScope !== undefined || step.skillScope !== undefined || step.mcpServers !== undefined;
+}
+
+function capabilitiesFromRole(
+  role: ReturnType<typeof topologyRole> | undefined,
+): SubagentCapability[] | undefined {
+  if (!role) return undefined;
+  const toolNames = role.tool_scope ?? [];
+  const skillNames = role.skill_scope ?? [];
+  const mcpNames = role.mcp_servers ?? [];
+  if (toolNames.length === 0 && skillNames.length === 0 && mcpNames.length === 0) {
+    return undefined;
+  }
+  return [
+    ...toolNames.map((name): SubagentCapability => ({ kind: "tool", name })),
+    ...skillNames.map((name): SubagentCapability => ({ kind: "skill", name })),
+    ...mcpNames.map((name): SubagentCapability => ({ kind: "mcp", name })),
+  ];
+}
+
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0
     ? value.trim()
@@ -133,6 +159,28 @@ function topologyRole(context: PlanContext, role: string | undefined) {
   return match;
 }
 
+function roleRuntimePolicy(
+  role: ReturnType<typeof topologyRole> | undefined,
+): SubagentTaskContract["runtimePolicy"] | undefined {
+  if (!role) return undefined;
+  const out: NonNullable<SubagentTaskContract["runtimePolicy"]> = {};
+  if (role.max_turns !== undefined) out.maxTurns = role.max_turns;
+  if (role.system_preamble !== undefined) out.systemPreamble = role.system_preamble;
+  if (role.context !== undefined) out.contextMode = role.context;
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function mergeRuntimePolicy(
+  defaults: SubagentTaskContract["runtimePolicy"],
+  requested: SubagentTaskContract["runtimePolicy"] | undefined,
+): SubagentTaskContract["runtimePolicy"] | undefined {
+  if (!defaults && !requested) return undefined;
+  return {
+    ...(defaults ?? {}),
+    ...(requested ?? {}),
+  };
+}
+
 export function normalizeSubagentTaskContract(
   step: PlanStep,
   context: PlanContext,
@@ -146,10 +194,11 @@ export function normalizeSubagentTaskContract(
   const explicitCapabilities = Object.prototype.hasOwnProperty.call(raw, "capabilities")
     ? normalizeCapabilities(raw.capabilities) ?? []
     : undefined;
-  const capabilities = explicitCapabilities ?? capabilitiesFromScopes(step);
-  assertCapabilitiesKnown(capabilities, context);
-  const role = nonEmptyString(raw.role);
+  const role = nonEmptyString(raw.role) ?? inferSubagentRoleFromTopology(context);
   const roleDefaults = topologyRole(context, role);
+  const scopedCapabilities = hasStepCapabilityScope(step) ? capabilitiesFromScopes(step) : undefined;
+  const capabilities = explicitCapabilities ?? scopedCapabilities ?? capabilitiesFromRole(roleDefaults) ?? [];
+  assertCapabilitiesKnown(capabilities, context);
   const requestedLane = normalizeLane(raw.lane);
   if (requestedLane !== undefined && context.orchestration?.roles?.length && !roleDefaults) {
     throw new OrchestratorKernelError(
@@ -164,6 +213,16 @@ export function normalizeSubagentTaskContract(
     );
   }
   const lane = roleDefaults?.lane ?? requestedLane;
+  const runtimePolicy = mergeRuntimePolicy(
+    roleRuntimePolicy(roleDefaults),
+    raw.runtimePolicy,
+  );
+  const permissions = Object.prototype.hasOwnProperty.call(raw, "permissions")
+    ? stringArray(raw.permissions) ?? []
+    : roleDefaults?.permissions !== undefined
+      ? [...roleDefaults.permissions]
+      : undefined;
+  const topology = resolveSubagentTopology(context, role);
   return {
     taskBrief,
     capabilities,
@@ -173,9 +232,13 @@ export function normalizeSubagentTaskContract(
       ? { modelPreference: raw.modelPreference }
       : step.model !== undefined
         ? { modelPreference: step.model }
+        : roleDefaults?.model !== undefined
+          ? { modelPreference: roleDefaults.model }
         : {}),
-    ...(raw.runtimePolicy !== undefined ? { runtimePolicy: raw.runtimePolicy } : {}),
+    ...(runtimePolicy !== undefined ? { runtimePolicy } : {}),
     ...(raw.policyCeiling !== undefined ? { policyCeiling: raw.policyCeiling } : {}),
+    ...(permissions !== undefined ? { permissions } : {}),
+    ...(topology !== undefined ? { topology } : {}),
     ...(step.inputArtifactRefs !== undefined ? { inputArtifactRefs: [...step.inputArtifactRefs] } : {}),
     ...(raw.outputSchema !== undefined && raw.outputSchema && typeof raw.outputSchema === "object"
       ? { outputSchema: raw.outputSchema as Record<string, unknown> }
@@ -187,6 +250,9 @@ export function parseSubagentTaskContract(value: unknown): Partial<SubagentTaskC
   if (!value || typeof value !== "object") return undefined;
   const raw = value as Record<string, unknown>;
   const capabilities = normalizeCapabilities(raw.capabilities);
+  const permissions = Object.prototype.hasOwnProperty.call(raw, "permissions")
+    ? stringArray(raw.permissions) ?? []
+    : undefined;
   return {
     ...(typeof raw.taskBrief === "string" ? { taskBrief: raw.taskBrief } : {}),
     ...(capabilities !== undefined ? { capabilities } : {}),
@@ -199,6 +265,7 @@ export function parseSubagentTaskContract(value: unknown): Partial<SubagentTaskC
     ...(raw.policyCeiling && typeof raw.policyCeiling === "object"
       ? { policyCeiling: raw.policyCeiling as WorkerConfig["policyCeiling"] }
       : {}),
+    ...(permissions !== undefined ? { permissions } : {}),
     ...(raw.outputSchema && typeof raw.outputSchema === "object"
       ? { outputSchema: raw.outputSchema as Record<string, unknown> }
       : {}),
@@ -241,6 +308,13 @@ export function subagentSpecFromTaskNode(
     ...(request.traceId !== undefined ? { traceId: request.traceId } : {}),
     workspaceRoot: request.workspaceRoot,
     ...(contract.policyCeiling !== undefined ? { policyCeiling: contract.policyCeiling } : {}),
+    ...(contract.permissions !== undefined ? { permissions: [...contract.permissions] } : {}),
+    ...(contract.topology !== undefined ? { topology: contract.topology } : {}),
+    lineage: subagentLineageMetadata({
+      runId: request.runId,
+      parentWorkerId: request.parentWorkerId,
+      parentTaskId: node.id,
+    }),
     ...(contract.inputArtifactRefs !== undefined
       ? { inputArtifactRefs: [...contract.inputArtifactRefs] }
       : {}),

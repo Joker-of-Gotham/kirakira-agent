@@ -23,6 +23,7 @@ import {
   ResearchTaskExecutor,
   type DeepResearchKernelOptions,
 } from "./research/research-task-executor.js";
+import { subagentLineageMetadata } from "./subagent/topology.js";
 import { SuperstepManager } from "./execution/superstep.js";
 import { BackpressureController } from "./scheduler/backpressure.js";
 import { LaneRouter } from "./scheduler/lane-router.js";
@@ -397,6 +398,7 @@ export class OrchestratorKernel {
 
   private graphPayload(graph: TaskGraph): Record<string, unknown> {
     const summary = graphSummary(graph);
+    const parentWorkerId = this.parentWorkerIds.get(graph.runId);
     return {
       graphId: graph.id,
       runId: graph.runId,
@@ -409,6 +411,22 @@ export class OrchestratorKernel {
         description: node.spec.description,
         ...(node.spec.subagent?.role !== undefined ? { role: node.spec.subagent.role } : {}),
         ...(node.spec.subagent?.lane !== undefined ? { requestedLane: node.spec.subagent.lane } : {}),
+        ...(node.spec.subagent?.permissions !== undefined
+          ? { permissions: node.spec.subagent.permissions }
+          : {}),
+        ...(node.spec.subagent?.topology?.parentRole !== undefined
+          ? { parentRole: node.spec.subagent.topology.parentRole }
+          : {}),
+        ...(node.spec.subagent?.topology?.handoffEdgeId !== undefined
+          ? { handoffEdgeId: node.spec.subagent.topology.handoffEdgeId }
+          : {}),
+        ...(node.kind === "subagent" && parentWorkerId !== undefined
+          ? subagentLineageMetadata({
+              runId: graph.runId,
+              parentWorkerId,
+              parentTaskId: node.id,
+            })
+          : {}),
         ...(node.assignedWorkerId !== undefined ? { workerId: node.assignedWorkerId } : {}),
         ...(node.error !== undefined ? { error: node.error } : {}),
       })),
@@ -449,16 +467,29 @@ export class OrchestratorKernel {
     const node = this.graphs.get(runId)?.nodes.get(event.nodeId);
     if (!node || node.kind !== "subagent") return null;
     const contract = node.spec.subagent;
+    const parentWorkerId = this.parentWorkerIds.get(runId);
+    const lineage = parentWorkerId !== undefined
+      ? subagentLineageMetadata({
+          runId,
+          parentWorkerId,
+          parentTaskId: event.nodeId,
+        })
+      : undefined;
     return {
       subagentId: event.nodeId,
       parentTaskId: event.nodeId,
-      parentWorkerId: this.parentWorkerIds.get(runId),
+      parentWorkerId,
+      ...(lineage !== undefined ? lineage : {}),
       ...(event.kind === "task_started" ? { workerId: event.workerId, lane: event.lane } : {}),
       ...(contract !== undefined
         ? {
             taskPreview: contract.taskBrief,
             role: contract.role,
             requestedLane: contract.lane,
+            permissions: contract.permissions,
+            parentRole: contract.topology?.parentRole,
+            handoffEdgeId: contract.topology?.handoffEdgeId,
+            handoff: contract.topology?.handoff,
             capabilities: contract.capabilities,
             modelPreference: contract.modelPreference,
             runtimePolicy: contract.runtimePolicy,

@@ -85,6 +85,57 @@ describe("workbench live smoke gate contract", () => {
     ]);
   });
 
+  it("reports selected smoke readiness targets from the smoke CLI dry-run", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/kirakira-workbench-smoke.mjs",
+        "--dry-run",
+        "--profile",
+        "workbench-host",
+        "--surface",
+        "web",
+        "--skip-infra",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          KIRAKIRA_WEB_PORT: "5199",
+          KIRAKIRA_BROWSER_GATEWAY_PORT: "17399",
+        },
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain("5173");
+
+    const report = JSON.parse(result.stdout) as {
+      checks: string[];
+      readinessPlan: {
+        compose?: unknown;
+        checks: Array<{ name: string; target?: string; endpoint?: string }>;
+      };
+    };
+
+    expect(report.checks).toEqual(report.readinessPlan.checks.map((check) => check.name));
+    expect(report.readinessPlan.compose).toBeUndefined();
+    expect(report.readinessPlan.checks).toEqual([
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        target: "http://127.0.0.1:17399/healthz",
+        endpoint: "ws://127.0.0.1:17399/runtime",
+      }),
+      expect.objectContaining({
+        name: "presentation:web",
+        target: "http://127.0.0.1:5199/",
+      }),
+    ]);
+  });
+
   it("reports the same hidden Electron smoke contract from launcher desktop dry-run", () => {
     const result = spawnSync(
       process.execPath,

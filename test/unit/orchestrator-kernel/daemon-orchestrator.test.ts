@@ -136,6 +136,28 @@ describe("daemon orchestrator graph execution", () => {
         availableTools: ["repo.read"],
         availableSkills: ["research"],
         availableMcpServers: ["filesystem"],
+        orchestration: {
+          handoff_mode: "swarm",
+          default_role: "supervisor",
+          roles: [
+            {
+              id: "delegate",
+              lane: "delegated",
+              model: "openai:gpt-5.4-delegate",
+              max_turns: 6,
+              context: "isolated",
+              permissions: ["workspace-read"],
+            },
+          ],
+          handoffs: [
+            {
+              from: "supervisor",
+              to: "delegate",
+              mode: "tool",
+              input_filter: "scoped-task-brief",
+            },
+          ],
+        },
       },
       planner: {
         async completeText() {
@@ -153,6 +175,7 @@ describe("daemon orchestrator graph execution", () => {
                 mcpServers: ["filesystem"],
                 subagent: {
                   taskBrief: "Inspect repository architecture",
+                  role: "delegate",
                   runtimePolicy: { maxTurns: 4 },
                 },
               },
@@ -180,6 +203,8 @@ describe("daemon orchestrator graph execution", () => {
 
     expect(bridgeRequests).toHaveLength(1);
     const subagentEvents = writer.events.filter((event) => event.kind.startsWith("subagent."));
+    const runId = subagentEvents[0]?.runId;
+    if (typeof runId !== "string") throw new Error("missing run id");
     expect(subagentEvents.map((event) => event.kind)).toEqual([
       "subagent.spawned",
       "subagent.completed",
@@ -187,6 +212,21 @@ describe("daemon orchestrator graph execution", () => {
     expect(subagentEvents[0]?.payload).toMatchObject({
       subagentId: "inspect",
       taskPreview: "Inspect repository architecture",
+      role: "delegate",
+      requestedLane: "delegated",
+      permissions: ["workspace-read"],
+      parentRole: "supervisor",
+      handoffEdgeId: "handoff:supervisor:delegate:tool:0",
+      handoff: {
+        id: "handoff:supervisor:delegate:tool:0",
+        from: "supervisor",
+        to: "delegate",
+        mode: "tool",
+        inputFilter: "scoped-task-brief",
+      },
+      rootLineageId: runId,
+      parentLineageId: `${runId}:worker:${runId}-supervisor`,
+      lineageId: `${runId}:task:inspect:subagent`,
       capabilities: [
         { kind: "tool", name: "repo.read" },
         { kind: "skill", name: "research" },
@@ -197,6 +237,10 @@ describe("daemon orchestrator graph execution", () => {
     expect(subagentEvents[1]?.payload).toMatchObject({
       subagentId: "inspect",
       status: "completed",
+      handoffEdgeId: "handoff:supervisor:delegate:tool:0",
+      rootLineageId: runId,
+      parentLineageId: `${runId}:worker:${runId}-supervisor`,
+      lineageId: `${runId}:task:inspect:subagent`,
       preview: "child summary",
       artifactRefs: ["artifact-child"],
     });

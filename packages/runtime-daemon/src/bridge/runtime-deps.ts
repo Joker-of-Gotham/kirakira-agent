@@ -11,8 +11,10 @@ import {
   ToolRegistry,
   ToolSearchEngine,
   WorkspaceExecutor,
+  type AgentMcpToolGateway,
   type DelegateRunner,
   type GatewayClientLike,
+  type McpTraceContextCarrier,
   type RuntimeCapabilityScope,
   type RuntimeDeps,
   type SkillRegistration,
@@ -27,6 +29,8 @@ import {
 } from "@kirakira/policy-engine";
 import type { McpPep } from "@kirakira/policy-engine";
 import { discoverSkills } from "@kirakira/skill-runtime";
+import { createDaemonAgentMcpToolGateway } from "./agent-mcp-tool-gateway.js";
+import { DaemonMcpRuntime } from "./mcp-runtime.js";
 import { createDaemonMcpDependencies } from "./mcp-runtime-deps.js";
 
 export interface DaemonDelegateRuntimeOptions {
@@ -36,10 +40,12 @@ export interface DaemonDelegateRuntimeOptions {
   resolvedConfig?: Pick<ResolvedConfig, "runtimeState">;
   runtimeProfileName?: string;
   mcpManager?: McpClientManager;
+  mcpPep?: McpPep;
   modelGateway?: GatewayClientLike;
   policyBundlePath?: string;
   policy?: SubagentRuntimePolicy;
   allowNestedDelegation?: boolean;
+  traceContext?: McpTraceContextCarrier | (() => McpTraceContextCarrier | undefined);
 }
 
 export interface DaemonDelegateRuntime {
@@ -54,14 +60,16 @@ interface RuntimeDepsInput {
   role?: string;
   requestedLane?: string;
   capabilityScope?: RuntimeCapabilityScope;
+  traceContext?: McpTraceContextCarrier;
 }
 
 interface RuntimeDepsContext {
   workspaceRoot: string;
   eventWriter: RuntimeDeps["eventWriter"];
   modelClient: ModelClient;
-  mcpManager: McpClientManager;
-  mcpPep: McpPep;
+  mcpToolGateway: AgentMcpToolGateway;
+  runtimeProfileName?: string;
+  traceContext?: McpTraceContextCarrier | (() => McpTraceContextCarrier | undefined);
   workspace: Workspace;
   skills: SkillRegistration[];
   discoveredTools: ToolSchema[];
@@ -140,9 +148,13 @@ function createRuntimeDeps(
   const registry = createToolRegistry(context.discoveredTools, capabilityScope);
   return {
     modelClient: context.modelClient,
-    toolExecutor: new ToolExecutor(context.mcpPep, context.mcpManager, {
+    toolExecutor: new ToolExecutor(context.mcpToolGateway, {
       pepContext: () => createPepContext(context.workspaceRoot, input),
       capabilityScope,
+      ...(context.runtimeProfileName !== undefined
+        ? { runtimeProfileName: context.runtimeProfileName }
+        : {}),
+      traceContext: input.traceContext ?? context.traceContext,
       onEvent: context.eventWriter.emit,
     }),
     skillInjector,
@@ -172,18 +184,35 @@ export async function createDaemonDelegateRuntime(
       : {}),
     ...(options.policyBundlePath !== undefined ? { policyBundlePath: options.policyBundlePath } : {}),
     ...(options.mcpManager !== undefined ? { mcpManager: options.mcpManager } : {}),
+    ...(options.mcpPep !== undefined ? { mcpPep: options.mcpPep } : {}),
     auditWriter: new DisabledAuditWriter(),
   });
   const workspaceRoot = deps.workspaceRoot;
   const mcpManager = deps.mcpManager;
   const mcpPep = deps.mcpPep;
+  const mcpRuntime = new DaemonMcpRuntime({
+    workspaceRoot,
+    ...(options.mcpConfigPath !== undefined ? { mcpConfigPath: options.mcpConfigPath } : {}),
+    ...(options.resolvedConfig !== undefined ? { resolvedConfig: options.resolvedConfig } : {}),
+    ...(options.runtimeProfileName !== undefined
+      ? { runtimeProfileName: options.runtimeProfileName }
+      : {}),
+    ...(options.policyBundlePath !== undefined ? { policyBundlePath: options.policyBundlePath } : {}),
+    mcpManager,
+    mcpPep,
+    mcpAuditBridge: deps.mcpAuditBridge ?? null,
+  });
+  const mcpToolGateway = createDaemonAgentMcpToolGateway(mcpRuntime);
   const modelClient = new ModelClient(options.modelGateway);
   const context: RuntimeDepsContext = {
     workspaceRoot,
     eventWriter: options.eventWriter,
     modelClient,
-    mcpManager,
-    mcpPep,
+    mcpToolGateway,
+    ...(options.runtimeProfileName !== undefined
+      ? { runtimeProfileName: options.runtimeProfileName }
+      : {}),
+    ...(options.traceContext !== undefined ? { traceContext: options.traceContext } : {}),
     workspace: {
       id: "daemon-workspace",
       rootPath: workspaceRoot,
@@ -216,6 +245,7 @@ export async function createDaemonDelegateRuntime(
   return {
     delegateRunner,
     async close() {
+      await mcpRuntime.close();
       await deps.close();
     },
   };

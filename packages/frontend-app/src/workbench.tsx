@@ -26,6 +26,7 @@ import {
   createRunInspector,
   createRunWorkstream,
   createSubagentTopologyView,
+  createWorkbenchNavigationView,
   createWorkbenchInspectorView,
   projectRunDashboard,
   runtimeTransportOrchestration,
@@ -45,6 +46,7 @@ import {
   type RunInspectorProjection,
   type RunDashboardArtifact,
   type RunDashboardProjection,
+  type RunDashboardResearchRun,
   type RunDashboardStatus,
   type RunWorkstreamActivity,
   type RunWorkstreamAttentionItem,
@@ -58,6 +60,7 @@ import {
   type SubagentTopologyView,
   type WorkbenchInspectorView,
   type WorkbenchInspectorViewId,
+  type WorkbenchViewId,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -159,6 +162,7 @@ export function KirakiraWorkbench({
   const [selectedMcpToolId, setSelectedMcpToolId] = useState<string | undefined>();
   const [mcpToolDrafts, setMcpToolDrafts] = useState<Record<string, string>>({});
   const [mcpToolCall, setMcpToolCall] = useState<McpToolCallState>({ status: "idle" });
+  const [activeWorkbenchView, setActiveWorkbenchView] = useState<WorkbenchViewId>("runs");
   const [inspectorViewId, setInspectorViewId] = useState<WorkbenchInspectorViewId>("mcp");
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
@@ -330,6 +334,18 @@ export function KirakiraWorkbench({
       }),
     [inspector, selectedMcpPlayground, workstream],
   );
+  const navigation = useMemo(
+    () =>
+      createWorkbenchNavigationView({
+        projection,
+        runtimeStatus,
+        mcpDirectory: mcpDirectoryView,
+        activeView: activeWorkbenchView,
+      }),
+    [activeWorkbenchView, mcpDirectoryView, projection, runtimeStatus],
+  );
+  const activeNavigationLabel =
+    navigation.items.find((item) => item.id === navigation.activeView)?.label ?? "Runtime";
 
   useEffect(() => {
     if (!runId) return;
@@ -398,6 +414,12 @@ export function KirakiraWorkbench({
   const selectWorkstreamItem = useCallback((itemId: string, focusId?: string) => {
     setSelectedWorkstreamItemId(itemId);
     if (focusId) setSelectedFocusId(focusId);
+  }, []);
+
+  const selectWorkbenchView = useCallback((viewId: WorkbenchViewId) => {
+    setActiveWorkbenchView(viewId);
+    if (viewId === "research") setInspectorViewId("research");
+    if (viewId === "systems") setInspectorViewId("mcp");
   }, []);
 
   const updateMcpArgumentDraft = useCallback((toolId: string, draft: string) => {
@@ -550,22 +572,26 @@ export function KirakiraWorkbench({
         </div>
 
         <nav className="kk-nav" aria-label="Workspace views">
-          <button type="button" className="kk-nav-item kk-nav-item-active">
-            <Activity size={18} />
-            Runs
-          </button>
-          <button type="button" className="kk-nav-item">
-            <Bot size={18} />
-            Agents
-          </button>
-          <button type="button" className="kk-nav-item">
-            <FileSearch size={18} />
-            Research
-          </button>
-          <button type="button" className="kk-nav-item">
-            <ShieldCheck size={18} />
-            Approvals
-          </button>
+          {navigation.items.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              aria-current={item.selected ? "page" : undefined}
+              className={
+                item.selected
+                  ? `kk-nav-item kk-nav-item-active kk-nav-item-${item.tone}`
+                  : `kk-nav-item kk-nav-item-${item.tone}`
+              }
+              onClick={() => selectWorkbenchView(item.id)}
+            >
+              <WorkbenchNavIcon id={item.id} />
+              <span>
+                <strong>{item.label}</strong>
+                <small>{item.status}</small>
+              </span>
+              <em>{item.count}</em>
+            </button>
+          ))}
         </nav>
 
         <section className="kk-run-list" aria-label="Recent runs">
@@ -594,7 +620,7 @@ export function KirakiraWorkbench({
       <section className="kk-workspace" aria-label="Runtime workspace">
         <header className="kk-topbar">
           <div>
-            <p className="kk-kicker">Runtime workbench</p>
+            <p className="kk-kicker">{activeNavigationLabel} workbench</p>
             <h1>{projection.runId ?? "Ready for a run"}</h1>
           </div>
           <div className={`kk-connection kk-connection-${connection}`}>
@@ -610,19 +636,32 @@ export function KirakiraWorkbench({
           <Stat label="Updated" value={formatClock(projection.updatedAt)} icon={<Clock3 size={18} />} />
         </section>
 
-        <section className="kk-main-grid">
-          <RunWorkstreamPanel
-            workstream={workstream}
-            onCancel={cancel}
-            canCancel={Boolean(runId)}
-            onSelectItem={selectWorkstreamItem}
-          />
-
-          <SwarmTopologyPanel
-            topology={topology}
-            onSelectFocus={setSelectedFocusId}
-          />
-        </section>
+        <WorkbenchViewSurface
+          activeView={navigation.activeView}
+          workstream={workstream}
+          topology={topology}
+          researchRuns={researchRuns}
+          artifacts={artifacts}
+          systemInspector={workbenchInspector}
+          mcpState={mcpDirectory}
+          mcpDirectoryView={mcpDirectoryView}
+          selectedMcpTool={selectedMcpTool}
+          selectedMcpToolId={selectedMcpTool?.id}
+          selectedMcpPlayground={selectedMcpPlayground}
+          mcpToolDetail={activityRail.mcpTool}
+          mcpToolCall={mcpToolCall}
+          onCancel={cancel}
+          canCancel={Boolean(runId)}
+          onSelectItem={selectWorkstreamItem}
+          onSelectFocus={setSelectedFocusId}
+          onSelectArtifact={(id) => setSelectedFocusId(`artifact:${id}`)}
+          onInspectorViewChange={setInspectorViewId}
+          onSelectMcpTool={setSelectedMcpToolId}
+          onMcpArgumentDraftChange={updateMcpArgumentDraft}
+          onCallMcpTool={() => void callSelectedMcpTool()}
+          onRefreshMcp={() => void refreshMcpDirectory(false)}
+          onStartAndRefreshMcp={() => void refreshMcpDirectory(true)}
+        />
 
         <RunInspectorPanel
           inspector={inspector}
@@ -660,12 +699,14 @@ export function KirakiraWorkbench({
       </section>
 
       <aside className="kk-right-rail" aria-label="Run intelligence">
-        <SystemInspectorPanel
-          view={workbenchInspector}
-          onViewChange={setInspectorViewId}
-          onSelectFocus={setSelectedFocusId}
-          onSelectMcpTool={setSelectedMcpToolId}
-        />
+        {navigation.activeView !== "systems" ? (
+          <SystemInspectorPanel
+            view={workbenchInspector}
+            onViewChange={setInspectorViewId}
+            onSelectFocus={setSelectedFocusId}
+            onSelectMcpTool={setSelectedMcpToolId}
+          />
+        ) : null}
 
         <ActivityRailPanel
           view={activityRail}
@@ -732,48 +773,54 @@ export function KirakiraWorkbench({
           )}
         </section>
 
-        <OutputArtifactsPanel
-          artifacts={artifacts}
-          onSelectArtifact={(id) => setSelectedFocusId(`artifact:${id}`)}
-        />
+        {navigation.activeView !== "research" ? (
+          <OutputArtifactsPanel
+            artifacts={artifacts}
+            onSelectArtifact={(id) => setSelectedFocusId(`artifact:${id}`)}
+          />
+        ) : null}
 
-        <section className="kk-rail-section">
-          <div className="kk-pane-header">
-            <div>
-              <p className="kk-kicker">Research</p>
-              <h2>Evidence</h2>
+        {navigation.activeView !== "research" ? (
+          <section className="kk-rail-section">
+            <div className="kk-pane-header">
+              <div>
+                <p className="kk-kicker">Research</p>
+                <h2>Evidence</h2>
+              </div>
+              <FileSearch size={18} />
             </div>
-            <FileSearch size={18} />
-          </div>
-          {!latestResearch ? (
-            <div className="kk-empty">No evidence yet</div>
-          ) : (
-            <div className="kk-research">
-              <strong>{latestResearch.question ?? latestResearch.id}</strong>
-              <span>{latestResearch.phase}</span>
-              {latestResearch.latestCitation ? (
-                <a href={latestResearch.latestCitation.uri} target="_blank" rel="noreferrer">
-                  {latestResearch.latestCitation.title ?? latestResearch.latestCitation.uri}
-                </a>
-              ) : null}
-            </div>
-          )}
-        </section>
+            {!latestResearch ? (
+              <div className="kk-empty">No evidence yet</div>
+            ) : (
+              <div className="kk-research">
+                <strong>{latestResearch.question ?? latestResearch.id}</strong>
+                <span>{latestResearch.phase}</span>
+                {latestResearch.latestCitation ? (
+                  <a href={latestResearch.latestCitation.uri} target="_blank" rel="noreferrer">
+                    {latestResearch.latestCitation.title ?? latestResearch.latestCitation.uri}
+                  </a>
+                ) : null}
+              </div>
+            )}
+          </section>
+        ) : null}
 
-        <McpDirectoryPanel
-          state={mcpDirectory}
-          view={mcpDirectoryView}
-          selectedTool={selectedMcpTool}
-          selectedToolId={selectedMcpTool?.id}
-          playground={selectedMcpPlayground}
-          toolDetail={activityRail.mcpTool}
-          callState={mcpToolCall}
-          onSelectTool={setSelectedMcpToolId}
-          onArgumentDraftChange={updateMcpArgumentDraft}
-          onCallTool={() => void callSelectedMcpTool()}
-          onRefresh={() => void refreshMcpDirectory(false)}
-          onStartAndRefresh={() => void refreshMcpDirectory(true)}
-        />
+        {navigation.activeView !== "systems" ? (
+          <McpDirectoryPanel
+            state={mcpDirectory}
+            view={mcpDirectoryView}
+            selectedTool={selectedMcpTool}
+            selectedToolId={selectedMcpTool?.id}
+            playground={selectedMcpPlayground}
+            toolDetail={activityRail.mcpTool}
+            callState={mcpToolCall}
+            onSelectTool={setSelectedMcpToolId}
+            onArgumentDraftChange={updateMcpArgumentDraft}
+            onCallTool={() => void callSelectedMcpTool()}
+            onRefresh={() => void refreshMcpDirectory(false)}
+            onStartAndRefresh={() => void refreshMcpDirectory(true)}
+          />
+        ) : null}
 
         <section className="kk-rail-section">
           <div className="kk-pane-header">
@@ -842,6 +889,385 @@ export function KirakiraWorkbench({
         </section>
       </aside>
     </main>
+  );
+}
+
+function WorkbenchNavIcon({ id }: { id: WorkbenchViewId }) {
+  if (id === "agents") return <Bot size={18} />;
+  if (id === "research") return <FileSearch size={18} />;
+  if (id === "systems") return <ShieldCheck size={18} />;
+  return <Activity size={18} />;
+}
+
+function WorkbenchViewSurface({
+  activeView,
+  workstream,
+  topology,
+  researchRuns,
+  artifacts,
+  systemInspector,
+  mcpState,
+  mcpDirectoryView,
+  selectedMcpTool,
+  selectedMcpToolId,
+  selectedMcpPlayground,
+  mcpToolDetail,
+  mcpToolCall,
+  onCancel,
+  canCancel,
+  onSelectItem,
+  onSelectFocus,
+  onSelectArtifact,
+  onInspectorViewChange,
+  onSelectMcpTool,
+  onMcpArgumentDraftChange,
+  onCallMcpTool,
+  onRefreshMcp,
+  onStartAndRefreshMcp,
+}: {
+  activeView: WorkbenchViewId;
+  workstream: RunWorkstreamProjection;
+  topology: SubagentTopologyView;
+  researchRuns: RunDashboardResearchRun[];
+  artifacts: RunDashboardArtifact[];
+  systemInspector: WorkbenchInspectorView;
+  mcpState: McpDirectoryState;
+  mcpDirectoryView: RuntimeMcpDirectoryView;
+  selectedMcpTool?: RuntimeMcpDirectoryTool;
+  selectedMcpToolId?: string;
+  selectedMcpPlayground: RuntimeMcpToolPlaygroundView;
+  mcpToolDetail?: RunActivityRailMcpTool;
+  mcpToolCall: McpToolCallState;
+  onCancel: () => void;
+  canCancel: boolean;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+  onSelectFocus: (id: string) => void;
+  onSelectArtifact: (id: string) => void;
+  onInspectorViewChange: (id: WorkbenchInspectorViewId) => void;
+  onSelectMcpTool: (id: string) => void;
+  onMcpArgumentDraftChange: (toolId: string, draft: string) => void;
+  onCallMcpTool: () => void;
+  onRefreshMcp: () => void;
+  onStartAndRefreshMcp: () => void;
+}) {
+  if (activeView === "agents") {
+    return (
+      <section className="kk-main-grid kk-view-grid kk-view-agents" aria-label="Agent swarm workspace">
+        <SwarmTopologyPanel topology={topology} onSelectFocus={onSelectFocus} />
+        <AgentOperationsPanel
+          topology={topology}
+          workstream={workstream}
+          onSelectFocus={onSelectFocus}
+          onSelectItem={onSelectItem}
+        />
+      </section>
+    );
+  }
+
+  if (activeView === "research") {
+    return (
+      <section className="kk-main-grid kk-view-grid kk-view-research" aria-label="Research workspace">
+        <ResearchWorkspacePanel
+          researchRuns={researchRuns}
+          artifacts={artifacts}
+          onSelectFocus={onSelectFocus}
+          onSelectArtifact={onSelectArtifact}
+        />
+        <OutputArtifactsPanel artifacts={artifacts} onSelectArtifact={onSelectArtifact} />
+      </section>
+    );
+  }
+
+  if (activeView === "systems") {
+    return (
+      <section className="kk-main-grid kk-view-grid kk-view-systems" aria-label="Memory, MCP, and artifact systems">
+        <SystemInspectorPanel
+          view={systemInspector}
+          onViewChange={onInspectorViewChange}
+          onSelectFocus={onSelectFocus}
+          onSelectMcpTool={onSelectMcpTool}
+        />
+        <McpDirectoryPanel
+          state={mcpState}
+          view={mcpDirectoryView}
+          selectedTool={selectedMcpTool}
+          selectedToolId={selectedMcpToolId}
+          playground={selectedMcpPlayground}
+          toolDetail={mcpToolDetail}
+          callState={mcpToolCall}
+          onSelectTool={onSelectMcpTool}
+          onArgumentDraftChange={onMcpArgumentDraftChange}
+          onCallTool={onCallMcpTool}
+          onRefresh={onRefreshMcp}
+          onStartAndRefresh={onStartAndRefreshMcp}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section className="kk-main-grid kk-view-grid kk-view-runs" aria-label="Run operations workspace">
+      <RunWorkstreamPanel
+        workstream={workstream}
+        onCancel={onCancel}
+        canCancel={canCancel}
+        onSelectItem={onSelectItem}
+      />
+      <SwarmTopologyPanel topology={topology} onSelectFocus={onSelectFocus} />
+    </section>
+  );
+}
+
+function AgentOperationsPanel({
+  topology,
+  workstream,
+  onSelectFocus,
+  onSelectItem,
+}: {
+  topology: SubagentTopologyView;
+  workstream: RunWorkstreamProjection;
+  onSelectFocus: (id: string) => void;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  const roles = topology.roles.slice(0, 6);
+  const liveWorkers = topology.roles.flatMap((role) => role.workers).slice(0, 6);
+  return (
+    <section className="kk-agent-ops-panel" aria-label="Agent operations">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Agents</p>
+          <h2>Swarm Control</h2>
+        </div>
+        <span className="kk-count">{topology.summary.handoffMode ?? "single"}</span>
+      </div>
+
+      <dl className="kk-ops-metrics">
+        <div>
+          <dt>Roles</dt>
+          <dd>{topology.summary.roleCount}</dd>
+        </div>
+        <div>
+          <dt>Workers</dt>
+          <dd>{topology.summary.activeWorkerCount}/{topology.summary.workerCount}</dd>
+        </div>
+        <div className={topology.summary.mismatchCount > 0 ? "kk-ops-warning" : ""}>
+          <dt>Lane drift</dt>
+          <dd>{topology.summary.mismatchCount}</dd>
+        </div>
+      </dl>
+
+      <div className="kk-agent-ops-grid">
+        <section aria-label="Role readiness">
+          <div className="kk-section-heading">
+            <span>Role readiness</span>
+            <span>{roles.length}</span>
+          </div>
+          <div className="kk-agent-role-list">
+            {roles.length === 0 ? (
+              <div className="kk-empty">No roles published</div>
+            ) : (
+              roles.map((role) => (
+                <article key={role.id} className="kk-agent-role-row">
+                  <header>
+                    <span className={`kk-dot kk-dot-${role.phase}`} />
+                    <span>
+                      <strong>{role.label}</strong>
+                      <small>{role.description ?? role.sources.join(" / ")}</small>
+                    </span>
+                    <span>{role.activeWorkerCount}/{role.workerCount}</span>
+                  </header>
+                  <div>
+                    {role.capabilityLabels.slice(0, 4).map((label) => (
+                      <span key={label}>{label}</span>
+                    ))}
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section aria-label="Live workers">
+          <div className="kk-section-heading">
+            <span>Live workers</span>
+            <span>{liveWorkers.length}</span>
+          </div>
+          <div className="kk-agent-worker-list">
+            {liveWorkers.length === 0 ? (
+              <div className="kk-empty">No workers active</div>
+            ) : (
+              liveWorkers.map((worker) => (
+                <button
+                  key={worker.id}
+                  type="button"
+                  className="kk-agent-worker-row"
+                  onClick={() => onSelectFocus(`subagent:${worker.id}`)}
+                >
+                  <span className={`kk-dot kk-dot-${worker.phase}`} />
+                  <span>
+                    <strong>{worker.id}</strong>
+                    <small>{worker.taskPreview ?? worker.role ?? worker.phase}</small>
+                  </span>
+                  <span>{worker.phase}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section aria-label="Agent attention">
+        <div className="kk-section-heading">
+          <span>Attention queue</span>
+          <span>{workstream.attention.length}</span>
+        </div>
+        <div className="kk-agent-attention-list">
+          {workstream.attention.length === 0 ? (
+            <div className="kk-empty">No agent attention required</div>
+          ) : (
+            workstream.attention.slice(0, 4).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={`kk-agent-attention-row kk-attention-${item.severity}`}
+                onClick={() => onSelectItem(item.id, item.focusId)}
+              >
+                <AlertTriangle size={15} />
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.actionLabel}</small>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function ResearchWorkspacePanel({
+  researchRuns,
+  artifacts,
+  onSelectFocus,
+  onSelectArtifact,
+}: {
+  researchRuns: RunDashboardResearchRun[];
+  artifacts: RunDashboardArtifact[];
+  onSelectFocus: (id: string) => void;
+  onSelectArtifact: (id: string) => void;
+}) {
+  const sortedRuns = [...researchRuns].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const evidenceCount = sortedRuns.reduce((total, run) => total + run.evidenceCount, 0);
+  const citationCount = sortedRuns.reduce((total, run) => total + run.citationCount, 0);
+  return (
+    <section className="kk-research-workspace" aria-label="Research evidence workspace">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Research</p>
+          <h2>Evidence Desk</h2>
+        </div>
+        <span className="kk-count">{citationCount} citations</span>
+      </div>
+
+      <dl className="kk-ops-metrics">
+        <div>
+          <dt>Runs</dt>
+          <dd>{sortedRuns.length}</dd>
+        </div>
+        <div>
+          <dt>Evidence</dt>
+          <dd>{evidenceCount}</dd>
+        </div>
+        <div>
+          <dt>Artifacts</dt>
+          <dd>{artifacts.length}</dd>
+        </div>
+      </dl>
+
+      <div className="kk-research-grid">
+        <section aria-label="Research runs">
+          <div className="kk-section-heading">
+            <span>Runs</span>
+            <span>{sortedRuns.length}</span>
+          </div>
+          <div className="kk-research-run-list">
+            {sortedRuns.length === 0 ? (
+              <div className="kk-empty">No research runs yet</div>
+            ) : (
+              sortedRuns.map((run) => (
+                <button
+                  key={run.id}
+                  type="button"
+                  className="kk-research-run-row"
+                  onClick={() => onSelectFocus(`research:${run.id}`)}
+                >
+                  <span className={`kk-dot kk-dot-${run.phase}`} />
+                  <span>
+                    <strong>{run.question ?? run.id}</strong>
+                    <small>
+                      {run.evidenceCount} evidence / {run.citationCount} citations
+                    </small>
+                  </span>
+                  <span className={`kk-pill kk-pill-${run.phase}`}>{run.phase}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
+        <section aria-label="Latest citations">
+          <div className="kk-section-heading">
+            <span>Citations</span>
+            <span>{citationCount}</span>
+          </div>
+          <div className="kk-citation-list">
+            {sortedRuns.filter((run) => run.latestCitation).length === 0 ? (
+              <div className="kk-empty">No citations captured</div>
+            ) : (
+              sortedRuns.map((run) =>
+                run.latestCitation ? (
+                  <a key={`${run.id}-${run.latestCitation.id}`} href={run.latestCitation.uri} target="_blank" rel="noreferrer">
+                    <FileSearch size={15} />
+                    <span>
+                      <strong>{run.latestCitation.title ?? run.latestCitation.uri}</strong>
+                      <small>{run.sourcePolicy ?? run.phase}</small>
+                    </span>
+                  </a>
+                ) : null,
+              )
+            )}
+          </div>
+        </section>
+      </div>
+
+      <section aria-label="Artifact queue">
+        <div className="kk-section-heading">
+          <span>Artifact queue</span>
+          <span>{artifacts.length}</span>
+        </div>
+        <div className="kk-research-artifact-strip">
+          {artifacts.length === 0 ? (
+            <div className="kk-empty">No source artifacts</div>
+          ) : (
+            artifacts.slice(0, 6).map((artifact) => (
+              <button
+                key={artifact.id}
+                type="button"
+                className="kk-research-artifact"
+                onClick={() => onSelectArtifact(artifact.id)}
+              >
+                <span className={`kk-dot kk-dot-${artifact.phase}`} />
+                <span>
+                  <strong>{artifact.title ?? artifact.path ?? artifact.id}</strong>
+                  <small>{artifact.summary ?? artifact.kind ?? artifact.phase}</small>
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </section>
   );
 }
 

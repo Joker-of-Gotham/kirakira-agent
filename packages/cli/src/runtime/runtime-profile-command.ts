@@ -17,7 +17,7 @@ export function buildRuntimeProfileScriptInvocation(
   const args = [options.action ?? "show"];
   if (options.profile) args.push(options.profile);
   return buildRuntimeScriptInvocation({
-    scriptName: "runtime-profile.mjs",
+    scriptId: "profile",
     args,
   }, env);
 }

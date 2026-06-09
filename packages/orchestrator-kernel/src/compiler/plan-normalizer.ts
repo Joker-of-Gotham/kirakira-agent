@@ -36,6 +36,8 @@ export class PlanNormalizer {
     }
     for (const step of planSteps) {
       const subagent = normalizeSubagentTaskContract(step, plan.context);
+      const approvalRequired =
+        step.approvalRequired ?? subagent?.topology?.handoff?.approvalRequired;
       nodes.set(step.id, {
         id: step.id,
         kind: step.kind,
@@ -49,7 +51,7 @@ export class PlanNormalizer {
             ? { inputArtifactRefs: [...step.inputArtifactRefs] }
             : {}),
           ...(step.estimatedTokens !== undefined ? { estimatedTokens: step.estimatedTokens } : {}),
-          ...(step.approvalRequired !== undefined ? { approvalRequired: step.approvalRequired } : {}),
+          ...(approvalRequired !== undefined ? { approvalRequired } : {}),
           ...(subagent !== undefined ? { subagent } : {}),
           ...(step.research !== undefined ? { research: step.research } : {}),
         },
@@ -92,11 +94,11 @@ export class PlanNormalizer {
         });
       }
     }
-    for (const step of planSteps) {
-      if (step.approvalRequired) {
+    for (const node of nodes.values()) {
+      if (node.spec.approvalRequired) {
         edges.push({
-          from: step.id,
-          to: step.id,
+          from: node.id,
+          to: node.id,
           kind: "blocks_on_approval",
           metadata: { self: true },
         });

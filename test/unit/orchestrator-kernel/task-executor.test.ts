@@ -315,6 +315,11 @@ describe("orchestrator task executor", () => {
           filesystemWrite: "ask",
           shell: "deny",
         },
+        lineage: {
+          rootLineageId: "run-1",
+          parentLineageId: "run-1:worker:worker-parent",
+          lineageId: "run-1:task:step-a:subagent",
+        },
         inputArtifactRefs: ["artifact-source"],
         outputSchema: {
           type: "object",
@@ -506,6 +511,11 @@ describe("orchestrator task executor", () => {
       lane: "delegated",
       spec: {
         taskBrief: "Inspect repo architecture",
+        lineage: {
+          rootLineageId: "run-1",
+          parentLineageId: "run-1:worker:worker-parent",
+          lineageId: "run-1:task:step-a:subagent",
+        },
         inputArtifactRefs: ["artifact-source"],
       },
     });
@@ -615,7 +625,25 @@ describe("orchestrator task executor", () => {
         context: {
           ...context,
           orchestration: {
-            roles: [{ id: "researcher", lane: "background" }],
+            default_role: "supervisor",
+            roles: [
+              {
+                id: "researcher",
+                lane: "background",
+                model: "openai:gpt-5.4-research",
+                max_turns: 5,
+                context: "filtered",
+                permissions: ["workspace-read"],
+              },
+            ],
+            handoffs: [
+              {
+                from: "supervisor",
+                to: "researcher",
+                mode: "swarm",
+                input_filter: "research-brief",
+              },
+            ],
           },
         },
         steps: [
@@ -649,6 +677,18 @@ describe("orchestrator task executor", () => {
       spec: {
         role: "researcher",
         lane: "background",
+        modelPreference: "openai:gpt-5.4-research",
+        runtimePolicy: { maxTurns: 5, contextMode: "filtered" },
+        permissions: ["workspace-read"],
+        topology: {
+          parentRole: "supervisor",
+          handoffEdgeId: "handoff:supervisor:researcher:swarm:0",
+        },
+        lineage: {
+          rootLineageId: "run-1",
+          parentLineageId: "run-1:worker:worker-parent",
+          lineageId: "run-1:task:research-worker:subagent",
+        },
       },
     });
   });

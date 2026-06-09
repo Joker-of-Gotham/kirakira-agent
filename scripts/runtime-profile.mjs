@@ -875,7 +875,6 @@ function renderRuntimeStartupStep(profile, step, env, options) {
 export function buildRuntimeSurfaceStartupPlan(profile = resolveRuntimeProfile(), surface, options = {}) {
   const config = runtimeConfigForProfile(profile, options);
   const env = renderRuntimeEnv(profile);
-  const composeArgs = renderComposeArgs(profile);
   const infraServices = Array.isArray(profile.workbench?.infraServices)
     ? profile.workbench.infraServices
     : [];
@@ -887,12 +886,12 @@ export function buildRuntimeSurfaceStartupPlan(profile = resolveRuntimeProfile()
   });
   const steps = [];
 
-  if (!options.skipInfra && composeArgs.length > 0 && infraServices.length > 0) {
+  if (!options.skipInfra && readiness.compose) {
     steps.push({
       name: "infra",
       mode: "run",
-      command: "docker",
-      args: ["compose", ...composeArgs, "up", "-d", "--wait", ...infraServices],
+      command: readiness.compose.command,
+      args: readiness.compose.args,
       ...(options.includeExecutionEnv === true ? { env } : {}),
     });
   }

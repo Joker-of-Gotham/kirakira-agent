@@ -3,6 +3,10 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 
 import { findRepoRoot } from "../util/repo-root.js";
+import {
+  getRuntimeScriptDefinition,
+  type RuntimeScriptId,
+} from "./runtime-script-registry.js";
 
 export interface RuntimeScriptInvocation {
   command: string;
@@ -11,7 +15,7 @@ export interface RuntimeScriptInvocation {
 }
 
 export interface RuntimeScriptInvocationOptions {
-  scriptName: string;
+  scriptId: RuntimeScriptId;
   args?: string[];
 }
 
@@ -28,7 +32,7 @@ export function buildRuntimeScriptInvocation(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeScriptInvocation {
   const repoRoot = resolveKirakiraRepoRoot(env);
-  const scriptPath = join(repoRoot, "scripts", options.scriptName);
+  const scriptPath = join(repoRoot, "scripts", getRuntimeScriptDefinition(options.scriptId).scriptName);
   if (!existsSync(scriptPath)) {
     throw new Error(`Runtime script not found: ${scriptPath}`);
   }

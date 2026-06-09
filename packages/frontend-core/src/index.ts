@@ -113,6 +113,7 @@ export type {
 } from "./activity-rail.js";
 
 export { createWorkbenchInspectorView } from "./workbench-inspector.js";
+export { createWorkbenchNavigationView } from "./workbench-navigation.js";
 
 export type {
   WorkbenchInspectorInput,
@@ -127,6 +128,14 @@ export type {
   WorkbenchInspectorView,
   WorkbenchInspectorViewId,
 } from "./workbench-inspector.js";
+
+export type {
+  WorkbenchNavigationInput,
+  WorkbenchNavigationItem,
+  WorkbenchNavigationView,
+  WorkbenchViewId,
+  WorkbenchViewTone,
+} from "./workbench-navigation.js";
 
 export {
   createEmptyRunDashboard,

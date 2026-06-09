@@ -26,7 +26,7 @@ export function buildRuntimeDoctorScriptInvocation(
     args.push("--timeout-ms", String(options.timeoutMs));
   }
   return buildRuntimeScriptInvocation({
-    scriptName: "runtime-doctor.mjs",
+    scriptId: "doctor",
     args,
   }, env);
 }
