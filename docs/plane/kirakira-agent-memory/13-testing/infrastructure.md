@@ -6,6 +6,20 @@
 
 ---
 
+## 2026-06-09 Runtime Profile Alignment
+
+`docker-compose.test.yml` is aligned with the `test-host` runtime profile:
+memory integration tests reach services through published host endpoints on
+`127.0.0.1`, not Docker-internal service DNS names. `memory-global-setup`
+uses the profile-driven runtime doctor for `test-host` and sets
+`__KIRAKIRA_MEMORY_STACK_UP__` for `skipIfNoDocker()`.
+
+Qdrant readiness must stay dependency-free. The test Compose healthcheck uses
+`timeout 2 bash -lc ': > /dev/tcp/127.0.0.1/6333'` instead of `curl` or `wget`,
+matching the base Compose healthcheck strategy.
+
+---
+
 ## docker-compose.test.yml 服务一览
 
 | 服务 | 镜像 | 角色 |
@@ -26,7 +40,7 @@
 |------|------------|------------|---------------------|
 | Postgres | **5432** | `POSTGRES_DB=kirakira_test` | `pg_isready -U kirakira_test`，间隔 5s，最多 10 次重试 |
 | Redis | **6379** | 默认实例 | `redis-cli ping`，间隔 3s |
-| Qdrant | **6333**（HTTP）、**6334**（gRPC） | REST `/healthz` | `curl -f http://localhost:6333/healthz`，间隔 5s |
+| Qdrant | **6333**（HTTP）、**6334**（gRPC） | REST `/healthz` | `timeout 2 bash -lc ': > /dev/tcp/127.0.0.1/6333'`，间隔 5s |
 | Neo4j | **7687**（Bolt）、**7474**（HTTP） | `NEO4J_AUTH=neo4j/testpassword` | `cypher-shell ... 'RETURN 1'`，间隔 10s |
 | MinIO | **9000**（S3 API）、**9001**（Console） | `server /data --console-address ":9001"` | `mc ready local`（依赖镜像内 `mc` 配置；若本地调试失败可临时 `docker compose ps` + 直连 HTTP） |
 

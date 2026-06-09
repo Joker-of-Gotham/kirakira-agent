@@ -27,13 +27,13 @@ export {
 
 /**
  * Populated by `test/helpers/memory-global-setup.ts` before any test file loads.
- * When Postgres is unreachable (no Docker stack), integration suites should skip.
+ * When the profile-defined memory stack is unreachable, integration suites should skip.
  */
 export function skipIfNoDocker(): boolean {
   if (process.env["KIRAKIRA_FORCE_INTEGRATION"] === "1") {
     return false;
   }
-  return process.env["__KIRAKIRA_MEMORY_PG_UP__"] !== "1";
+  return process.env["__KIRAKIRA_MEMORY_STACK_UP__"] !== "1";
 }
 
 export interface MemoryPgHarness {

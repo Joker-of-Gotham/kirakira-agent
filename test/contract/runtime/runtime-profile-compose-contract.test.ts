@@ -60,6 +60,11 @@ function expectCatalogPortsInCompose(
   }
 }
 
+function healthcheckCommandText(compose: ReturnType<typeof loadComposeFile>, serviceName: string): string {
+  const service = composeService(compose, serviceName) as { healthcheck?: { test?: unknown } };
+  return JSON.stringify(service.healthcheck?.test ?? "");
+}
+
 describe("runtime profile compose contracts", () => {
   it("keeps readiness compose services aligned with catalog mappings and healthchecks", () => {
     const config = loadRuntimeProfiles();
@@ -93,6 +98,19 @@ describe("runtime profile compose contracts", () => {
         expect((composeService(healthcheckCompose, composeName) as { healthcheck?: unknown }).healthcheck)
           .toBeTruthy();
       }
+    }
+  });
+
+  it("keeps qdrant compose healthchecks dependency-free", () => {
+    const baseCompose = loadComposeFile("docker-compose.yml", import.meta.url);
+    const testCompose = loadComposeFile("docker-compose.test.yml", import.meta.url);
+
+    for (const text of [
+      healthcheckCommandText(baseCompose, "qdrant"),
+      healthcheckCommandText(testCompose, "qdrant"),
+    ]) {
+      expect(text).toContain("/dev/tcp/127.0.0.1/6333");
+      expect(text).not.toMatch(/\b(curl|wget)\b/u);
     }
   });
 
