@@ -20,6 +20,7 @@ import {
   createEmptyRunDashboard,
   createRunInspector,
   projectRunDashboard,
+  runtimeTransportSupportsArtifactContent,
   type RuntimeArtifactContent,
   type RunDashboardArtifact,
   type RunInspectorFocus,
@@ -248,6 +249,16 @@ export function KirakiraWorkbench({
   const selectedArtifactPreview = selectedArtifactPreviewKey
     ? artifactPreviews[selectedArtifactPreviewKey]
     : undefined;
+  const artifactContentCapabilityKnown = runtimeStatus !== undefined;
+  const artifactContentAvailable = runtimeTransportSupportsArtifactContent(runtimeStatus);
+  const selectedArtifactPreviewDisplay = selectedArtifactPreview ??
+    (selectedArtifactId && artifactContentCapabilityKnown && !artifactContentAvailable
+      ? {
+          artifactId: selectedArtifactId,
+          status: "error" as const,
+          message: "Artifact preview is not enabled by this runtime",
+        }
+      : undefined);
   const pendingApproval = projection.pendingApprovalIds[0];
   const graph = projection.graph;
   const graphNodes = Object.values(graph.nodes).sort((a, b) => {
@@ -261,6 +272,7 @@ export function KirakiraWorkbench({
 
   useEffect(() => {
     if (!runId || !selectedArtifactId || !selectedArtifactPreviewKey) return;
+    if (!artifactContentAvailable) return;
     const existing = artifactPreviews[selectedArtifactPreviewKey];
     if (existing) return;
     let disposed = false;
@@ -300,6 +312,7 @@ export function KirakiraWorkbench({
     };
   }, [
     artifactPreviews,
+    artifactContentAvailable,
     runId,
     runtime,
     selectedArtifactId,
@@ -445,7 +458,7 @@ export function KirakiraWorkbench({
 
         <RunInspectorPanel
           inspector={inspector}
-          artifactPreview={selectedArtifactPreview}
+          artifactPreview={selectedArtifactPreviewDisplay}
           onSelectFocus={setSelectedFocusId}
         />
 

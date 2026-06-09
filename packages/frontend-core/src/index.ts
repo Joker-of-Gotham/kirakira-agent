@@ -22,6 +22,10 @@ export {
   fetchBrowserGatewayHealth,
   fetchBrowserGatewayManifest,
 } from "./browser-gateway-health.js";
+export {
+  runtimeTransportManifest,
+  runtimeTransportSupportsArtifactContent,
+} from "./runtime-capabilities.js";
 
 export { createRunInspector } from "./inspector.js";
 
