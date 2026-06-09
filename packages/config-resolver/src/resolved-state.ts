@@ -15,6 +15,7 @@ import type {
   PolicyYaml,
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeMemoryState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 } from "./types.js";
@@ -348,6 +349,111 @@ function mcpCatalog(config: Record<string, unknown>) {
   return recordMap(config.mcpCatalog);
 }
 
+function memoryDefaults(config: Record<string, unknown>): Record<string, unknown> {
+  return recordMap(config.memory);
+}
+
+function memoryConfig(
+  rawProfile: Record<string, unknown>,
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  return deepMerge(memoryDefaults(config), recordMap(rawProfile.memory));
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === "boolean" ? value : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function projectRuntimeMemoryState(
+  memory: Record<string, unknown>,
+  servicesByName: Record<string, unknown>,
+  serviceEnv: Record<string, unknown>,
+  serviceGroupMap: Record<string, unknown>,
+): ResolvedRuntimeMemoryState | undefined {
+  if (Object.keys(memory).length === 0) return undefined;
+  const refs = [
+    ...groupRefs(memory.serviceGroups),
+    ...stringArray(memory.services),
+  ];
+  const serviceNames = expandRefs(refs, serviceGroupMap);
+  const vector = recordMap(memory.vector);
+  const graph = recordMap(memory.graph);
+  const blob = recordMap(memory.blob);
+  const embedding = recordMap(memory.embedding);
+  const recall = recordMap(memory.recall);
+  const vectorState = {
+    backend: vector.backend === "pgvector" ? "pgvector" : vector.backend === "qdrant" ? "qdrant" : undefined,
+    url_env: stringValue(vector.urlEnv),
+    host_env: stringValue(vector.hostEnv),
+    port_env: stringValue(vector.portEnv),
+    api_key_env: stringValue(vector.apiKeyEnv),
+    collection: stringValue(vector.collection),
+  } satisfies NonNullable<ResolvedRuntimeMemoryState["vector"]>;
+  const graphState = {
+    backend: graph.backend === "kuzu" ? "kuzu" : graph.backend === "neo4j" ? "neo4j" : undefined,
+    uri_env: stringValue(graph.uriEnv),
+    username_env: stringValue(graph.usernameEnv),
+    password_env: stringValue(graph.passwordEnv),
+    database: stringValue(graph.database),
+  } satisfies NonNullable<ResolvedRuntimeMemoryState["graph"]>;
+  const blobState = {
+    backend: blob.backend === "s3" ? "s3" : undefined,
+    endpoint_env: stringValue(blob.endpointEnv),
+    bucket: stringValue(blob.bucket),
+    region: stringValue(blob.region),
+    access_key_id_env: stringValue(blob.accessKeyIdEnv),
+    secret_access_key_env: stringValue(blob.secretAccessKeyEnv),
+  } satisfies NonNullable<ResolvedRuntimeMemoryState["blob"]>;
+  const embeddingState = {
+    model: stringValue(embedding.model),
+    api_key_env: stringValue(embedding.apiKeyEnv),
+    base_url_env: stringValue(embedding.baseUrlEnv),
+  } satisfies NonNullable<ResolvedRuntimeMemoryState["embedding"]>;
+  const recallState = {
+    token_budget: optionalNumber(recall.tokenBudget),
+    limit: optionalNumber(recall.limit),
+    level: stringValue(recall.level),
+  } satisfies NonNullable<ResolvedRuntimeMemoryState["recall"]>;
+  const state: ResolvedRuntimeMemoryState = {
+    enabled: optionalBoolean(memory.enabled),
+    ...(serviceNames.length > 0
+      ? {
+          services: serviceNames.map((serviceName) => {
+            const catalogEntry = recordMap(servicesByName[serviceName]);
+            return {
+              name: serviceName,
+              url_env: stringValue(serviceEnv[serviceName]),
+              required: true,
+              compose_service: stringValue(catalogEntry.composeService),
+            };
+          }),
+        }
+      : {}),
+  };
+  return {
+    ...state,
+    ...(Object.values(vectorState).some((value) => value !== undefined)
+      ? { vector: vectorState }
+      : {}),
+    ...(Object.values(graphState).some((value) => value !== undefined)
+      ? { graph: graphState }
+      : {}),
+    ...(Object.values(blobState).some((value) => value !== undefined)
+      ? { blob: blobState }
+      : {}),
+    ...(Object.values(embeddingState).some((value) => value !== undefined)
+      ? { embedding: embeddingState }
+      : {}),
+    ...(Object.values(recallState).some((value) => value !== undefined)
+      ? { recall: recallState }
+      : {}),
+  };
+}
+
 function projectRuntimeProfile(
   name: string,
   rawProfile: Record<string, unknown>,
@@ -357,6 +463,7 @@ function projectRuntimeProfile(
   const serviceGroups = stringArray(rawProfile.serviceEndpointGroups);
   const servicesByName = recordMap(serviceCatalog(config).services);
   const serviceGroupMap = recordMap(serviceCatalog(config).groups);
+  const memory = memoryConfig(rawProfile, config);
   const endpointNames = expandRefs(
     [
       ...groupRefs(rawProfile.serviceEndpointGroups),
@@ -405,6 +512,12 @@ function projectRuntimeProfile(
   });
   const containerStartup = recordMap(rawProfile.containerStartup);
   const workbench = recordMap(rawProfile.workbench);
+  const memoryState = projectRuntimeMemoryState(
+    memory,
+    servicesByName,
+    serviceEnv,
+    serviceGroupMap,
+  );
 
   return {
     name,
@@ -465,6 +578,7 @@ function projectRuntimeProfile(
         path: stringValue(browserGateway.path),
       },
     } : {}),
+    ...(memoryState ? { memory: memoryState } : {}),
   };
 }
 

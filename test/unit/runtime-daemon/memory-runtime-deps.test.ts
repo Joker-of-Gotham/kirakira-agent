@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { ResolvedConfig } from "../../../packages/core/src/index.js";
 import type { MemoryBundle, RecallRequest, RetrievalTrace } from "../../../packages/memory-core/src/index.js";
 import {
   createDaemonMemoryDependencies,
@@ -154,6 +155,145 @@ describe("daemon memory runtime dependencies", () => {
         runtimeProfileName: "workbench-host",
       }),
     ).toBe(false);
+  });
+
+  it("uses resolved memory profile aliases and defaults before generic fallbacks", async () => {
+    let capturedConfig: ReturnType<typeof memoryServiceConfigFromEnv> | undefined;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "profiled-memory-workspace",
+        deep_research: { enabled: true },
+      },
+      runtimeState: {
+        default_profile: "profiled",
+        profiles: [
+          {
+            name: "profiled",
+            mode: "host",
+            workspace_root: "C:/workspace",
+            memory: {
+              enabled: true,
+              services: [
+                { name: "postgres", url_env: "PROFILE_DATABASE_URL" },
+                { name: "redis", url_env: "PROFILE_REDIS_URL" },
+                { name: "qdrant", url_env: "PROFILE_QDRANT_URL" },
+                { name: "neo4j", url_env: "PROFILE_NEO4J_URI" },
+                { name: "minio", url_env: "PROFILE_S3_ENDPOINT" },
+              ],
+              vector: {
+                backend: "qdrant",
+                url_env: "PROFILE_QDRANT_URL",
+                api_key_env: "PROFILE_QDRANT_API_KEY",
+              },
+              graph: {
+                backend: "neo4j",
+                uri_env: "PROFILE_NEO4J_URI",
+                username_env: "PROFILE_NEO4J_USER",
+                password_env: "PROFILE_NEO4J_PASSWORD",
+              },
+              blob: {
+                backend: "s3",
+                endpoint_env: "PROFILE_S3_ENDPOINT",
+                bucket: "profile-memory",
+                region: "ap-southeast-1",
+                access_key_id_env: "PROFILE_S3_ACCESS_KEY_ID",
+                secret_access_key_env: "PROFILE_S3_SECRET_ACCESS_KEY",
+              },
+              embedding: {
+                model: "profile-embedding",
+                api_key_env: "PROFILE_EMBEDDING_API_KEY",
+                base_url_env: "PROFILE_EMBEDDING_BASE_URL",
+              },
+              recall: {
+                token_budget: 2048,
+                limit: 5,
+                level: "L2",
+              },
+            },
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+    const deps = createDaemonMemoryDependencies({
+      workspaceRoot: "C:/workspace",
+      resolvedConfig,
+      runtimeProfileName: "profiled",
+      env: {
+        PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+        PROFILE_QDRANT_URL: "http://profile-qdrant:7333",
+        PROFILE_QDRANT_API_KEY: "profile-qdrant-key",
+        PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+        PROFILE_NEO4J_USER: "profile-neo4j",
+        PROFILE_NEO4J_PASSWORD: "profile-neo4j-secret",
+        PROFILE_S3_ENDPOINT: "http://profile-minio:19000",
+        PROFILE_S3_ACCESS_KEY_ID: "profile-access",
+        PROFILE_S3_SECRET_ACCESS_KEY: "profile-secret",
+        PROFILE_EMBEDDING_API_KEY: "profile-embedding-key",
+        PROFILE_EMBEDDING_BASE_URL: "http://profile-embeddings",
+      },
+      serviceFactory(config) {
+        capturedConfig = config;
+        return {
+          async recall() {
+            return bundle;
+          },
+          async explainRetrieval() {
+            return trace;
+          },
+        };
+      },
+    });
+
+    await deps.researchSource?.service.recall({
+      tenantId: "tenant",
+      workspaceId: "workspace",
+      query: "runtime memory",
+    });
+
+    expect(capturedConfig?.postgres).toMatchObject({
+      host: "profile-pg",
+      port: 15432,
+      database: "profile",
+      username: "profile",
+      password: "secret",
+    });
+    expect(capturedConfig?.redis).toEqual({ url: "redis://profile-redis:16379/2" });
+    expect(capturedConfig?.vector).toMatchObject({
+      backend: "qdrant",
+      host: "profile-qdrant",
+      port: 7333,
+      apiKey: "profile-qdrant-key",
+    });
+    expect(capturedConfig?.graph).toMatchObject({
+      backend: "neo4j",
+      uri: "bolt://profile-neo4j:17687",
+      username: "profile-neo4j",
+      password: "profile-neo4j-secret",
+    });
+    expect(capturedConfig?.blob).toMatchObject({
+      bucket: "profile-memory",
+      region: "ap-southeast-1",
+      endpoint: "http://profile-minio:19000",
+      credentials: {
+        accessKeyId: "profile-access",
+        secretAccessKey: "profile-secret",
+      },
+    });
+    expect(capturedConfig?.embedding).toMatchObject({
+      model: "profile-embedding",
+      apiKey: "profile-embedding-key",
+      baseUrl: "http://profile-embeddings",
+    });
+    expect(capturedConfig?.recall).toMatchObject({
+      defaultTokenBudget: 2048,
+      defaultLevel: "L2",
+    });
+    expect(deps.researchSource).toMatchObject({
+      tokenBudget: 2048,
+      limit: 5,
+      level: "L2",
+    });
   });
 
   it("constructs the production service lazily on first recall", async () => {

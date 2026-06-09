@@ -195,6 +195,21 @@ function runtimeMcpServerCatalog(config) {
   return isRecord(servers) ? servers : {};
 }
 
+function runtimeMemoryConfig(config, profile) {
+  const memory = mergeSpecRecord(config.memory, profile.memory);
+  if (Object.keys(memory).length === 0) return undefined;
+  const serviceRefs = [
+    ...serviceGroupRefs(memory.serviceGroups),
+    ...(Array.isArray(memory.services) ? memory.services : []),
+  ];
+  return {
+    ...memory,
+    ...(serviceRefs.length > 0
+      ? { services: expandRuntimeServiceRefs(serviceRefs, config) }
+      : {}),
+  };
+}
+
 function runtimeComposeServiceName(config, serviceName) {
   const entry = runtimeServiceCatalogEntry(config, serviceName);
   return typeof entry?.composeService === "string" && entry.composeService.length > 0
@@ -644,10 +659,12 @@ export function resolveRuntimeProfile(
   }
   const envBindings = mergeEnvBindings(config.envBindings, profile.envBindings);
   const dynamicProfile = resolveDynamicProfile(config, profile, env);
+  const memory = runtimeMemoryConfig(config, profile);
   const resolvedProfile = {
     name,
     ...profile,
     ...dynamicProfile,
+    ...(memory ? { memory } : {}),
     envBindings,
     containerStartup: resolveContainerStartupRefs(profile.containerStartup, config),
     workbench: resolveWorkbenchRefs(profile.workbench, config),

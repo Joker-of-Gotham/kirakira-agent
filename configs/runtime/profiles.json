@@ -27,7 +27,19 @@
       "presentation.desktop.rendererUrl": [
         "KIRAKIRA_DESKTOP_RENDERER_URL",
         "KIRAKIRA_DESKTOP_DEV_URL"
-      ]
+      ],
+      "memory.vector.backend": "KIRAKIRA_MEMORY_VECTOR_BACKEND",
+      "memory.graph.backend": "KIRAKIRA_MEMORY_GRAPH_BACKEND",
+      "memory.graph.database": "KIRAKIRA_MEMORY_KUZU_PATH",
+      "memory.blob.bucket": [
+        "KIRAKIRA_MEMORY_S3_BUCKET",
+        "S3_BUCKET"
+      ],
+      "memory.blob.region": "KIRAKIRA_MEMORY_S3_REGION",
+      "memory.embedding.model": "KIRAKIRA_MEMORY_EMBEDDING_MODEL",
+      "memory.recall.tokenBudget": "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET",
+      "memory.recall.limit": "KIRAKIRA_MEMORY_RECALL_LIMIT",
+      "memory.recall.level": "KIRAKIRA_MEMORY_RECALL_LEVEL"
     },
     "booleans": {
       "daemon.browserGateway.enabled": {
@@ -198,6 +210,40 @@
           }
         }
       }
+    }
+  },
+  "memory": {
+    "enabled": true,
+    "serviceGroups": ["memory-stack"],
+    "vector": {
+      "backend": "qdrant",
+      "urlEnv": "QDRANT_URL",
+      "apiKeyEnv": "QDRANT_API_KEY",
+      "collection": "kirakira_memory"
+    },
+    "graph": {
+      "backend": "neo4j",
+      "uriEnv": "NEO4J_URI",
+      "usernameEnv": "KIRAKIRA_NEO4J_USER",
+      "passwordEnv": "KIRAKIRA_NEO4J_PASSWORD"
+    },
+    "blob": {
+      "backend": "s3",
+      "endpointEnv": "S3_ENDPOINT",
+      "bucket": "kirakira-memory",
+      "region": "us-east-1",
+      "accessKeyIdEnv": "S3_ACCESS_KEY_ID",
+      "secretAccessKeyEnv": "S3_SECRET_ACCESS_KEY"
+    },
+    "embedding": {
+      "model": "text-embedding-3-small",
+      "apiKeyEnv": "OPENAI_API_KEY",
+      "baseUrlEnv": "OPENAI_BASE_URL"
+    },
+    "recall": {
+      "tokenBudget": 4096,
+      "limit": 8,
+      "level": "L3"
     }
   },
   "mcpCatalog": {

@@ -38,19 +38,19 @@ change, a validation command, and a pushed commit.
 
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
-| EAM mechanism parity | 41% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, and daemon default memory recall construction now exist. | Prove exact parity against `reference_project/eam-agent`; project structured memory runtime state from profiles; finish MCP gateway/trust/audit closure; finish swarm topology/config. |
+| EAM mechanism parity | 42% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, and structured memory runtime profile state now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit closure; finish swarm topology/config; connect memory retain/reflect/checkpoint. |
 | Web and Electron presentation | 45% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed visual system, design tokens, browser/desktop visual QA. |
-| Hardcoding, harness, SDK/API | 36% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, and runtime ack parsing are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
-| Docker/local ecosystem | 40% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, and daemon resolved-config startup exist. | Make profile state the only startup truth source, unify memory stack readiness, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
+| Hardcoding, harness, SDK/API | 38% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, and runtime ack parsing are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
+| Docker/local ecosystem | 42% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, and memory-stack profile projection exist. | Reuse resolved memory contract in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
 
 ## Gap Matrix
 
 | Area | EAM source | Kirakira current | Status | Next implementation slice |
 | --- | --- | --- | --- | --- |
 | Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts` | Partial. Contracts, inheritance, delegate bridge, and kernel events exist. | Add a declarative swarm/topology projection from resolved config into kernel routing and delegation policy; validate multi-subagent fanout and lineage. |
-| Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts` | Advancing. Kernel research executor, daemon composition, and lazy default daemon memory recall source exist. | Project structured memory profile state, add gated Docker/local daemon integration coverage, and connect retain/reflect/checkpoint events. |
+| Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`, structured memory runtime profile state | Advancing. Kernel research executor, daemon composition, lazy default daemon memory recall source, and profile-projected memory defaults exist. | Add gated Docker/local daemon integration coverage and connect retain/reflect/checkpoint events. |
 | MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, and delegate/direct daemon MCP dependency construction now share one factory. | Expose live tool health/discovery views in the workbench, route direct calls through gateway trust/audit/OTel, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
-| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory now builds lazy recall sources from runtime env. | Advancing. Package surface, pipeline env bridge, and default daemon recall composition exist. | Promote memory config into resolved runtime profile state, reuse the builder from harnesses, and connect retain/reflect/checkpoint to runs. |
+| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, and resolved memory profile contracts exist. | Reuse the contract from harnesses and connect retain/reflect/checkpoint to runs. |
 | Policy and harness | `reference_project/eam-agent/packages/policy-engine`, `packages/eamd`, `policies/*` | `packages/policy-engine`, `packages/kirakirad`, `policies/*` | Partial. PEP/PDP packages exist. | Centralize runtime policy context generation and ensure web/desktop tool actions pass through same PEP path as CLI. |
 | Registry and skills | `reference_project/eam-agent/packages/registry-client`, `packages/skill-runtime` | `packages/registry-client`, `packages/skill-runtime`, `skills-lock.json` | Partial. Packages exist; lockfile is currently untracked local state. | Decide tracked vs generated lockfile policy; connect registry trust decisions to runtime install/activation UI and CLI. |
 | Audit and tracing | `reference_project/eam-agent/packages/audit-ledger`, `docs/plane/eam-agent-tracing` | `packages/audit-ledger`, `docs/plane/kirakira-agent-tracing` | Partial. Ledger package and tracing plane exist. | Emit OTel-compatible spans for run, tool, MCP, subagent, research, memory retrieval, and policy decisions. |
@@ -86,9 +86,9 @@ Latest four-lane audit intake on 2026-06-09:
   events. Delegate runtime and direct daemon MCP calls share one MCP dependency
   factory backed by resolved runtime profiles. Daemon memory now has a lazy
   runtime dependency factory that can inject a default memory recall source into
-  deep research from runtime env. Next work should target live MCP workbench
-  views, gateway trust/audit/OTel convergence, structured memory profile state,
-  and per-service test readiness.
+  deep research from structured runtime memory profile state plus env. Next work
+  should target live MCP workbench views, gateway trust/audit/OTel convergence,
+  test-harness reuse of the memory contract, and per-service readiness.
 
 ## Execution Queue
 
@@ -96,8 +96,8 @@ Latest four-lane audit intake on 2026-06-09:
    audit, memory, subagent, and deep-research runtime dependencies.
    MCP/PDP/audit construction is now shared for delegate and direct daemon MCP
    paths; memory recall construction now joins daemon deep-research through a
-   lazy env-driven factory. Remaining work is structured profile memory state,
-   retain/reflect/checkpoint wiring, and OTel/audit convergence.
+   lazy profile/env-driven factory. Remaining work is retain/reflect/checkpoint
+   wiring, harness reuse, and OTel/audit convergence.
 2. **MCP runtime loop:** expose daemon MCP tools/health through
    `RuntimeManifest`, browser gateway, and desktop IPC.
    Tool invocation, typed live discovery, and direct call run-event emission
@@ -106,8 +106,8 @@ Latest four-lane audit intake on 2026-06-09:
 3. **Memory daemon composition:** construct memory service dependencies from
    resolved runtime profile env and inject memory recall into deep research by
    default.
-   Lazy daemon recall injection is now wired and unit-tested; profile projection
-   and gated Docker/local integration remain.
+   Lazy daemon recall injection and structured memory profile projection are now
+   wired and unit-tested; gated Docker/local integration remains.
 4. **Swarm topology projection:** add resolved orchestration topology fields
    and compile them into kernel lane capacities, child runtime policy, and
    lineage events.

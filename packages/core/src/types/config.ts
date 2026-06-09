@@ -117,6 +117,44 @@ export interface ResolvedRuntimeBrowserGatewayState {
   path?: string;
 }
 
+export interface ResolvedRuntimeMemoryState {
+  enabled?: boolean;
+  services?: ResolvedRuntimeServiceState[];
+  vector?: {
+    backend?: "qdrant" | "pgvector";
+    url_env?: string;
+    host_env?: string;
+    port_env?: string;
+    api_key_env?: string;
+    collection?: string;
+  };
+  graph?: {
+    backend?: "neo4j" | "kuzu";
+    uri_env?: string;
+    username_env?: string;
+    password_env?: string;
+    database?: string;
+  };
+  blob?: {
+    backend?: "s3";
+    endpoint_env?: string;
+    bucket?: string;
+    region?: string;
+    access_key_id_env?: string;
+    secret_access_key_env?: string;
+  };
+  embedding?: {
+    model?: string;
+    api_key_env?: string;
+    base_url_env?: string;
+  };
+  recall?: {
+    token_budget?: number;
+    limit?: number;
+    level?: string;
+  };
+}
+
 export interface ResolvedRuntimeProfileState {
   name: string;
   mode: "container" | "host" | "hybrid";
@@ -135,6 +173,7 @@ export interface ResolvedRuntimeProfileState {
   mcp_servers?: ResolvedRuntimeMcpServerState[];
   presentation?: ResolvedRuntimePresentationState;
   browser_gateway?: ResolvedRuntimeBrowserGatewayState;
+  memory?: ResolvedRuntimeMemoryState;
 }
 
 export interface ResolvedRuntimeState {

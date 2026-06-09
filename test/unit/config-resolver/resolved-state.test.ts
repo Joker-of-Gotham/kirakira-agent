@@ -63,6 +63,46 @@ describe("resolved runtime state", () => {
     expect(workbench?.presentation?.web?.url).toBe("http://127.0.0.1:5183");
     expect(workbench?.presentation?.desktop?.renderer_url).toBe("http://127.0.0.1:5174");
     expect(workbench?.browser_gateway?.endpoint).toBe("ws://127.0.0.1:17373/runtime");
+    expect(workbench?.memory).toMatchObject({
+      enabled: true,
+      services: [
+        expect.objectContaining({ name: "postgres", url_env: "DATABASE_URL" }),
+        expect.objectContaining({ name: "redis", url_env: "REDIS_URL" }),
+        expect.objectContaining({ name: "qdrant", url_env: "QDRANT_URL" }),
+        expect.objectContaining({ name: "neo4j", url_env: "NEO4J_URI" }),
+        expect.objectContaining({ name: "minio", url_env: "S3_ENDPOINT" }),
+      ],
+      vector: {
+        backend: "qdrant",
+        url_env: "QDRANT_URL",
+        api_key_env: "QDRANT_API_KEY",
+        collection: "kirakira_memory",
+      },
+      graph: {
+        backend: "neo4j",
+        uri_env: "NEO4J_URI",
+        username_env: "KIRAKIRA_NEO4J_USER",
+        password_env: "KIRAKIRA_NEO4J_PASSWORD",
+      },
+      blob: {
+        backend: "s3",
+        endpoint_env: "S3_ENDPOINT",
+        bucket: "kirakira-memory",
+        region: "us-east-1",
+        access_key_id_env: "S3_ACCESS_KEY_ID",
+        secret_access_key_env: "S3_SECRET_ACCESS_KEY",
+      },
+      embedding: {
+        model: "text-embedding-3-small",
+        api_key_env: "OPENAI_API_KEY",
+        base_url_env: "OPENAI_BASE_URL",
+      },
+      recall: {
+        token_budget: 4096,
+        limit: 8,
+        level: "L3",
+      },
+    });
     expect(workbench?.mcp_servers?.find((server) => server.name === "filesystem-patch")?.args?.[0])
       .toBe("packages/mcp-filesystem-patch/dist/index.js");
     expect(JSON.stringify(runtime)).not.toContain("5173");

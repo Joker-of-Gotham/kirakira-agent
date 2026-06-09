@@ -6,6 +6,7 @@ import type {
   PolicyYaml,
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeMemoryState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 } from "@kirakira/core";
@@ -18,6 +19,7 @@ export type {
   PolicyYaml,
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeMemoryState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 };

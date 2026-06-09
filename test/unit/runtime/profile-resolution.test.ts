@@ -461,6 +461,41 @@ describe("runtime profile rendering", () => {
     expect(JSON.stringify(env)).not.toContain("5173");
   });
 
+  it("renders memory runtime defaults from the declarative profile contract", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const env = renderRuntimeEnv(profile);
+
+    expect(profile.memory).toMatchObject({
+      enabled: true,
+      services: ["postgres", "redis", "qdrant", "neo4j", "minio"],
+      vector: { backend: "qdrant", urlEnv: "QDRANT_URL" },
+      graph: { backend: "neo4j", uriEnv: "NEO4J_URI" },
+      blob: {
+        backend: "s3",
+        endpointEnv: "S3_ENDPOINT",
+        bucket: "kirakira-memory",
+      },
+      embedding: {
+        model: "text-embedding-3-small",
+        apiKeyEnv: "OPENAI_API_KEY",
+      },
+      recall: {
+        tokenBudget: 4096,
+        limit: 8,
+        level: "L3",
+      },
+    });
+    expect(env.KIRAKIRA_MEMORY_VECTOR_BACKEND).toBe("qdrant");
+    expect(env.KIRAKIRA_MEMORY_GRAPH_BACKEND).toBe("neo4j");
+    expect(env.KIRAKIRA_MEMORY_S3_BUCKET).toBe("kirakira-memory");
+    expect(env.S3_BUCKET).toBe("kirakira-memory");
+    expect(env.KIRAKIRA_MEMORY_EMBEDDING_MODEL).toBe("text-embedding-3-small");
+    expect(env.KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET).toBe("4096");
+    expect(env.KIRAKIRA_MEMORY_RECALL_LIMIT).toBe("8");
+    expect(env.KIRAKIRA_MEMORY_RECALL_LEVEL).toBe("L3");
+    expect(env.KIRAKIRA_MEMORY_ENABLED).toBeUndefined();
+  });
+
   it("renders service env and aliases from declarative bindings", () => {
     const config = {
       schemaVersion: 1,

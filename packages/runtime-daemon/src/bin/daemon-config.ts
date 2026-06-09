@@ -143,6 +143,7 @@ export function daemonConfigFromEnv(
           ? {
               resolvedConfig,
               kernelOptions: kernelOptionsFromResolvedConfig(resolvedConfig, env),
+              memory: { env },
             }
           : {}),
       }

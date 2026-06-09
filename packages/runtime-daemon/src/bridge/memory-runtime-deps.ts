@@ -1,4 +1,4 @@
-import type { ResolvedConfig } from "@kirakira/core";
+import type { ResolvedConfig, ResolvedRuntimeMemoryState } from "@kirakira/core";
 import type { MemoryRecallPort } from "@kirakira/deep-research";
 import {
   MemoryServiceImpl,
@@ -30,9 +30,12 @@ export interface DaemonMemoryDependencies {
 }
 
 const MEMORY_SERVICE_NAMES = new Set(["postgres", "redis", "qdrant", "neo4j", "minio"]);
+const MEMORY_CONTEXT_LEVELS = new Set(["L0", "L1", "L2", "L3"]);
+const DEFAULT_MEMORY_LEVEL: NonNullable<DaemonMemoryResearchSourceOptions["level"]> = "L3";
 
-function envFirst(env: DaemonMemoryEnv, ...keys: string[]): string | undefined {
+function envFirst(env: DaemonMemoryEnv, ...keys: Array<string | undefined>): string | undefined {
   for (const key of keys) {
+    if (!key) continue;
     const value = env[key];
     if (typeof value === "string" && value.trim().length > 0) return value.trim();
   }
@@ -47,11 +50,19 @@ function envFlag(env: DaemonMemoryEnv, key: string): boolean | undefined {
   return undefined;
 }
 
-function envNumber(env: DaemonMemoryEnv, key: string): number | undefined {
-  const value = envFirst(env, key);
+function envNumber(env: DaemonMemoryEnv, ...keys: Array<string | undefined>): number | undefined {
+  const value = envFirst(env, ...keys);
   if (!value) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function memoryContextLevel(
+  value: string | undefined,
+): DaemonMemoryResearchSourceOptions["level"] | undefined {
+  return value && MEMORY_CONTEXT_LEVELS.has(value)
+    ? value as NonNullable<DaemonMemoryResearchSourceOptions["level"]>
+    : undefined;
 }
 
 function parsePort(value: string | undefined, fallback: number): number {
@@ -87,19 +98,46 @@ function endpointHostPort(
   };
 }
 
+function activeRuntimeMemory(
+  options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
+): ResolvedRuntimeMemoryState | undefined {
+  return activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName)?.memory;
+}
+
+function memoryServiceEnv(
+  memory: ResolvedRuntimeMemoryState | undefined,
+  name: string,
+): string | undefined {
+  return memory?.services?.find((service) => service.name === name)?.url_env;
+}
+
 function memoryProfileHasBackingServices(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
 ): boolean {
   const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
-  const serviceNames = new Set(profile?.services?.map((service) => service.name) ?? []);
+  const memory = profile?.memory;
+  if (memory?.enabled === false) return false;
+  const serviceNames = new Set(
+    (memory?.services ?? profile?.services ?? []).map((service) => service.name),
+  );
   return [...MEMORY_SERVICE_NAMES].some((name) => serviceNames.has(name));
 }
 
-function hasRuntimeMemoryEnv(env: DaemonMemoryEnv): boolean {
+function hasRuntimeMemoryEnv(
+  env: DaemonMemoryEnv,
+  memory: ResolvedRuntimeMemoryState | undefined,
+): boolean {
   return Boolean(
-    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", "DATABASE_URL") &&
-      envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", "REDIS_URL") &&
-      envFirst(env, "KIRAKIRA_MEMORY_S3_ENDPOINT_URL", "S3_ENDPOINT", "S3_ENDPOINT_URL"),
+    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL") &&
+      envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") &&
+      envFirst(
+        env,
+        "KIRAKIRA_MEMORY_S3_ENDPOINT_URL",
+        memory?.blob?.endpoint_env,
+        memoryServiceEnv(memory, "minio"),
+        "S3_ENDPOINT",
+        "S3_ENDPOINT_URL",
+      ),
   );
 }
 
@@ -108,51 +146,70 @@ export function shouldCreateDaemonMemoryDependencies(
 ): boolean {
   const env = options.env ?? process.env;
   const enabled = envFlag(env, "KIRAKIRA_MEMORY_ENABLED");
+  const memory = activeRuntimeMemory(options);
   if (enabled === false) return false;
+  if (memory?.enabled === false) return false;
   if (options.service) return true;
   if (enabled === true) return true;
   return Boolean(
     options.resolvedConfig?.agentToml.deep_research?.enabled &&
       memoryProfileHasBackingServices(options) &&
-      hasRuntimeMemoryEnv(env),
+      hasRuntimeMemoryEnv(env, memory),
   );
 }
 
 export function memoryServiceConfigFromEnv(
   env: DaemonMemoryEnv = process.env,
+  memory?: ResolvedRuntimeMemoryState,
 ): MemoryServiceConfig {
   const postgresDsn =
-    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", "DATABASE_URL") ??
+    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL") ??
     "postgresql://localhost:5432/kirakira";
   const redisUrl =
-    envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", "REDIS_URL") ?? "redis://localhost:6379/0";
-  const qdrantUrl = envFirst(env, "KIRAKIRA_MEMORY_QDRANT_URL", "QDRANT_URL");
-  const vectorBackend = envFirst(env, "KIRAKIRA_MEMORY_VECTOR_BACKEND");
-  const graphBackend = envFirst(env, "KIRAKIRA_MEMORY_GRAPH_BACKEND");
+    envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") ?? "redis://localhost:6379/0";
+  const qdrantUrl = envFirst(
+    env,
+    "KIRAKIRA_MEMORY_QDRANT_URL",
+    memory?.vector?.url_env,
+    memoryServiceEnv(memory, "qdrant"),
+    "QDRANT_URL",
+  );
+  const vectorBackend = envFirst(env, "KIRAKIRA_MEMORY_VECTOR_BACKEND") ?? memory?.vector?.backend;
+  const graphBackend = envFirst(env, "KIRAKIRA_MEMORY_GRAPH_BACKEND") ?? memory?.graph?.backend;
   const neo4jUri =
-    envFirst(env, "KIRAKIRA_MEMORY_NEO4J_URI", "NEO4J_URI") ?? "bolt://localhost:7687";
+    envFirst(
+      env,
+      "KIRAKIRA_MEMORY_NEO4J_URI",
+      memory?.graph?.uri_env,
+      memoryServiceEnv(memory, "neo4j"),
+      "NEO4J_URI",
+    ) ?? "bolt://localhost:7687";
   const s3Endpoint = envFirst(
     env,
     "KIRAKIRA_MEMORY_S3_ENDPOINT_URL",
+    memory?.blob?.endpoint_env,
+    memoryServiceEnv(memory, "minio"),
     "S3_ENDPOINT",
     "S3_ENDPOINT_URL",
   );
   const accessKeyId = envFirst(
     env,
     "KIRAKIRA_MEMORY_AWS_ACCESS_KEY_ID",
+    memory?.blob?.access_key_id_env,
     "S3_ACCESS_KEY_ID",
     "AWS_ACCESS_KEY_ID",
   );
   const secretAccessKey = envFirst(
     env,
     "KIRAKIRA_MEMORY_AWS_SECRET_ACCESS_KEY",
+    memory?.blob?.secret_access_key_env,
     "S3_SECRET_ACCESS_KEY",
     "AWS_SECRET_ACCESS_KEY",
   );
   const qdrant = endpointHostPort(
     qdrantUrl,
-    envFirst(env, "KIRAKIRA_MEMORY_QDRANT_HOST") ?? "localhost",
-    parsePort(envFirst(env, "KIRAKIRA_MEMORY_QDRANT_PORT"), 6333),
+    envFirst(env, "KIRAKIRA_MEMORY_QDRANT_HOST", memory?.vector?.host_env) ?? "localhost",
+    parsePort(envFirst(env, "KIRAKIRA_MEMORY_QDRANT_PORT", memory?.vector?.port_env), 6333),
   );
 
   return {
@@ -165,31 +222,34 @@ export function memoryServiceConfigFromEnv(
             backend: "qdrant",
             host: qdrant.host,
             port: qdrant.port,
-            apiKey: envFirst(env, "KIRAKIRA_MEMORY_QDRANT_API_KEY", "QDRANT_API_KEY"),
+            apiKey: envFirst(env, "KIRAKIRA_MEMORY_QDRANT_API_KEY", memory?.vector?.api_key_env, "QDRANT_API_KEY"),
           },
     graph:
       graphBackend === "kuzu"
         ? {
             backend: "kuzu",
             database:
-              envFirst(env, "KIRAKIRA_MEMORY_KUZU_PATH") ?? ".kirakira/memory/kuzu",
+              envFirst(env, "KIRAKIRA_MEMORY_KUZU_PATH") ??
+              memory?.graph?.database ??
+              ".kirakira/memory/kuzu",
           }
         : {
             backend: "neo4j",
             uri: neo4jUri,
             username:
-              envFirst(env, "KIRAKIRA_MEMORY_NEO4J_USER", "KIRAKIRA_NEO4J_USER") ??
+              envFirst(env, "KIRAKIRA_MEMORY_NEO4J_USER", memory?.graph?.username_env, "KIRAKIRA_NEO4J_USER") ??
               "neo4j",
             password:
               envFirst(
                 env,
                 "KIRAKIRA_MEMORY_NEO4J_PASSWORD",
+                memory?.graph?.password_env,
                 "KIRAKIRA_NEO4J_PASSWORD",
               ) ?? "password",
           },
     blob: {
-      bucket: envFirst(env, "KIRAKIRA_MEMORY_S3_BUCKET", "S3_BUCKET") ?? "kirakira-memory",
-      region: envFirst(env, "KIRAKIRA_MEMORY_S3_REGION", "AWS_REGION") ?? "us-east-1",
+      bucket: envFirst(env, "KIRAKIRA_MEMORY_S3_BUCKET", "S3_BUCKET") ?? memory?.blob?.bucket ?? "kirakira-memory",
+      region: envFirst(env, "KIRAKIRA_MEMORY_S3_REGION", "AWS_REGION") ?? memory?.blob?.region ?? "us-east-1",
       ...(s3Endpoint ? { endpoint: s3Endpoint, forcePathStyle: true } : {}),
       ...(accessKeyId && secretAccessKey
         ? { credentials: { accessKeyId, secretAccessKey } }
@@ -198,17 +258,18 @@ export function memoryServiceConfigFromEnv(
     embedding: {
       model:
         envFirst(env, "KIRAKIRA_MEMORY_EMBEDDING_MODEL", "OPENAI_EMBEDDING_MODEL") ??
+        memory?.embedding?.model ??
         "text-embedding-3-small",
-      apiKey: envFirst(env, "KIRAKIRA_MEMORY_EMBEDDING_API_KEY", "OPENAI_API_KEY"),
-      baseUrl: envFirst(env, "KIRAKIRA_MEMORY_EMBEDDING_BASE_URL", "OPENAI_BASE_URL"),
+      apiKey: envFirst(env, "KIRAKIRA_MEMORY_EMBEDDING_API_KEY", memory?.embedding?.api_key_env, "OPENAI_API_KEY"),
+      baseUrl: envFirst(env, "KIRAKIRA_MEMORY_EMBEDDING_BASE_URL", memory?.embedding?.base_url_env, "OPENAI_BASE_URL"),
     },
     recall: {
       similarityWeight: envNumber(env, "KIRAKIRA_MEMORY_RECALL_SIMILARITY_WEIGHT"),
       graphWeight: envNumber(env, "KIRAKIRA_MEMORY_RECALL_GRAPH_WEIGHT"),
       temporalWeight: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TEMPORAL_WEIGHT"),
       stateWeight: envNumber(env, "KIRAKIRA_MEMORY_RECALL_STATE_WEIGHT"),
-      defaultTokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET"),
-      defaultLevel: envFirst(env, "KIRAKIRA_MEMORY_RECALL_LEVEL"),
+      defaultTokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET") ?? memory?.recall?.token_budget,
+      defaultLevel: envFirst(env, "KIRAKIRA_MEMORY_RECALL_LEVEL") ?? memory?.recall?.level,
     },
     retain: {
       reflectThreshold: envNumber(env, "KIRAKIRA_MEMORY_RETAIN_REFLECT_THRESHOLD"),
@@ -280,7 +341,8 @@ export function createDaemonMemoryDependencies(
   }
 
   const env = options.env ?? process.env;
-  const config = options.service ? undefined : memoryServiceConfigFromEnv(env);
+  const memory = activeRuntimeMemory(options);
+  const config = options.service ? undefined : memoryServiceConfigFromEnv(env, memory);
   const service =
     options.service ??
     new LazyMemoryRecallPort(
@@ -299,9 +361,11 @@ export function createDaemonMemoryDependencies(
         envFirst(env, "KIRAKIRA_MEMORY_WORKSPACE_ID", "KIRAKIRA_WORKSPACE_ID") ??
         workspaceRoot ??
         defaultWorkspaceId(options, env),
-      tokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET"),
-      limit: envNumber(env, "KIRAKIRA_MEMORY_RECALL_LIMIT"),
-      level: "L3",
+      tokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET") ?? memory?.recall?.token_budget,
+      limit: envNumber(env, "KIRAKIRA_MEMORY_RECALL_LIMIT") ?? memory?.recall?.limit,
+      level:
+        memoryContextLevel(envFirst(env, "KIRAKIRA_MEMORY_RECALL_LEVEL") ?? memory?.recall?.level) ??
+        DEFAULT_MEMORY_LEVEL,
       includeRedacted: false,
     },
     async close() {

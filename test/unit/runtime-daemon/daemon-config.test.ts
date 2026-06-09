@@ -143,6 +143,16 @@ describe("runtime daemon env config", () => {
           "memory",
         ]),
       });
+      expect(config.kernel?.memory?.env).toMatchObject({
+        KIRAKIRA_WORKSPACE_ROOT: workspaceRoot,
+        DATABASE_URL: expect.any(String),
+        REDIS_URL: expect.any(String),
+        QDRANT_URL: expect.any(String),
+        NEO4J_URI: expect.any(String),
+        S3_ENDPOINT: expect.any(String),
+        KIRAKIRA_MEMORY_VECTOR_BACKEND: "qdrant",
+        KIRAKIRA_MEMORY_RECALL_LEVEL: "L3",
+      });
       expect(config.browserGateway?.allowedOrigins).toEqual([
         "http://127.0.0.1:5183",
         "http://127.0.0.1:5174",
