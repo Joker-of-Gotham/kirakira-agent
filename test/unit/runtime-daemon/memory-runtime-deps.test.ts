@@ -13,6 +13,7 @@ import type {
 import type { RunEvent } from "../../../packages/runtime-contracts/src/index.js";
 import {
   createDaemonMemoryDependencies,
+  DAEMON_MEMORY_REFLECT_RUNTIME_EVENTS,
   DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
   DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
   DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
@@ -614,6 +615,11 @@ describe("daemon memory runtime dependencies", () => {
           enabled: false,
           eventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
         }),
+        expect.objectContaining({
+          channel: "runtime-events",
+          enabled: false,
+          eventKinds: DAEMON_MEMORY_REFLECT_RUNTIME_EVENTS,
+        }),
       ]),
     );
   });
@@ -745,6 +751,12 @@ describe("daemon memory runtime dependencies", () => {
           enabled: true,
           eventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
         }),
+        expect.objectContaining({
+          channel: "runtime-events",
+          enabled: true,
+          eventKinds: DAEMON_MEMORY_REFLECT_RUNTIME_EVENTS,
+          requiresRunId: true,
+        }),
       ]),
     );
 
@@ -808,12 +820,25 @@ describe("daemon memory runtime dependencies", () => {
       serviceOutboxEventTypes: DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
     });
 
-    const reflected = await deps.retainReflect.reflect.invoke?.({
-      tenantId: "tenant",
-      workspaceId: "workspace",
-      factIds: ["record-fact"],
-      maxConsolidations: 2,
-    });
+    const reflected = await deps.retainReflect.reflect.invoke?.(
+      {
+        tenantId: "tenant",
+        workspaceId: "workspace",
+        factIds: ["record-fact"],
+        maxConsolidations: 2,
+      },
+      {
+        runId: "run-memory",
+        sessionId: "session-memory-reflect",
+        traceId: "trace-memory",
+        parentTaskId: "task-memory",
+        nodeId: "node-memory",
+        metadata: {
+          source: "unit-test",
+          nested: { ignored: true },
+        },
+      },
+    );
 
     expect(reflected).toEqual(reflectReceipt);
     expect(factoryCalls).toBe(1);
@@ -825,9 +850,117 @@ describe("daemon memory runtime dependencies", () => {
         maxConsolidations: 2,
       },
     ]);
-    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.kind)).toEqual([
+      "memory.retain.started",
+      "memory.retain.completed",
+      "memory.reflect.started",
+      "memory.reflect.completed",
+    ]);
+    expect(events[2]?.runId).toBe("run-memory");
+    expect(events[2]?.payload).toMatchObject({
+      operation: "reflect",
+      tenantId: "tenant",
+      workspaceId: "workspace",
+      runId: "run-memory",
+      sessionId: "session-memory-reflect",
+      traceId: "trace-memory",
+      parentTaskId: "task-memory",
+      nodeId: "node-memory",
+      factIds: ["record-fact"],
+      factIdCount: 1,
+      maxConsolidations: 2,
+      metadata: { source: "unit-test" },
+    });
+    expect(events[3]?.payload).toMatchObject({
+      observationIds: ["observation-1"],
+      observationCount: 1,
+      beliefUpdates: [{ beliefId: "belief-1", action: "created" }],
+      beliefUpdateCount: 1,
+      contradictionCount: 0,
+      reflectedAt: "2026-06-09T00:00:02.000Z",
+      serviceOutboxEventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
+    });
+    expect(events[3]?.payload).not.toHaveProperty("content");
     await deps.close();
     expect(closed).toBe(true);
+  });
+
+  it("emits reflect failed events without live memory infra", async () => {
+    const events: RunEvent[] = [];
+    const reflectCalls: ReflectRequest[] = [];
+    const deps = createDaemonMemoryDependencies({
+      workspaceRoot: "C:/workspace",
+      env: {},
+      enableRetain: false,
+      enableReflect: true,
+      eventSink(event) {
+        events.push(event);
+      },
+      service: {
+        async recall() {
+          return bundle;
+        },
+        async explainRetrieval() {
+          return trace;
+        },
+        async reflect(request) {
+          reflectCalls.push(request);
+          throw new Error("reflect pipeline failed");
+        },
+      },
+    });
+
+    await expect(
+      deps.retainReflect.reflect.invoke?.(
+        {
+          tenantId: "tenant",
+          workspaceId: "workspace",
+          scope: "project",
+          episodeIds: ["episode-retained"],
+          maxConsolidations: 1,
+        },
+        {
+          runId: "run-memory-failed",
+          sessionId: "session-memory",
+          traceId: "trace-memory-failed",
+          parentTaskId: "task-memory",
+          nodeId: "node-memory",
+        },
+      ),
+    ).rejects.toThrow("reflect pipeline failed");
+
+    expect(reflectCalls).toEqual([
+      {
+        tenantId: "tenant",
+        workspaceId: "workspace",
+        scope: "project",
+        episodeIds: ["episode-retained"],
+        maxConsolidations: 1,
+      },
+    ]);
+    expect(events.map((event) => event.kind)).toEqual([
+      "memory.reflect.started",
+      "memory.reflect.failed",
+    ]);
+    expect(events[0]?.payload).toMatchObject({
+      operation: "reflect",
+      tenantId: "tenant",
+      workspaceId: "workspace",
+      scope: "project",
+      runId: "run-memory-failed",
+      sessionId: "session-memory",
+      traceId: "trace-memory-failed",
+      parentTaskId: "task-memory",
+      nodeId: "node-memory",
+      episodeIds: ["episode-retained"],
+      episodeIdCount: 1,
+      maxConsolidations: 1,
+    });
+    expect(events[1]?.payload).toMatchObject({
+      operation: "reflect",
+      error: "reflect pipeline failed",
+    });
+    expect(events[1]?.payload.durationMs).toEqual(expect.any(Number));
   });
 
   it("constructs the production service lazily on first recall", async () => {

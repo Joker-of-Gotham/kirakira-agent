@@ -4,6 +4,9 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { getMcpConfigPath } from "@kirakira/core";
 import { parseMcpConfigJson } from "@kirakira/mcp-adapter";
+import {
+  runtimeMcpLocalEditNotice,
+} from "../../runtime/runtime-mcp-config.js";
 
 function resolveMcpImportPath(spec: string, cwd: string): string {
   const trimmed = spec.trim();
@@ -78,8 +81,24 @@ export default class McpImport extends Command {
 
     const added = Object.keys(incoming.mcpServers);
     this.log(`Merged ${added.length} server(s) from ${srcPath} into ${destPath}`);
+    this.log(`Local edit target: ${destPath}`);
+    await this.logProjectionNotice(destPath, added);
     for (const name of added) {
       this.log(`  + ${name}`);
     }
+  }
+
+  private async logProjectionNotice(
+    configPath: string,
+    editedServers: string[],
+  ): Promise<void> {
+    const notice = await runtimeMcpLocalEditNotice({
+      configPath,
+      serverNames: editedServers,
+      action: "upsert",
+    });
+    if (!notice) return;
+    if (notice.level === "warn") this.warn(notice.message);
+    else this.log(notice.message);
   }
 }

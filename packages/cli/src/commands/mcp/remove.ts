@@ -2,6 +2,9 @@ import { Command, Args } from "@oclif/core";
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { getMcpConfigPath } from "@kirakira/core";
+import {
+  runtimeMcpLocalEditNotice,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpRemove extends Command {
   static override description = "Remove an MCP server from .mcp.json";
@@ -37,7 +40,20 @@ export default class McpRemove extends Command {
       JSON.stringify(config, null, 2) + "\n",
       "utf-8",
     );
+    await this.warnIfProfileStillDefines(configPath, args.name);
 
     this.log(`✓ Removed MCP server "${args.name}" from ${configPath}`);
+  }
+
+  private async warnIfProfileStillDefines(
+    configPath: string,
+    serverName: string,
+  ): Promise<void> {
+    const notice = await runtimeMcpLocalEditNotice({
+      configPath,
+      serverNames: [serverName],
+      action: "remove",
+    });
+    if (notice?.level === "warn") this.warn(notice.message);
   }
 }

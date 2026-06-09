@@ -1,7 +1,8 @@
 import { Command, Flags } from "@oclif/core";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { getMcpConfigPath } from "@kirakira/core";
+import {
+  formatMcpConfigSource,
+  resolveRuntimeMcpConfig,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpList extends Command {
   static override description = "List configured MCP servers";
@@ -12,21 +13,15 @@ export default class McpList extends Command {
 
   async run(): Promise<void> {
     const { flags } = await this.parse(McpList);
-    const configPath = getMcpConfigPath(process.cwd());
-
-    if (!existsSync(configPath)) {
-      this.log("No .mcp.json found. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.");
-      return;
-    }
-
-    const raw = await readFile(configPath, "utf-8");
-    const config = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
+    const resolution = await resolveRuntimeMcpConfig();
+    for (const warning of resolution.warnings) this.warn(warning);
+    const config = resolution.config;
     const servers = Object.entries(config.mcpServers ?? {});
 
     if (flags.json) {
       this.log(JSON.stringify(config, null, 2));
     } else {
-      this.log(`MCP Servers (${servers.length}):`);
+      this.log(`MCP Servers (${servers.length}) from ${formatMcpConfigSource(resolution)}:`);
       for (const [name, cfg] of servers) {
         const c = cfg as Record<string, unknown>;
         const transport = c["type"] ?? (c["command"] ? "stdio" : "http");

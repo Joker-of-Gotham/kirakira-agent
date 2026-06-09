@@ -108,6 +108,26 @@ function liveRequested(options, env) {
   return options.live || env.KIRAKIRA_LIVE_E2E === "1" || env.KIRAKIRA_WORKBENCH_SMOKE_LIVE === "1";
 }
 
+function readinessTargetSummary(check) {
+  return Object.fromEntries(
+    Object.entries({
+      type: check.type,
+      target: check.target,
+      endpoint: check.endpoint,
+      responseSchema: check.responseSchema,
+    }).filter(([, value]) => value !== undefined),
+  );
+}
+
+export function buildWorkbenchSmokeTargets(readinessPlan) {
+  return Object.fromEntries(
+    (readinessPlan.checks ?? []).map((check) => [
+      check.name,
+      readinessTargetSummary(check),
+    ]),
+  );
+}
+
 export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
   const profile = profileFromOptions(options, env);
   const plan = buildWorkbenchSmokePlan(profile, options.surface, {
@@ -121,6 +141,7 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
     plan,
     readinessPlan,
     checks: readinessPlan.checks.map((check) => check.name),
+    targets: buildWorkbenchSmokeTargets(readinessPlan),
     readiness: {
       timeoutMs: options.timeoutMs ?? DEFAULT_SMOKE_TIMEOUT_MS,
       intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
@@ -149,6 +170,7 @@ async function main(argv) {
     surface: smokePlan.plan.surface,
     live: smokePlan.live,
     checks: smokePlan.checks,
+    targets: smokePlan.targets,
     stepOverrides: smokePlan.plan.smoke?.stepOverrides ?? [],
     readiness: smokePlan.readiness,
     readinessPlan: smokePlan.readinessPlan,

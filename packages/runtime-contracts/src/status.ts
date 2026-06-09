@@ -1,5 +1,9 @@
 import type { RuntimeEndpointParts } from "./endpoint.js";
-import type { RunEventKind } from "./events.js";
+import {
+  MEMORY_RUN_EVENT_KINDS,
+  isRunEventKind,
+  type RunEventKind,
+} from "./events.js";
 import {
   DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
   RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
@@ -251,18 +255,8 @@ const DEFAULT_CAPABILITIES: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>
   memory: {
     id: "memory",
     state: "available",
-    summary: "Attach durable memory recall and retain planes through injected runtime services.",
-    eventKinds: [
-      "memory.recall.started",
-      "memory.recall.completed",
-      "memory.recall.failed",
-      "memory.retain.started",
-      "memory.retain.completed",
-      "memory.retain.failed",
-      "memory.checkpoint.saved",
-      "memory.checkpoint.restored",
-      "memory.checkpoint.failed",
-    ],
+    summary: "Attach durable memory recall, retain, reflect, and checkpoint planes through injected runtime services.",
+    eventKinds: [...MEMORY_RUN_EVENT_KINDS],
   },
   mcp: {
     id: "mcp",
@@ -614,7 +608,7 @@ function sanitizeRuntimeCapability(
     state: capability.state,
     summary: capability.summary,
     ...(capability.eventKinds !== undefined
-      ? { eventKinds: capability.eventKinds.filter((kind) => typeof kind === "string") }
+      ? { eventKinds: capability.eventKinds.filter(isRunEventKind) }
       : {}),
     ...(capability.clientMessageTypes !== undefined
       ? {
@@ -750,7 +744,7 @@ const isRuntimeCapabilityRecord = (
     typeof value.summary === "string" &&
     (value.eventKinds === undefined ||
       (Array.isArray(value.eventKinds) &&
-        value.eventKinds.every((kind) => typeof kind === "string"))) &&
+        value.eventKinds.every(isRunEventKind))) &&
     (value.clientMessageTypes === undefined ||
       (Array.isArray(value.clientMessageTypes) &&
         value.clientMessageTypes.every((messageType) => typeof messageType === "string"))) &&

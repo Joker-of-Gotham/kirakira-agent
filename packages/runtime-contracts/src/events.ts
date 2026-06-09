@@ -31,6 +31,9 @@ export const RUN_EVENT_KINDS = [
   "memory.retain.started",
   "memory.retain.completed",
   "memory.retain.failed",
+  "memory.reflect.started",
+  "memory.reflect.completed",
+  "memory.reflect.failed",
   "memory.checkpoint.saved",
   "memory.checkpoint.restored",
   "memory.checkpoint.failed",
@@ -61,6 +64,17 @@ export const RUN_EVENT_KINDS = [
 ] as const;
 
 export type RunEventKind = (typeof RUN_EVENT_KINDS)[number];
+export type MemoryRunEventKind = Extract<RunEventKind, `memory.${string}`>;
+
+const RUN_EVENT_KIND_SET: ReadonlySet<string> = new Set(RUN_EVENT_KINDS);
+
+export const isRunEventKind = (value: unknown): value is RunEventKind =>
+  typeof value === "string" && RUN_EVENT_KIND_SET.has(value);
+
+export const MEMORY_RUN_EVENT_KINDS: readonly MemoryRunEventKind[] =
+  RUN_EVENT_KINDS.filter(
+    (kind): kind is MemoryRunEventKind => kind.startsWith("memory."),
+  );
 
 export interface RunEvent {
   id: string;

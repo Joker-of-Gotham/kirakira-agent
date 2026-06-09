@@ -1,12 +1,12 @@
 import { Command, Args, Flags } from "@oclif/core";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { getMcpConfigPath } from "@kirakira/core";
 import {
   McpClientManager,
-  parseMcpConfigJson,
   McpGateway,
 } from "@kirakira/mcp-adapter";
+import {
+  formatMcpConfigSource,
+  resolveRuntimeMcpConfig,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpTools extends Command {
   static override description =
@@ -25,19 +25,16 @@ export default class McpTools extends Command {
 
   async run(): Promise<void> {
     const { args, flags } = await this.parse(McpTools);
-    const configPath = getMcpConfigPath(process.cwd());
-
-    if (!existsSync(configPath)) {
-      this.error(`No MCP config at ${configPath}. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.`);
-    }
-
-    const raw = await readFile(configPath, "utf-8");
-    const servers = parseMcpConfigJson(raw);
+    const resolution = await resolveRuntimeMcpConfig();
+    const servers = resolution.servers;
 
     const manager = new McpClientManager();
     manager.registerMany(servers);
 
-    const gateway = new McpGateway({ manager });
+    const gateway = new McpGateway({
+      manager,
+      ...(resolution.aliasCatalog ? { aliasCatalog: resolution.aliasCatalog } : {}),
+    });
 
     try {
       await gateway.startAll();
@@ -56,6 +53,7 @@ export default class McpTools extends Command {
       this.log(JSON.stringify(tools, null, 2));
     } else {
       const summary = gateway.getSummary();
+      this.log(`Source: ${formatMcpConfigSource(resolution)}`);
       this.log(`\nMCP Gateway — ${summary.totalTools} tools from ${summary.servers.length} servers\n`);
 
       for (const srv of summary.servers) {

@@ -1,12 +1,9 @@
 import { Command, Args } from "@oclif/core";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { getMcpConfigPath } from "@kirakira/core";
 import {
   McpClientManager,
-  parseMcpConfigJson,
   McpGateway,
 } from "@kirakira/mcp-adapter";
+import { resolveRuntimeMcpConfig } from "../../runtime/runtime-mcp-config.js";
 
 export default class McpCall extends Command {
   static override description =
@@ -23,14 +20,8 @@ export default class McpCall extends Command {
 
   async run(): Promise<void> {
     const { args } = await this.parse(McpCall);
-    const configPath = getMcpConfigPath(process.cwd());
-
-    if (!existsSync(configPath)) {
-      this.error(`No MCP config at ${configPath}. Start once with 'pnpm start' or add with 'pnpm start -- mcp add <package>'.`);
-    }
-
-    const raw = await readFile(configPath, "utf-8");
-    const servers = parseMcpConfigJson(raw);
+    const resolution = await resolveRuntimeMcpConfig();
+    const servers = resolution.servers;
 
     let toolArgs: Record<string, unknown>;
     try {
@@ -42,7 +33,10 @@ export default class McpCall extends Command {
     const manager = new McpClientManager();
     manager.registerMany(servers);
 
-    const gateway = new McpGateway({ manager });
+    const gateway = new McpGateway({
+      manager,
+      ...(resolution.aliasCatalog ? { aliasCatalog: resolution.aliasCatalog } : {}),
+    });
 
     try {
       await gateway.startAll();

@@ -1,32 +1,28 @@
 import { Command, Args } from "@oclif/core";
-import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { getMcpConfigPath } from "@kirakira/core";
 import {
   McpClientManager,
-  parseMcpConfigJson,
   checkServersHealth,
 } from "@kirakira/mcp-adapter";
+import {
+  formatMcpConfigSource,
+  resolveRuntimeMcpConfig,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpTest extends Command {
   static override description = "Test connectivity to an MCP server (real tools/list)";
 
   static override args = {
-    name: Args.string({ description: "MCP server name from .mcp.json", required: true }),
+    name: Args.string({ description: "MCP server name from resolved config", required: true }),
   };
 
   async run(): Promise<void> {
     const { args } = await this.parse(McpTest);
-    const configPath = getMcpConfigPath(process.cwd());
-    if (!existsSync(configPath)) {
-      this.error(`No MCP config at ${configPath}`);
-    }
-    const raw = await readFile(configPath, "utf-8");
-    const servers = parseMcpConfigJson(raw);
+    const resolution = await resolveRuntimeMcpConfig();
+    const servers = resolution.servers;
     const target = servers.find((s) => s.name === args.name);
     if (!target) {
       this.error(
-        `MCP server "${args.name}" not found. Known: ${servers.map((s) => s.name).join(", ")}`,
+        `MCP server "${args.name}" not found in ${formatMcpConfigSource(resolution)}. Known: ${servers.map((s) => s.name).join(", ")}`,
       );
     }
 

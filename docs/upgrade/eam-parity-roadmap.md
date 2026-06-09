@@ -48,10 +48,10 @@ change, a validation command, and a pushed commit.
 
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
-| EAM mechanism parity | 67% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, topology PEP/audit context, deterministic subagent lineage and handoff edge IDs, bounded role defaults, first-class agent-runtime delegate metadata fields, daemon-owned MCP tool gateway execution, profile/env-selected MCP OTel recorder plans injected into daemon MCP dependencies, frontend topology view-model, workbench MCP directory view, daemon retain/reflect memory bridge, optional OpenTelemetry MCP adapter hooks, launcher fail-fast supervision, and repeatable EAM parity audits now exist. Directory-level parity reports `exact=22`, `equivalent=9`, `drift=0`, `missing=0`, `extra=4`; rename-aware file-level parity reports `exact=15`, `equivalent=8`, `drift=8`, `missing=0`, `extra=4`, so structure presence is not treated as behavioral parity and product namespace migration is not treated as mechanism drift. | Configure real OTLP exporter paths where needed, add live daemon source-adapter validation, and run live propagation plus Docker/local smoke gates. |
-| Web and Electron presentation | 68% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, the shared workbench renders swarm topology and MCP directory panels, a tested four-view workbench IA now covers Runs, Agents, Research, and Systems, selected-subagent drawers, citation ledgers, artifact detail cards, and visual-QA hooks are browser-safe frontend-core view models, `DESIGN.md` documents the token system, and `pnpm start:desktop` plans daemon + renderer + Electron shell with readiness gates plus a hidden Electron smoke mode. | Broader screenshot QA, regular live Electron smoke execution, and additional density/polish passes across long MCP schemas and artifact previews. |
-| Hardcoding, harness, SDK/API | 60% | Runtime env, artifact policy, daemon config, CLI config loading, typed CLI runtime script registry, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, first-class delegate metadata, profile-projected MCP/memory startup fragments, profile-selected MCP OTel dependency planning, retain/reflect memory bridge contracts, PEP execution context, browser-safe topology/MCP/navigation/detail selectors, MCP gateway alias catalogs, launcher executor tests, and the workbench smoke harness are being centralized through resolver/contract-backed APIs; launcher smoke contracts now own web/desktop readiness checks and desktop Electron smoke step overrides for both dry-run and live paths. | Replace switch-heavy routing where it blocks extensibility, add reflect runtime event contract kinds, harden remaining test harnesses, and deduplicate runtime-profile/daemon manifest topology projection. |
-| Docker/local ecosystem | 64% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, profile-generated MCP config fragments, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, profile-driven Electron shell startup, surface-aware `waitFor` gates, smoke readiness plans filtered from the selected profile checks, compose startup args reused from readiness projection, profile-selected daemon MCP OTel recorder planning, profile-gated retain/reflect enablement, and opt-in `workbench-host` web/desktop live smoke commands now exist. | Reuse resolved memory/topology contracts in broader harnesses, wire remaining launchers/CLI paths where behavior permits, and run live Docker/local web plus Electron smoke gates in a slower environment. |
+| EAM mechanism parity | 72% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, topology PEP/audit context, deterministic subagent lineage and handoff edge IDs, bounded role defaults, first-class agent-runtime delegate metadata fields, daemon-owned MCP tool gateway execution, profile/env-selected MCP OTel recorder plans, SDK/OTLP factory planning, frontend topology view-model, workbench MCP directory view, daemon retain/reflect memory bridge, typed reflect runtime events, launcher fail-fast supervision, and repeatable EAM parity audits now exist. Directory-level parity reports `exact=22`, `equivalent=9`, `drift=0`, `missing=0`, `extra=4`; rename-aware file-level parity reports `exact=15`, `equivalent=8`, `drift=8`, `missing=0`, `extra=4`, so structure presence is not treated as behavioral parity and product namespace migration is not treated as mechanism drift. | Inject concrete OTLP SDK factories where profiles require SDK-owned export, add live daemon source-adapter validation, and run live propagation plus Docker/local smoke gates. |
+| Web and Electron presentation | 69% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, the shared workbench renders swarm topology and MCP directory panels, a tested four-view workbench IA now covers Runs, Agents, Research, and Systems, selected-subagent drawers, citation ledgers, artifact detail cards, and visual-QA hooks are browser-safe frontend-core view models, `DESIGN.md` documents the token system, and `pnpm start:desktop` plans daemon + renderer + Electron shell with readiness gates plus a hidden Electron smoke mode. Smoke reports now expose explicit profile-derived targets for web `5183`, desktop renderer `5174`, and gateway `17373`. | Broader screenshot QA, regular live Electron smoke execution, and additional density/polish passes across long MCP schemas and artifact previews. |
+| Hardcoding, harness, SDK/API | 66% | Runtime env, artifact policy, daemon config, CLI config loading, typed CLI runtime script registry, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, first-class delegate metadata, profile-projected MCP/memory startup fragments, profile-selected MCP OTel dependency planning, SDK/OTLP factory contracts, typed memory reflect event contracts, retain/reflect runtime events, profile-first CLI MCP config resolution, PEP execution context, browser-safe topology/MCP/navigation/detail selectors, MCP gateway alias catalogs, launcher executor tests, and the workbench smoke harness are being centralized through resolver/contract-backed APIs; launcher smoke contracts now own web/desktop readiness checks and desktop Electron smoke step overrides for both dry-run and live paths. | Replace switch-heavy routing where it blocks extensibility, harden remaining test harnesses, inject concrete telemetry SDK factories, and deduplicate runtime-profile/daemon manifest topology projection. |
+| Docker/local ecosystem | 66% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, profile-generated MCP config fragments, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, profile-driven Electron shell startup, surface-aware `waitFor` gates, smoke readiness plans filtered from the selected profile checks, compose startup args reused from readiness projection, profile-selected daemon MCP OTel recorder planning, profile-gated retain/reflect enablement, profile-first CLI MCP reads, and opt-in `workbench-host` web/desktop live smoke commands now exist. | Reuse resolved memory/topology contracts in broader harnesses, inject runtime host telemetry factories, and run live Docker/local web plus Electron smoke gates in a slower environment. |
 
 Behavior-level evidence for the eight file-level drift rows now lives in
 `docs/upgrade/eam-behavior-parity.md` and the script-consumed
@@ -66,13 +66,13 @@ final completion.
 | Area | EAM source | Kirakira current | Status | Next implementation slice |
 | --- | --- | --- | --- | --- |
 | Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts`, `configs/runtime/profiles.json`, `packages/config-resolver/src/resolved-state.ts`, `packages/runtime-daemon/src/bin/daemon-config.ts`, `packages/runtime-contracts/src/status.ts`, `scripts/runtime-doctor.mjs` | Advancing. Contracts, inheritance, delegate bridge, kernel events, public topology schema, resolved profile topology projection, runtime-profile launcher topology merge, topology lane compilation, role-aware contract/routing/event projection, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, first-class agent-runtime delegate request fields, public topology manifest, profile doctor topology check, and PEP/audit execution context exist. | Add broader live daemon source-adapter validation. |
-| Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`, structured memory runtime profile state | Advancing. Kernel research executor, daemon composition, lazy default daemon memory recall source, profile-projected memory defaults, and profile-gated retain/reflect daemon memory bridge contracts exist. | Add gated Docker/local daemon integration coverage and reflect runtime event contract kinds. |
-| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection, `packages/frontend-core/src/mcp-directory.ts`, shared workbench MCP panel | Advancing. Catalog rendering, MCP manager registration, profile-rendered MCP alias catalogs, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, delegate/direct daemon MCP dependency construction, delegated ToolExecutor gateway closure, live workbench health/discovery view, direct-call gateway trust/audit context, policy/trust-enriched discovery metadata, injectable MCP OTel span recording, and profile/env-selected MCP OTel recorder plans now share typed daemon dependency contracts. File-level parity still flags `mcp-adapter` extras for alias catalog, gateway context, OTel bridge, and OTel profile planning, which are real Kirakira extension surfaces rather than EAM namespace drift. | Configure real OTLP/OpenTelemetry SDK exporters where appropriate, add live propagation smoke coverage, and replace remaining CLI MCP setup duplication where behavior permits. |
-| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources, retain/reflect bridges, and memory-backed checkpoint repositories from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, resolved memory profile contracts, profile-selected daemon checkpoint repository, profile-gated retain/reflect enablement, retain runtime events, and reflect service-outbox contract exposure exist. Rename-aware file parity now treats `eam_memory_pipeline` -> `kirakira_memory_pipeline` as equivalent and filters generated Python cache artifacts. The remaining memory drift is the checkpoint migration/repository surface in `memory-store`. | Reuse the contract from harnesses, verify live Docker/local checkpoint plus retain/reflect persistence, and add reflect runtime event kinds. |
+| Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`, structured memory runtime profile state | Advancing. Kernel research executor, daemon composition, lazy default daemon memory recall source, profile-projected memory defaults, profile-gated retain/reflect daemon memory bridge contracts, and typed reflect runtime events exist. | Add gated Docker/local daemon integration coverage. |
+| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/cli/src/runtime/runtime-mcp-config.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection, `packages/frontend-core/src/mcp-directory.ts`, shared workbench MCP panel | Advancing. Catalog rendering, MCP manager registration, profile-rendered MCP alias catalogs, profile-first CLI MCP reads with local custom-server overlay, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, delegate/direct daemon MCP dependency construction, delegated ToolExecutor gateway closure, live workbench health/discovery view, direct-call gateway trust/audit context, policy/trust-enriched discovery metadata, injectable MCP OTel span recording, profile/env-selected MCP OTel recorder plans, and SDK/OTLP factory planning now share typed dependency contracts. File-level parity still flags `mcp-adapter` extras for alias catalog, gateway context, OTel bridge, and OTel profile planning, which are real Kirakira extension surfaces rather than EAM namespace drift. | Inject a concrete OpenTelemetry SDK/OTLP factory where profiles require SDK-owned export and add live propagation smoke coverage. |
+| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources, retain/reflect bridges, and memory-backed checkpoint repositories from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, resolved memory profile contracts, profile-selected daemon checkpoint repository, profile-gated retain/reflect enablement, retain runtime events, reflect runtime events, and reflect service-outbox contract exposure exist. Rename-aware file parity now treats `eam_memory_pipeline` -> `kirakira_memory_pipeline` as equivalent and filters generated Python cache artifacts. The remaining memory drift is the checkpoint migration/repository surface in `memory-store`. | Reuse the contract from harnesses and verify live Docker/local checkpoint plus retain/reflect persistence. |
 | Policy and harness | `reference_project/eam-agent/packages/policy-engine`, `packages/eamd`, `policies/*` | `packages/policy-engine`, `packages/kirakirad`, `policies/*`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts` | Advancing. PEP/PDP packages exist; daemon direct MCP calls and delegated subagent ToolExecutor paths now pass role/lane execution context into PEP without using topology roles as principal roles, and delegated tool calls now route through the same daemon MCP gateway surface. | Ensure web/desktop/direct/delegated tool actions share the same profile-selected OTel/audit context; reduce remaining harness duplication. |
 | Registry and skills | `reference_project/eam-agent/packages/registry-client`, `packages/skill-runtime` | `packages/registry-client`, `packages/skill-runtime`, `skills-lock.json` | Partial. Packages exist; lockfile is currently untracked local state. | Decide tracked vs generated lockfile policy; connect registry trust decisions to runtime install/activation UI and CLI. |
 | Audit and tracing | `reference_project/eam-agent/packages/audit-ledger`, `docs/plane/eam-agent-tracing` | `packages/audit-ledger`, `docs/plane/kirakira-agent-tracing`, policy-engine ledger writer execution context | Advancing. Ledger package and tracing plane exist; policy decision/tool execution audit rows now preserve subagent role/lane execution context. Rename-aware file parity now treats the tracing doc filename token rename `eam-` -> `kirakira-` as equivalent, so no tracing docs file drift remains. | Emit OTel-compatible spans for run, tool, MCP, subagent, research, memory retrieval, and policy decisions. |
-| Runtime profiles | `reference_project/eam-agent/packages/config-resolver`, `agent.toml`, `policy.yaml` | `configs/runtime/profiles.json`, `packages/config-resolver`, `scripts/runtime-profile.mjs`, daemon resolved-config startup, CLI resolver adapter | Advancing. Daemon and CLI now consume resolved config, and profile projection can emit MCP config plus memory-stack startup fragments without writing local `.mcp.json`. | Move remaining CLI config subcommands and init/doctor surfaces away from local helper duplication, then wire projection fragments into launchers where behavior permits. |
+| Runtime profiles | `reference_project/eam-agent/packages/config-resolver`, `agent.toml`, `policy.yaml` | `configs/runtime/profiles.json`, `packages/config-resolver`, `scripts/runtime-profile.mjs`, daemon resolved-config startup, CLI resolver adapter | Advancing. Daemon and CLI now consume resolved config, profile projection can emit MCP config plus memory-stack startup fragments without writing local `.mcp.json`, and read-only CLI MCP commands now resolve the profile projection before local compatibility overlays. | Move remaining CLI config subcommands and init/doctor surfaces away from local helper duplication, then wire projection fragments into launchers where behavior permits. |
 | Runtime protocol | `reference_project/eam-agent/packages/runtime-contracts`, daemon/browser/desktop clients | `packages/runtime-contracts`, daemon/browser/desktop clients, runtime manifest MCP projection | Advancing. Ack payload parsing, public MCP runtime directory, MCP tool invocation results, MCP discovery results, and desktop preload validation are centralized in runtime contracts. | Extend the same contract layer to richer gateway/audit/tracing results and live workbench projections. |
 | Presentation shell | `reference_project/openhuman/app`, `reference_project/openhuman/src`, `reference_project/openhuman/design-previews` | `apps/web`, `apps/desktop`, `packages/frontend-app`, `packages/frontend-core`, `DESIGN.md` | Advancing. Shared workbench now has manifest-aware swarm topology, MCP directory panels, tested navigation view models, active Runs/Agents/Research/Systems workspace surfaces, selected subagent drawers, citation ledgers, artifact detail cards, and visual-QA hooks backed by frontend-core projections. | Broaden screenshot QA, keep long-schema/detail density polished, and keep Electron/web parity as the IA evolves. |
 
@@ -88,9 +88,9 @@ Latest four-lane audit intake on 2026-06-09:
   lane-capacity compilation, role-aware contract normalization, role-derived
   lane routing, role/requested-lane event projection, deterministic lineage
   IDs, handoff edge IDs, role defaults, sanitized manifest topology projection,
-  profile doctor topology validation, and PEP/audit execution context.
-  Remaining work is first-class delegate request metadata, gateway OTel/audit
-  convergence, and broader live daemon source-adapter validation.
+  profile doctor topology validation, first-class delegate request metadata,
+  and PEP/audit execution context. Remaining work is gateway OTel/audit
+  convergence and broader live daemon source-adapter validation.
 - **2026-06-09 EAM parity audit normalization:** `scripts/eam-parity-audit.mjs`
   now compares source file paths after scoped namespace normalization rather
   than raw product-token paths. It treats `eamd` -> `kirakirad`,
@@ -101,10 +101,11 @@ Latest four-lane audit intake on 2026-06-09:
   file-level audit dropped from `drift=11` to `drift=8`; remaining true drift
   is concentrated in `agent-runtime`, `cli`, `config-resolver`, `kirakirad`,
   `mcp-adapter`, `memory-store`, `orchestrator-kernel`, and `runtime-daemon`.
-- **Presentation:** shells and gateway are usable, but `workbench.tsx` and
-  `styles.css` are too large and event-log oriented. The next UI slice should
-  model OpenHuman-style tool timeline entries, citation chips, and artifact
-  cards as first-class dashboard data.
+- **Presentation:** shells and gateway are usable, and the shared workbench now
+  has first-class views for topology, MCP directory, citation ledgers, artifact
+  detail cards, and visual-QA hooks. The next UI slice should continue
+  density/polish passes across long MCP schemas, tool timeline entries,
+  citation chips, and artifact previews.
 - **2026-06-09 topology UI slice:** four-agent audit confirmed the next
   presentation step should replace the flat subagent list with a shared
   topology projection. `packages/frontend-core/src/topology.ts` now merges
@@ -139,9 +140,10 @@ Latest four-lane audit intake on 2026-06-09:
   now exposes a `projection` action that emits profile-derived MCP config and
   memory-stack startup fragments without reading or writing local `.mcp.json`.
   `packages/config-resolver` exposes the same resolved-state projection shape
-  for downstream daemon, launcher, and harness consumers. Remaining risk is
-  replacing older callers that still assemble MCP or memory-stack details
-  locally.
+  for downstream daemon, launcher, and harness consumers. Read-only CLI MCP
+  commands now resolve the profile projection first and overlay non-conflicting
+  local custom servers. Remaining risk is replacing older callers that still
+  assemble memory-stack or topology details locally.
 - **2026-06-09 MCP directory UI slice:** the shared web/Electron workbench now
   exposes live MCP discovery through `runtime.listMcpTools()`, using
   `packages/frontend-core/src/mcp-directory.ts` for health, tool count, and
@@ -164,8 +166,10 @@ Latest four-lane audit intake on 2026-06-09:
   `mcp_call` now create injectable MCP client spans from the shared gateway
   metadata, expose span id/status/duration through runtime contracts, and
   propagate W3C `traceparent` through MCP `params._meta` when a recorder is
-  supplied. Tests use an in-memory exporter; no real OTLP transport is wired
-  yet.
+  supplied. Tests use an in-memory exporter; the adapter can now select an
+  explicit OpenTelemetry SDK/OTLP factory mode without pretending export exists,
+  but daemon/runtime hosts still need to inject a concrete factory when a
+  selected profile requires SDK-owned export.
 - **2026-06-09 workbench live smoke gate slice:** `pnpm e2e:workbench` now
   wraps the profile-driven workbench launcher in an opt-in smoke harness. The
   default path reports the resolved plan without starting services; live mode
@@ -181,6 +185,8 @@ Latest four-lane audit intake on 2026-06-09:
   local literals, and the workbench smoke gate now uses resolved
   `workbench-host` readiness names plus launcher-owned smoke step overrides
   instead of local presentation-port literals or wrapper-only desktop branching.
+  The dry-run smoke report now exposes explicit profile-derived targets for
+  web `5183`, desktop renderer `5174`, and gateway `17373`.
   Remaining work is broader daemon startup coverage, regular live Electron
   smoke execution, and Compose duplication reduction.
 - **Architecture/API:** the largest hardcoding seam is no longer package
@@ -203,14 +209,16 @@ Latest four-lane audit intake on 2026-06-09:
   daemon MCP PEP/audit paths receive `context.execution` role metadata, and
   direct daemon MCP discovery/calls carry shared gateway trust/policy/audit/OTel
   metadata. Legacy gateway aliases now have an injectable catalog with profile
-  rendering from `configs/runtime/profiles.json`. Web/Electron now expose a
-  shared MCP argument playground backed by discovery metadata. Delegate lineage,
-  topology, and permission metadata are now first-class agent-runtime request
-  fields; daemon MCP dependencies now select the profile-driven OTel recorder;
-  daemon memory dependencies now expose retain/reflect bridge contracts. Next
-  work should target a real OTLP/OpenTelemetry SDK exporter, reflect runtime
-  event contract kinds, live memory/topology source-adapter validation, and
-  per-service readiness.
+  rendering from `configs/runtime/profiles.json`, and read-only CLI MCP commands
+  consume that profile-projected config before local overlays. Web/Electron now
+  expose a shared MCP argument playground backed by discovery metadata. Delegate
+  lineage, topology, and permission metadata are now first-class agent-runtime
+  request fields; daemon MCP dependencies now select the profile-driven OTel
+  recorder; OTel SDK/OTLP mode has an explicit factory boundary instead of a
+  fake exporter; daemon memory dependencies now emit typed retain/reflect
+  runtime events. Next work should target concrete runtime-host SDK factory
+  injection, live memory/topology source-adapter validation, and per-service
+  readiness.
 
 ## Execution Queue
 
@@ -220,9 +228,9 @@ Latest four-lane audit intake on 2026-06-09:
    paths; memory recall construction now joins daemon deep-research through a
    lazy profile/env-driven factory, daemon checkpoints can use a
    profile-selected memory-store Postgres envelope repository, and
-   retain/reflect service bridge contracts are now wired. Remaining work is
-   live checkpoint plus retain/reflect persistence verification, reflect runtime
-   event kinds, and OTel/audit convergence.
+   retain/reflect service bridge contracts plus typed runtime events are now
+   wired. Remaining work is live checkpoint plus retain/reflect persistence
+   verification and OTel/audit convergence.
 2. **MCP runtime loop:** expose daemon MCP tools/health through
    `RuntimeManifest`, browser gateway, and desktop IPC.
   Tool invocation, typed live discovery, direct call run-event emission, and
@@ -230,15 +238,16 @@ Latest four-lane audit intake on 2026-06-09:
   trust/audit context and discovery results include typed policy/trust/audit
   metadata plus an injectable OTel-compatible span recorder/export bridge; the
   shared workbench argument playground is now wired. The daemon dependency path
-  now selects profile/env-driven recorder plans. A real OTLP/OpenTelemetry SDK
-  adapter and live propagation gate remain.
+  now selects profile/env-driven recorder plans, and the adapter can select an
+  explicit OpenTelemetry SDK/OTLP factory mode without pretending export exists.
+  Concrete runtime-host SDK factory injection and live propagation gates remain.
 3. **Memory daemon composition:** construct memory service dependencies from
    resolved runtime profile env and inject memory recall into deep research by
    default.
    Lazy daemon recall injection, structured memory profile projection,
-   profile-selected memory checkpoint repository injection, and profile-gated
-   retain/reflect memory service bridges are now wired and unit-tested; gated
-   Docker/local integration remains.
+   profile-selected memory checkpoint repository injection, profile-gated
+   retain/reflect memory service bridges, and typed reflect runtime events are
+   now wired and unit-tested; gated Docker/local integration remains.
 4. **Swarm topology projection:** add resolved orchestration topology fields
    and compile them into kernel lane capacities, child runtime policy, and
    lineage events.

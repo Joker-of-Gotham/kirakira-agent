@@ -1,8 +1,9 @@
 import { Command, Args } from "@oclif/core";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { getMcpConfigPath } from "@kirakira/core";
-import { McpClientManager, parseMcpConfigJson, applyOauthAuth } from "@kirakira/mcp-adapter";
+import { McpClientManager, applyOauthAuth } from "@kirakira/mcp-adapter";
+import {
+  formatMcpConfigSource,
+  resolveRuntimeMcpConfig,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpLogin extends Command {
   static override description = "Authenticate with a remote MCP server (OAuth/token)";
@@ -13,19 +14,15 @@ export default class McpLogin extends Command {
 
   async run(): Promise<void> {
     const { args } = await this.parse(McpLogin);
-    const configPath = getMcpConfigPath(process.cwd());
-
-    if (!existsSync(configPath)) {
-      this.error(`No MCP config at ${configPath}.`);
-    }
-
-    const raw = await readFile(configPath, "utf8");
-    const servers = parseMcpConfigJson(raw);
+    const resolution = await resolveRuntimeMcpConfig();
+    const servers = resolution.servers;
     const target = servers.find((s) => s.name === args.name);
 
     if (!target) {
       const known = servers.map((s) => s.name).join(", ");
-      this.error(`Unknown server "${args.name}". Known: ${known || "(none)"}`);
+      this.error(
+        `Unknown server "${args.name}" in ${formatMcpConfigSource(resolution)}. Known: ${known || "(none)"}`,
+      );
     }
 
     if (target.auth.mode === "oauth") {
@@ -40,9 +37,11 @@ export default class McpLogin extends Command {
     }
 
     const manager = new McpClientManager();
-    manager.registerServer(target!);
+    manager.registerServer(target);
     try {
-      this.log(`Connecting to ${args.name} (${target!.transport.kind})…`);
+      this.log(
+        `Connecting to ${args.name} (${target.transport.kind}) from ${formatMcpConfigSource(resolution)}`,
+      );
       await manager.startServer(args.name);
       const health = manager.getHealth(args.name);
       this.log(`Authentication / connectivity: ${health}`);

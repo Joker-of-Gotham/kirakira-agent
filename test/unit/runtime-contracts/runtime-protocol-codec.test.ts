@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   RuntimeRequestTracker,
+  type RunEventKind,
   makeRuntimeProtocolError,
   parseRuntimeArtifactContentAckResult,
   parseRuntimeClientMessage,
@@ -48,6 +49,26 @@ describe("runtime protocol codec", () => {
     ).toMatchObject({
       ok: false,
       error: { code: "invalid_filter", messageId: "sub-1" },
+    });
+
+    const reflectEventKinds: RunEventKind[] = [
+      "memory.reflect.started",
+      "memory.reflect.completed",
+      "memory.reflect.failed",
+    ];
+    expect(
+      parseRuntimeClientMessage({
+        type: "subscribe",
+        messageId: "reflect-sub-1",
+        runId: "run-1",
+        filter: { kinds: reflectEventKinds },
+      }),
+    ).toMatchObject({
+      ok: true,
+      message: {
+        filter: { kinds: reflectEventKinds },
+        messageId: "reflect-sub-1",
+      },
     });
 
     expect(

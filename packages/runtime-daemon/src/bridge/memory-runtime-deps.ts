@@ -145,6 +145,11 @@ export const DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS = [
   "memory.retain.completed",
   "memory.retain.failed",
 ] as const satisfies readonly RunEventKind[];
+export const DAEMON_MEMORY_REFLECT_RUNTIME_EVENTS = [
+  "memory.reflect.started",
+  "memory.reflect.completed",
+  "memory.reflect.failed",
+] as const satisfies readonly RunEventKind[];
 export const DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS = [
   "memory.fact.extract",
   "memory.index.materialize",
@@ -703,14 +708,14 @@ function memoryOperationDestinations(
       eventTypes: serviceOutboxEvents,
     },
   ];
-  if (operation === "retain") {
-    destinations.push({
-      channel: "runtime-events",
-      enabled: enabled && eventSink !== undefined,
-      eventKinds: DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
-      requiresRunId: true,
-    });
-  }
+  destinations.push({
+    channel: "runtime-events",
+    enabled: enabled && eventSink !== undefined,
+    eventKinds: operation === "retain"
+      ? DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS
+      : DAEMON_MEMORY_REFLECT_RUNTIME_EVENTS,
+    requiresRunId: true,
+  });
   return destinations;
 }
 
@@ -739,13 +744,8 @@ function createRetainReflectBridge(input: {
         invokeRetain(input.service!, request, context, input.eventSink)
     : undefined;
   const reflectInvoke = input.service
-    ? async (request: DaemonMemoryReflectRequest) => {
-        const service = input.service!;
-        if (!service.reflect) {
-          throw new Error("Daemon memory service does not implement reflect");
-        }
-        return service.reflect(request);
-      }
+    ? (request: DaemonMemoryReflectRequest, context?: DaemonMemoryOperationContext) =>
+        invokeReflect(input.service!, request, context, input.eventSink)
     : undefined;
   return {
     retain: memoryOperationContract(
@@ -819,6 +819,62 @@ async function invokeRetain(
   }
 }
 
+async function invokeReflect(
+  service: DaemonMemoryService,
+  request: DaemonMemoryReflectRequest,
+  context: DaemonMemoryOperationContext | undefined,
+  eventSink: DaemonRunEventSink | undefined,
+): Promise<DaemonMemoryReflectReceipt> {
+  if (!service.reflect) {
+    throw new Error("Daemon memory service does not implement reflect");
+  }
+  const operationId = ulid();
+  const startedAt = Date.now();
+  const startedAtIso = new Date(startedAt).toISOString();
+  const runId = context?.runId;
+  const basePayload = memoryReflectRequestPayload(operationId, request, context, startedAtIso);
+  if (eventSink && runId) {
+    await emitDaemonMemoryOperationEvent(
+      eventSink,
+      runId,
+      "memory.reflect.started",
+      basePayload,
+    );
+  }
+  try {
+    const receipt = await service.reflect(request);
+    if (eventSink && runId) {
+      await emitDaemonMemoryOperationEvent(
+        eventSink,
+        runId,
+        "memory.reflect.completed",
+        {
+          ...basePayload,
+          ...memoryReflectReceiptPayload(receipt),
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt,
+        },
+      );
+    }
+    return receipt;
+  } catch (error) {
+    if (eventSink && runId) {
+      await emitDaemonMemoryOperationEvent(
+        eventSink,
+        runId,
+        "memory.reflect.failed",
+        {
+          ...basePayload,
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt,
+          error: errorMessage(error),
+        },
+      );
+    }
+    throw error;
+  }
+}
+
 function memoryRetainRequestPayload(
   operationId: string,
   request: DaemonMemoryRetainRequest,
@@ -854,6 +910,53 @@ function memoryRetainReceiptPayload(receipt: DaemonMemoryRetainReceipt): Record<
     outboxEventId: receipt.outboxEventId,
     retainedAt: receipt.retainedAt,
     serviceOutboxEventTypes: DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
+  });
+}
+
+function memoryReflectRequestPayload(
+  operationId: string,
+  request: DaemonMemoryReflectRequest,
+  context: DaemonMemoryOperationContext | undefined,
+  startedAt: string,
+): Record<string, unknown> {
+  return compactRecord({
+    memoryOperationId: operationId,
+    operation: "reflect",
+    runId: context?.runId,
+    sessionId: context?.sessionId,
+    traceId: context?.traceId,
+    parentTaskId: context?.parentTaskId,
+    nodeId: context?.nodeId,
+    tenantId: request.tenantId,
+    workspaceId: request.workspaceId,
+    scope: request.scope,
+    factIds: request.factIds?.slice(0, 50),
+    factIdCount: request.factIds?.length,
+    episodeIds: request.episodeIds?.slice(0, 50),
+    episodeIdCount: request.episodeIds?.length,
+    maxConsolidations: request.maxConsolidations,
+    startedAt,
+    metadata: sanitizeRecord(context?.metadata),
+  });
+}
+
+function memoryReflectReceiptPayload(receipt: DaemonMemoryReflectReceipt): Record<string, unknown> {
+  return compactRecord({
+    observationIds: receipt.observationIds.slice(0, 50),
+    observationCount: receipt.observationIds.length,
+    beliefUpdates: receipt.beliefUpdates
+      .slice(0, 50)
+      .map((update) => ({ beliefId: update.beliefId, action: update.action })),
+    beliefUpdateCount: receipt.beliefUpdates.length,
+    contradictionCount: receipt.contradictions.length,
+    contradictionFactIds: uniqueStrings(
+      receipt.contradictions.flatMap((contradiction) => [
+        contradiction.factId,
+        contradiction.conflictsWith,
+      ]),
+    ).slice(0, 50),
+    reflectedAt: receipt.reflectedAt,
+    serviceOutboxEventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
   });
 }
 
@@ -896,6 +999,10 @@ function sanitizeRecord(
     }
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return [...new Set(values)].filter((value) => value.length > 0);
 }
 
 function preview(value: string, max = 160): string {

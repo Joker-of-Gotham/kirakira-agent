@@ -101,6 +101,147 @@ describe("MCP OTel recorder profile", () => {
     );
   });
 
+  it("selects an OpenTelemetry SDK recorder plan from env and profile OTLP configuration", () => {
+    const envPlan = buildMcpOtelRecorderPlan({
+      env: {
+        KIRAKIRA_MCP_OTEL_MODE: "opentelemetry-sdk",
+        OTEL_SERVICE_NAME: "kirakira-env",
+        OTEL_TRACES_EXPORTER: "otlp",
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "https://collector.example.test/v1/traces",
+        OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: "http/protobuf",
+        OTEL_EXPORTER_OTLP_TRACES_TIMEOUT: "7500",
+      },
+      profile: {
+        name: "profiled-host",
+        mode: "host",
+        mcp: {
+          telemetry: {
+            mode: "memory",
+            serviceName: "profile-service",
+            otlp: {
+              tracesEndpoint: "https://profile-collector.example.test/v1/traces",
+            },
+          },
+        },
+      },
+    });
+    const profilePlan = buildMcpOtelRecorderPlan({
+      env: {},
+      profile: {
+        name: "profiled-host",
+        mode: "host",
+        mcp: {
+          telemetry: {
+            enabled: true,
+            mode: "opentelemetry-sdk",
+            serviceName: "profile-service",
+            exporter: { type: "otlp" },
+            otlp: {
+              tracesEndpoint: "https://profile-collector.example.test/v1/traces",
+              tracesProtocol: "http/protobuf",
+              tracesTimeoutMs: 5000,
+            },
+          },
+        },
+      },
+    });
+
+    expect(envPlan).toMatchObject({
+      enabled: true,
+      mode: "opentelemetry-sdk",
+      defaultAttributes: {
+        "service.name": "kirakira-env",
+        "kirakira.runtime.profile": "profiled-host",
+      },
+      sdk: {
+        serviceName: "kirakira-env",
+        tracesExporter: "otlp",
+        otlp: {
+          tracesEndpoint: "https://collector.example.test/v1/traces",
+          tracesProtocol: "http/protobuf",
+          tracesTimeoutMs: 7500,
+        },
+      },
+    });
+    expect(profilePlan).toMatchObject({
+      enabled: true,
+      mode: "opentelemetry-sdk",
+      defaultAttributes: {
+        "service.name": "profile-service",
+        "kirakira.runtime.profile": "profiled-host",
+      },
+      sdk: {
+        serviceName: "profile-service",
+        tracesExporter: "otlp",
+        otlp: {
+          tracesEndpoint: "https://profile-collector.example.test/v1/traces",
+          tracesProtocol: "http/protobuf",
+          tracesTimeoutMs: 5000,
+        },
+      },
+    });
+  });
+
+  it("constructs an OpenTelemetry SDK recorder through an injected factory", () => {
+    const otelSpan = {
+      spanContext: vi.fn(() => ({
+        traceId: "cccccccccccccccccccccccccccccccc",
+        spanId: "dddddddddddddddd",
+      })),
+      setAttributes: vi.fn(),
+      end: vi.fn(),
+    };
+    const tracer = { startSpan: vi.fn(() => otelSpan) };
+    const api: OpenTelemetryApiLike = {
+      context: { active: vi.fn(() => ({})) },
+      trace: {
+        getTracer: vi.fn(() => tracer),
+        setSpan: vi.fn((context, span) => ({ context, span })),
+      },
+      propagation: { inject: vi.fn() },
+    };
+    const shutdown = vi.fn();
+    const sdkFactory = vi.fn(() => ({ api, shutdown }));
+    const plan = buildMcpOtelRecorderPlan({
+      env: {
+        KIRAKIRA_MCP_OTEL_MODE: "opentelemetry-sdk",
+        KIRAKIRA_MCP_OTEL_TRACER_NAME: "kirakira.sdk.mcp",
+        OTEL_SERVICE_NAME: "kirakira-sdk-test",
+      },
+    });
+    const created = createMcpOtelRecorderFromPlan({ plan, sdkFactory });
+
+    created.recorder?.startSpan({
+      name: "tools/call fs.read",
+      kind: "CLIENT",
+      attributes: { "mcp.method.name": "tools/call" },
+    });
+
+    expect(sdkFactory).toHaveBeenCalledWith({ plan });
+    expect(created.shutdown).toBe(shutdown);
+    expect(api.trace.getTracer).toHaveBeenCalledWith("kirakira.sdk.mcp", undefined);
+    expect(tracer.startSpan).toHaveBeenCalledWith(
+      "tools/call fs.read",
+      expect.objectContaining({
+        attributes: expect.objectContaining({
+          "service.name": "kirakira-sdk-test",
+          "mcp.method.name": "tools/call",
+        }),
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("fails clearly when an OpenTelemetry SDK plan lacks a factory", () => {
+    const plan = buildMcpOtelRecorderPlan({
+      env: { KIRAKIRA_MCP_OTEL_MODE: "opentelemetry-sdk" },
+    });
+
+    expect(() => createMcpOtelRecorderFromPlan({ plan })).toThrow(
+      /mode "opentelemetry-sdk" requires an injected OpenTelemetry SDK\/OTLP exporter factory/u,
+    );
+  });
+
   it("fails clearly when an OpenTelemetry API plan lacks an adapter", () => {
     const plan = buildMcpOtelRecorderPlan({
       env: { KIRAKIRA_MCP_OTEL_MODE: "opentelemetry-api" },

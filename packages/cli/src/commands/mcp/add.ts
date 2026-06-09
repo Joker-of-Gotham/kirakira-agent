@@ -3,6 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { getMcpConfigPath } from "@kirakira/core";
+import {
+  runtimeMcpLocalEditNotice,
+} from "../../runtime/runtime-mcp-config.js";
 
 /* ------------------------------------------------------------------ */
 /*  Smart package detection                                            */
@@ -190,9 +193,11 @@ export default class McpAdd extends Command {
       entry["env"] = env;
     }
 
-    await this.writeEntry(serverName, entry);
+    const configPath = await this.writeEntry(serverName, entry);
 
     this.log(`\n✓ Added MCP server "${serverName}"`);
+    this.log(`  local edit target: ${configPath}`);
+    await this.logProjectionNotice(configPath, [serverName]);
     this.log(`  command: ${command} ${cmdArgs.join(" ")}`);
     this.log(`\nThe server will be auto-discovered when you start the agent.`);
     this.log(`All tools will be available as mcp.${serverName}.<tool_name>\n`);
@@ -218,14 +223,16 @@ export default class McpAdd extends Command {
       entry["env"] = envObj;
     }
 
-    await this.writeEntry(serverName, entry);
+    const configPath = await this.writeEntry(serverName, entry);
+    this.log(`  local edit target: ${configPath}`);
+    await this.logProjectionNotice(configPath, [serverName]);
     this.log(`✓ Added HTTP MCP server "${serverName}" → ${flags.url}`);
   }
 
   private async writeEntry(
     serverName: string,
     entry: Record<string, unknown>,
-  ): Promise<void> {
+  ): Promise<string> {
     const configPath = getMcpConfigPath(process.cwd());
 
     let config: { mcpServers: Record<string, unknown> } = { mcpServers: {} };
@@ -247,5 +254,20 @@ export default class McpAdd extends Command {
       JSON.stringify(config, null, 2) + "\n",
       "utf-8",
     );
+    return configPath;
+  }
+
+  private async logProjectionNotice(
+    configPath: string,
+    editedServers: string[],
+  ): Promise<void> {
+    const notice = await runtimeMcpLocalEditNotice({
+      configPath,
+      serverNames: editedServers,
+      action: "upsert",
+    });
+    if (!notice) return;
+    if (notice.level === "warn") this.warn(notice.message);
+    else this.log(`  ${notice.message}`);
   }
 }

@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { existsSync, readFileSync } from "node:fs";
-import { getMcpConfigPath } from "@kirakira/core";
 import {
   McpClientManager,
-  parseMcpConfigJson,
   McpGateway,
   type GatewayTool,
 } from "@kirakira/mcp-adapter";
+import { resolveRuntimeMcpConfig } from "../../runtime/runtime-mcp-config.js";
 import type { McpServerStatus } from "../types.js";
 
 export interface McpToolDescriptor {
@@ -57,36 +55,18 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
   async function startMcp(): Promise<void> {
     setReady(false);
     setError(undefined);
-    const configPath = getMcpConfigPath(workspaceRoot);
-    if (!existsSync(configPath)) {
-      setError("No .mcp.json found");
+    let resolution;
+    try {
+      resolution = await resolveRuntimeMcpConfig({ cwd: workspaceRoot });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
       setServers([]);
       setTools([]);
       setReady(true);
       return;
     }
 
-    let raw: string;
-    try {
-      raw = readFileSync(configPath, "utf-8");
-    } catch (e) {
-      setError(`Failed to read ${configPath}: ${e instanceof Error ? e.message : String(e)}`);
-      setServers([]);
-      setTools([]);
-      setReady(true);
-      return;
-    }
-
-    let configs;
-    try {
-      configs = parseMcpConfigJson(raw);
-    } catch (e) {
-      setError(`Invalid .mcp.json: ${e instanceof Error ? e.message : String(e)}`);
-      setServers([]);
-      setTools([]);
-      setReady(true);
-      return;
-    }
+    const configs = resolution.servers;
 
     if (configs.length === 0) {
       setServers([]);
@@ -110,7 +90,10 @@ export function useMcp(workspaceRoot: string): UseMcpReturn {
     const manager = new McpClientManager();
     manager.registerMany(configs);
 
-    const gateway = new McpGateway({ manager });
+    const gateway = new McpGateway({
+      manager,
+      ...(resolution.aliasCatalog ? { aliasCatalog: resolution.aliasCatalog } : {}),
+    });
     gatewayRef.current = gateway;
 
     try {

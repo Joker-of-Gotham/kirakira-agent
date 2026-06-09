@@ -12,6 +12,10 @@ import {
   sanitizeRuntimeDaemonHealth,
   sanitizeRuntimeManifest,
 } from "../../../packages/runtime-contracts/src/index.js";
+import {
+  MEMORY_RUN_EVENT_KINDS,
+  type RunEventKind,
+} from "../../../packages/runtime-contracts/src/events.js";
 
 const collectKeys = (value: unknown): string[] => {
   if (!value || typeof value !== "object") return [];
@@ -170,6 +174,34 @@ describe("runtime status contract", () => {
     expect(JSON.stringify(sanitized)).not.toContain("secret-token");
     expect(JSON.stringify(sanitized)).not.toContain("system_preamble");
     expect(collectKeys(sanitized)).not.toContain("token");
+  });
+
+  it("advertises memory reflect event kinds from the central event registry", () => {
+    const reflectEventKinds: RunEventKind[] = [
+      "memory.reflect.started",
+      "memory.reflect.completed",
+      "memory.reflect.failed",
+    ];
+    const manifest = runtimeManifest();
+
+    expect(manifest.capabilities.memory.eventKinds).toEqual([
+      ...MEMORY_RUN_EVENT_KINDS,
+    ]);
+    expect(manifest.capabilities.memory.eventKinds).toEqual(
+      expect.arrayContaining(reflectEventKinds),
+    );
+    expect(
+      isRuntimeManifest({
+        ...manifest,
+        capabilities: {
+          ...manifest.capabilities,
+          memory: {
+            ...manifest.capabilities.memory,
+            eventKinds: ["memory.reflect.started", "memory.reflect.unknown"],
+          },
+        },
+      }),
+    ).toBe(false);
   });
 
   it("builds daemon health with legacy booleans and typed service details", () => {

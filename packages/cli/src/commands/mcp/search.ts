@@ -1,12 +1,13 @@
 import { Command, Args } from "@oclif/core";
-import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
-import { getMcpConfigPath } from "@kirakira/core";
 import { loadRegistryAuth } from "../../registry/auth.js";
 import { RegistryClient } from "../../registry/client.js";
+import {
+  formatMcpConfigSource,
+  resolveRuntimeMcpConfig,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpSearch extends Command {
-  static override description = "Search MCP servers in the registry or local .mcp.json";
+  static override description = "Search MCP servers in the registry or resolved MCP config";
 
   static override args = {
     query: Args.string({ description: "Search query", required: true }),
@@ -14,7 +15,6 @@ export default class McpSearch extends Command {
 
   async run(): Promise<void> {
     const { args } = await this.parse(McpSearch);
-    const cwd = process.cwd();
     const q = args.query.toLowerCase();
 
     const auth = await loadRegistryAuth();
@@ -39,18 +39,10 @@ export default class McpSearch extends Command {
       return;
     }
 
-    const configPath = getMcpConfigPath(cwd);
-    if (!existsSync(configPath)) {
-      this.error(
-        "No local .mcp.json and KIRAKIRA_REGISTRY_URL is unset. Configure one or set KIRAKIRA_REGISTRY_URL for registry search.",
-      );
-    }
-
-    const raw = await readFile(configPath, "utf8");
-    const config = JSON.parse(raw) as { mcpServers?: Record<string, unknown> };
-    const names = Object.keys(config.mcpServers ?? {});
+    const resolution = await resolveRuntimeMcpConfig();
+    const names = Object.keys(resolution.config.mcpServers ?? {});
     const hits = names.filter((n) => n.toLowerCase().includes(q));
-    this.log(`Local MCP servers matching "${args.query}" (${hits.length}):`);
+    this.log(`${formatMcpConfigSource(resolution)} servers matching "${args.query}" (${hits.length}):`);
     for (const n of hits) {
       this.log(`  ${n}`);
     }

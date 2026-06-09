@@ -64,6 +64,7 @@
       "status": "partial",
       "behavior": "Kirakira adds runtime profile and doctor command bridges plus provider setup and TUI presentation surfaces while retaining the EAM CLI file set.",
       "extensionFiles": [
+        "packages/cli/src/runtime/runtime-mcp-config.ts",
         "packages/cli/src/commands/runtime/doctor.ts",
         "packages/cli/src/commands/runtime/index.ts",
         "packages/cli/src/commands/runtime/profile.ts",
@@ -86,15 +87,23 @@
         },
         {
           "kind": "test",
+          "path": "test/unit/cli/runtime-mcp-config.test.ts",
+          "command": "pnpm exec vitest run test/unit/cli/runtime-mcp-config.test.ts test/unit/cli"
+        },
+        {
+          "kind": "test",
           "path": "test/tui/layout-stability.test.ts"
         },
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-runtime-profile-cli.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
         }
       ],
       "remainingGaps": [
-        "Replace remaining CLI MCP setup duplication with the resolved runtime profile projection where command behavior permits; runtime script names are now centralized behind a typed registry.",
         "Keep provider setup and home-screen UI covered by focused TUI tests when the workbench IA changes."
       ]
     },
@@ -189,6 +198,10 @@
           "path": "docs/change-records/2026-06-09-runtime-mcp-discovery-events.md"
         },
         {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
+        },
+        {
           "kind": "spec",
           "url": "https://modelcontextprotocol.io/specification/2025-11-25/schema"
         },
@@ -198,7 +211,7 @@
         }
       ],
       "remainingGaps": [
-        "Configure a real OTLP/OpenTelemetry SDK exporter when required by the selected runtime profile.",
+        "Inject a concrete OpenTelemetry SDK/OTLP factory from daemon/runtime hosts when a selected profile requires SDK-owned export.",
         "Add live propagation smoke coverage across daemon-owned MCP transports."
       ]
     },
@@ -231,11 +244,19 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/runtime-contracts/status.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-contracts test/unit/runtime-daemon/memory-runtime-deps.test.ts"
         }
       ],
       "remainingGaps": [
-        "Run gated Docker/local checkpoint and retain/reflect persistence validation against the test-host memory stack.",
-        "Add runtime-contract reflect event kinds before emitting reflect timeline events."
+        "Run gated Docker/local checkpoint and retain/reflect persistence validation against the test-host memory stack."
       ]
     },
     {
@@ -270,6 +291,10 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
         }
       ],
       "remainingGaps": [

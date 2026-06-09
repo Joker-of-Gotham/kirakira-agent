@@ -53,6 +53,18 @@ describe("workbench smoke gate", () => {
     ]);
     expect(smoke.checks).toEqual(["daemon:browser-gateway", "presentation:web"]);
     expect(smoke.checks).toEqual(smoke.readinessPlan.checks.map((check) => check.name));
+    expect(smoke.targets).toEqual({
+      "daemon:browser-gateway": {
+        type: "http-health",
+        target: "http://127.0.0.1:17373/healthz",
+        endpoint: "ws://127.0.0.1:17373/runtime",
+        responseSchema: "browser-gateway-health",
+      },
+      "presentation:web": {
+        type: "http",
+        target: "http://127.0.0.1:5183/",
+      },
+    });
     expect(smoke.readinessPlan.checks).toContainEqual(
       expect.objectContaining({
         name: "daemon:browser-gateway",
@@ -95,6 +107,13 @@ describe("workbench smoke gate", () => {
         target: "http://127.0.0.1:5199/",
       }),
     ]);
+    expect(smoke.targets["daemon:browser-gateway"]).toMatchObject({
+      target: "http://127.0.0.1:17399/healthz",
+      endpoint: "ws://127.0.0.1:17399/runtime",
+    });
+    expect(smoke.targets["presentation:web"]).toMatchObject({
+      target: "http://127.0.0.1:5199/",
+    });
     expect(JSON.stringify(smoke)).not.toContain("5183");
     expect(JSON.stringify(smoke)).not.toContain("17373");
   });
@@ -169,6 +188,9 @@ describe("workbench smoke gate", () => {
       "daemon:browser-gateway",
       "presentation:desktop",
     ]);
+    expect(smoke.targets["presentation:desktop"]).toMatchObject({
+      target: "http://127.0.0.1:5174/",
+    });
     expect(JSON.stringify(smoke)).not.toContain("5173");
   });
 

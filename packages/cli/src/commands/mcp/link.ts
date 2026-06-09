@@ -4,6 +4,9 @@ import { readFile, writeFile, mkdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { getMcpConfigPath } from "@kirakira/core";
 import { parseMcpConfigJson } from "@kirakira/mcp-adapter";
+import {
+  runtimeMcpLocalEditNotice,
+} from "../../runtime/runtime-mcp-config.js";
 
 export default class McpLink extends Command {
   static override description = "Link an MCP config file into this workspace's .mcp.json";
@@ -58,5 +61,20 @@ export default class McpLink extends Command {
 
     this.log(`Validated and merged ${Object.keys(incoming.mcpServers).length} server(s) from ${filePath}`);
     this.log(`Updated ${destPath}`);
+    await this.logProjectionNotice(destPath, Object.keys(incoming.mcpServers));
+  }
+
+  private async logProjectionNotice(
+    configPath: string,
+    editedServers: string[],
+  ): Promise<void> {
+    const notice = await runtimeMcpLocalEditNotice({
+      configPath,
+      serverNames: editedServers,
+      action: "upsert",
+    });
+    if (!notice) return;
+    if (notice.level === "warn") this.warn(notice.message);
+    else this.log(notice.message);
   }
 }
