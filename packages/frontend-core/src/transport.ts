@@ -1,10 +1,17 @@
 import type {
   EventFilter,
   RunEvent,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RuntimeBrowserGatewayHealth,
   RuntimeDaemonHealth,
   RuntimeRunMode,
   RuntimeRunOptions,
+} from "@kirakira/runtime-contracts";
+
+export type {
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
 } from "@kirakira/runtime-contracts";
 
 export type RuntimeTransportMode = "browser-gateway" | "desktop-ipc" | "mock";
@@ -62,6 +69,7 @@ export interface RuntimeTransport {
   getStatus?(): Promise<RuntimeTransportStatus>;
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<RuntimeTransportSnapshot>;
+  getArtifactContent(request: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent>;
   subscribeRun(
     runId: string,
     onEvent: (event: RuntimeTransportEvent) => void,

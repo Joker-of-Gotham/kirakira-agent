@@ -1,6 +1,8 @@
 import type {
   RuntimeClientMessage,
   RuntimeEndpointParts,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RuntimeRunMode,
   RuntimeServerMessage,
 } from "@kirakira/runtime-contracts";
@@ -71,6 +73,20 @@ const eventMatches = (
   }
   const kinds = subscription.options?.filter?.kinds;
   return !kinds || kinds.includes(event.kind);
+};
+
+const isArtifactContent = (value: unknown): value is RuntimeArtifactContent => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const artifact = value as Partial<RuntimeArtifactContent>;
+  return (
+    typeof artifact.runId === "string" &&
+    typeof artifact.artifactId === "string" &&
+    typeof artifact.path === "string" &&
+    typeof artifact.sizeBytes === "number" &&
+    typeof artifact.truncated === "boolean" &&
+    (artifact.encoding === "utf8" || artifact.encoding === "base64") &&
+    typeof artifact.content === "string"
+  );
 };
 
 export function createBrowserGatewayTransport(
@@ -271,6 +287,19 @@ export function createBrowserGatewayTransport(
         messageId: idFactory(),
       });
       return { runId, state };
+    },
+    async getArtifactContent(input: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent> {
+      const artifact = await request({
+        type: "get_artifact",
+        runId: input.runId,
+        artifactId: input.artifactId,
+        ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
+        messageId: idFactory(),
+      });
+      if (!isArtifactContent(artifact)) {
+        throw new Error("Runtime gateway returned an invalid artifact content response");
+      }
+      return artifact;
     },
     subscribeRun(
       runId: string,

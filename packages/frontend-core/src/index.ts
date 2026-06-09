@@ -1,5 +1,7 @@
 export type {
   ApprovalDecision,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RuntimeConnectionState,
   RuntimeTransport,
   RuntimeTransportEvent,

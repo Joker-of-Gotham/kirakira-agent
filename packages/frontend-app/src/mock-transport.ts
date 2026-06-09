@@ -1,6 +1,8 @@
 import type {
   RuntimeTransport,
   RuntimeTransportEvent,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -17,6 +19,7 @@ export function createMockRuntimeTransport(): RuntimeTransport {
   const eventsByRun = new Map<string, RunEvent[]>();
   const listenersByRun = new Map<string, Set<Listener>>();
   const timers = new Set<number>();
+  const artifactContentByRun = new Map<string, Map<string, RuntimeArtifactContent>>();
 
   const makeEvent = (
     runId: string,
@@ -76,6 +79,23 @@ export function createMockRuntimeTransport(): RuntimeTransport {
     const callId = `${runId}-tool`;
     const ticketId = `${runId}-approval`;
     const artifactId = `${runId}-artifact`;
+    const artifactContent: RuntimeArtifactContent = {
+      runId,
+      artifactId,
+      path: "artifacts/runtime-capability-manifest.md",
+      kind: "markdown",
+      createdAt: now(),
+      updatedAt: now(),
+      sizeBytes: 2320,
+      truncated: false,
+      encoding: "utf8",
+      content:
+        "# Runtime capability manifest notes\n\n" +
+        "- Browser and desktop clients consume the same runtime gateway contract.\n" +
+        "- Artifact preview uses artifact ids instead of renderer-supplied file paths.\n" +
+        "- Content is clipped at the runtime boundary before it reaches the UI.\n",
+    };
+    artifactContentByRun.set(runId, new Map([[artifactId, artifactContent]]));
 
     const timeline: Array<[number, RunEventKind, Record<string, unknown>]> = [
       [0, "run.created", { prompt, mode }],
@@ -314,6 +334,20 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           eventCount: eventsByRun.get(runId)?.length ?? 0,
         },
       };
+    },
+    async getArtifactContent(request: RuntimeArtifactContentRequest) {
+      const artifact = artifactContentByRun.get(request.runId)?.get(request.artifactId);
+      if (!artifact) {
+        throw new Error(`Artifact not found: ${request.artifactId}`);
+      }
+      if (request.maxBytes !== undefined && artifact.content.length > request.maxBytes) {
+        return {
+          ...artifact,
+          truncated: true,
+          content: artifact.content.slice(0, request.maxBytes),
+        };
+      }
+      return artifact;
     },
     subscribeRun(runId, onEvent, options): Unsubscribe {
       const listeners = listenersByRun.get(runId) ?? new Set<Listener>();

@@ -56,6 +56,15 @@ function createFakeClient() {
       disconnect: vi.fn(),
       submitPrompt: vi.fn(async () => "run-1"),
       getState: vi.fn(async (runId: string) => ({ runId })),
+      getArtifactContent: vi.fn(async () => ({
+        runId: "run-1",
+        artifactId: "artifact-a",
+        path: "artifacts/report.md",
+        sizeBytes: 7,
+        truncated: false,
+        encoding: "utf8" as const,
+        content: "preview",
+      })),
       subscribeToRun: vi.fn(),
       unsubscribe: vi.fn(),
       approve: vi.fn(async () => {}),
@@ -260,6 +269,39 @@ describe("desktop runtime IPC controller", () => {
       }),
     ).rejects.toThrow("subscribe filter is malformed");
     expect(fake.client.subscribeToRun).not.toHaveBeenCalled();
+  });
+
+  it("validates artifact content requests before forwarding through desktop IPC", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:getArtifactContent", eventFor(35), {
+        runId: "run-1",
+        artifactId: "artifact-a",
+        maxBytes: 1024,
+      }),
+    ).resolves.toMatchObject({
+      artifactId: "artifact-a",
+      content: "preview",
+    });
+    expect(fake.client.getArtifactContent).toHaveBeenCalledWith({
+      runId: "run-1",
+      artifactId: "artifact-a",
+      maxBytes: 1024,
+    });
+
+    await expect(
+      ipcMain.invoke("runtime:getArtifactContent", eventFor(35), {
+        runId: "run-1",
+      }),
+    ).rejects.toThrow("getArtifactContent requires artifactId");
   });
 
   it("reports desktop IPC status without forcing daemon connection", async () => {

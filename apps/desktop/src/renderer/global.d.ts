@@ -1,5 +1,7 @@
 import type {
   ApprovalDecision,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
   SubmitPromptRequest,
@@ -13,6 +15,7 @@ export interface KirakiraDesktopRuntimeBridge {
   getStatus(): Promise<RuntimeTransportStatus>;
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<{ runId: string; state: unknown }>;
+  getArtifactContent(request: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent>;
   subscribeRun(
     runId: string,
     options: SubscribeRunOptions | undefined,

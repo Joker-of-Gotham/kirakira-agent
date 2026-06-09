@@ -1,6 +1,8 @@
 import type {
   ControlMessage,
   EventFilter,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RunStateSnapshot,
   RuntimeRequestTracker,
   RuntimeRunMode,
@@ -278,6 +280,18 @@ export class DaemonClient {
       runId,
       messageId: ulid(),
     })) as RunStateSnapshot;
+  }
+
+  async getArtifactContent(
+    request: RuntimeArtifactContentRequest,
+  ): Promise<RuntimeArtifactContent> {
+    return (await this.rpcResult({
+      type: "get_artifact",
+      runId: request.runId,
+      artifactId: request.artifactId,
+      ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
+      messageId: ulid(),
+    })) as RuntimeArtifactContent;
   }
 
   async enqueuePrompt(prompt: string, priority?: number): Promise<void> {

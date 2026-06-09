@@ -663,8 +663,16 @@ export class OrchestratorKernel {
       rec.cost.budgetRemainingUsd = options.budgetUsd;
     }
     this.runs.set(runId, rec);
-    this.emit(runId, "run.created", { prompt, mode });
-    this.emit(runId, "run.started", { prompt, mode });
+    this.emit(runId, "run.created", {
+      prompt,
+      mode,
+      ...(options?.workspaceRoot !== undefined ? { workspaceRoot: options.workspaceRoot } : {}),
+    });
+    this.emit(runId, "run.started", {
+      prompt,
+      mode,
+      ...(options?.workspaceRoot !== undefined ? { workspaceRoot: options.workspaceRoot } : {}),
+    });
     const parentConfig = this.parentWorkerConfig(runId, prompt, mode, options);
     this.parentWorkerIds.set(runId, parentConfig.id);
     this.runtime.registerWorker({

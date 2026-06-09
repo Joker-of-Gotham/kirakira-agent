@@ -1,5 +1,9 @@
 import type { ControlMessage, RuntimeRunMode, RuntimeRunOptions } from "./control.js";
 import {
+  normalizeRuntimeArtifactContentMaxBytes,
+  type RuntimeArtifactContent,
+} from "./artifact-content.js";
+import {
   RUN_EVENT_KINDS,
   type EventFilter,
   type RunEvent,
@@ -31,6 +35,13 @@ export type RuntimeClientMessage =
       messageId: string;
     }
   | {
+      type: "get_artifact";
+      runId: string;
+      artifactId: string;
+      maxBytes?: number;
+      messageId: string;
+    }
+  | {
       type: "ping";
       messageId?: string;
     };
@@ -38,6 +49,7 @@ export type RuntimeClientMessage =
 export type RuntimeServerMessage =
   | { type: "event"; event: RunEvent }
   | { type: "state_snapshot"; state: RunStateSnapshot }
+  | { type: "artifact_content"; artifact: RuntimeArtifactContent }
   | { type: "error"; code: string; message: string; details?: unknown; messageId?: string }
   | { type: "ack"; messageId: string; result?: unknown }
   | { type: "pong"; messageId?: string }
@@ -277,6 +289,34 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
         ok: true,
         message: { type: "get_state", runId: raw.runId, messageId: raw.messageId },
       };
+    case "get_artifact": {
+      if (
+        typeof raw.runId !== "string" ||
+        typeof raw.artifactId !== "string" ||
+        typeof raw.messageId !== "string"
+      ) {
+        return error(
+          "invalid_message",
+          "get_artifact requires runId, artifactId, and messageId",
+          raw,
+          raw,
+        );
+      }
+      const maxBytes = normalizeRuntimeArtifactContentMaxBytes(raw.maxBytes);
+      if (raw.maxBytes !== undefined && maxBytes === undefined) {
+        return error("invalid_message", "get_artifact maxBytes is invalid", raw, raw.maxBytes);
+      }
+      return {
+        ok: true,
+        message: {
+          type: "get_artifact",
+          runId: raw.runId,
+          artifactId: raw.artifactId,
+          messageId: raw.messageId,
+          ...(maxBytes !== undefined ? { maxBytes } : {}),
+        },
+      };
+    }
     case "unsubscribe":
       if (typeof raw.subscriptionId !== "string") {
         return error("invalid_message", "unsubscribe requires subscriptionId", raw, raw);
@@ -335,6 +375,8 @@ export function isRuntimeServerMessage(value: unknown): value is RuntimeServerMe
       return isRecord(value.event) && typeof value.event.runId === "string";
     case "state_snapshot":
       return value.state !== undefined;
+    case "artifact_content":
+      return isRecord(value.artifact) && typeof value.artifact.artifactId === "string";
     case "error":
       return typeof value.code === "string" && typeof value.message === "string";
     case "ack":

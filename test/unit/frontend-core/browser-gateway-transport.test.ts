@@ -143,6 +143,57 @@ describe("browser gateway runtime transport", () => {
     await expect(submit).resolves.toEqual({ runId: "run-1" });
   });
 
+  it("requests artifact content through the runtime protocol", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const pending = transport.getArtifactContent({
+      runId: "run-1",
+      artifactId: "artifact-a",
+      maxBytes: 1024,
+    });
+    const frame = JSON.parse(socket?.sent[0] ?? "{}") as {
+      messageId: string;
+      type: string;
+    };
+    expect(frame).toMatchObject({
+      type: "get_artifact",
+      runId: "run-1",
+      artifactId: "artifact-a",
+      maxBytes: 1024,
+    });
+
+    socket?.message({
+      type: "ack",
+      messageId: frame.messageId,
+      result: {
+        runId: "run-1",
+        artifactId: "artifact-a",
+        path: "artifacts/report.md",
+        sizeBytes: 7,
+        truncated: false,
+        encoding: "utf8",
+        content: "preview",
+      },
+    });
+    await expect(pending).resolves.toMatchObject({
+      artifactId: "artifact-a",
+      content: "preview",
+    });
+  });
+
   it("maps subscriptions to events and sends daemon unsubscribe frames", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;

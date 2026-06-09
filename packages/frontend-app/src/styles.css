@@ -675,6 +675,51 @@ a:focus-visible {
   gap: 4px;
 }
 
+.kk-artifact-preview {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--kk-border);
+}
+
+.kk-artifact-preview > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+}
+
+.kk-artifact-preview strong,
+.kk-artifact-preview span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-artifact-preview span,
+.kk-artifact-preview-muted {
+  color: var(--kk-text-muted);
+  font-size: 0.78rem;
+}
+
+.kk-artifact-preview pre {
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: #fbfcfc;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .kk-composer {
   gap: 10px;
   padding: 12px;

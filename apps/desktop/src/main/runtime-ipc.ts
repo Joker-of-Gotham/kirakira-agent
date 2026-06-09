@@ -9,6 +9,7 @@ import {
 } from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
+  RuntimeArtifactContentRequest,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
   SubmitPromptRequest,
@@ -22,6 +23,7 @@ export interface RuntimeIpcControllerOptions {
     | "disconnect"
     | "submitPrompt"
     | "getState"
+    | "getArtifactContent"
     | "subscribeToRun"
     | "unsubscribe"
     | "approve"
@@ -148,6 +150,33 @@ function parseRunId(value: unknown, label: string): string {
     throw new Error(`${label} requires runId`);
   }
   return value;
+}
+
+function parseArtifactContentRequest(value: unknown): RuntimeArtifactContentRequest {
+  if (!isRecord(value)) throw new Error("getArtifactContent requires a request object");
+  const runId = parseRunId(value.runId, "getArtifactContent");
+  if (typeof value.artifactId !== "string" || value.artifactId.length === 0) {
+    throw new Error("getArtifactContent requires artifactId");
+  }
+  const maxBytes = optionalNumber(value.maxBytes);
+  if (value.maxBytes !== undefined && (maxBytes === undefined || maxBytes < 1)) {
+    throw new Error("getArtifactContent maxBytes must be a positive number");
+  }
+  const validated = validateRuntimeClientMessage({
+    type: "get_artifact",
+    runId,
+    artifactId: value.artifactId,
+    ...(maxBytes !== undefined ? { maxBytes } : {}),
+    messageId: "desktop-artifact-validate",
+  });
+  if (validated.type !== "get_artifact") {
+    throw new Error("getArtifactContent message is malformed");
+  }
+  return {
+    runId,
+    artifactId: validated.artifactId,
+    ...(validated.maxBytes !== undefined ? { maxBytes: validated.maxBytes } : {}),
+  };
 }
 
 function parseSubscriptionId(value: unknown): string {
@@ -408,6 +437,13 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         });
         await ensureConnected();
         return { runId, state: await options.client.getState(runId) };
+      });
+
+      ipcMain.handle("runtime:getArtifactContent", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseArtifactContentRequest(rawRequest);
+        await ensureConnected();
+        return options.client.getArtifactContent(request);
       });
 
       ipcMain.handle("runtime:subscribeRun", async (event, rawRequest: unknown) => {

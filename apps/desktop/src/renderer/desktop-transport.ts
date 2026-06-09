@@ -26,6 +26,7 @@ export function createDesktopRuntimeTransport(): RuntimeTransport | null {
     getStatus: () => bridge.getStatus().catch(unavailableDesktopStatus),
     submitPrompt: (request) => bridge.submitPrompt(request),
     getState: (runId) => bridge.getState(runId),
+    getArtifactContent: (request) => bridge.getArtifactContent(request),
     subscribeRun(
       runId: string,
       onEvent: (event: RuntimeTransportEvent) => void,

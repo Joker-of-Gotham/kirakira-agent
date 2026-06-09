@@ -261,6 +261,7 @@ export interface RunState {
   runId: string;
   parentRunId?: string;
   status: RunStatus;
+  workspaceRoot?: string;
   createdAt?: string;
   startedAt?: string;
   endedAt?: string;

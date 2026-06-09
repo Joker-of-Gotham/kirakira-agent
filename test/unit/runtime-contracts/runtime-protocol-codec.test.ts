@@ -53,6 +53,38 @@ describe("runtime protocol codec", () => {
       ok: false,
       error: { code: "invalid_message", messageId: "status-1" },
     });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "get_artifact",
+        messageId: "artifact-1",
+        runId: "run-1",
+        artifactId: "artifact-a",
+        maxBytes: 4096,
+      }),
+    ).toEqual({
+      ok: true,
+      message: {
+        type: "get_artifact",
+        messageId: "artifact-1",
+        runId: "run-1",
+        artifactId: "artifact-a",
+        maxBytes: 4096,
+      },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "get_artifact",
+        messageId: "artifact-bad",
+        runId: "run-1",
+        artifactId: "artifact-a",
+        maxBytes: -1,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_message", messageId: "artifact-bad" },
+    });
   });
 
   it("validates server messages and builds correlated protocol errors", () => {
@@ -69,6 +101,27 @@ describe("runtime protocol codec", () => {
       code: "unknown_run",
       message: "Run not found",
       messageId: "state-1",
+    });
+
+    expect(
+      parseRuntimeServerMessage({
+        type: "artifact_content",
+        artifact: {
+          runId: "run-1",
+          artifactId: "artifact-a",
+          path: "artifacts/report.md",
+          sizeBytes: 10,
+          truncated: false,
+          encoding: "utf8",
+          content: "preview",
+        },
+      }),
+    ).toMatchObject({
+      type: "artifact_content",
+      artifact: {
+        artifactId: "artifact-a",
+        content: "preview",
+      },
     });
 
     expect(

@@ -270,6 +270,7 @@ export class RunStateProjector {
         next.createdAt = event.timestamp;
         next.status = "pending";
         next.parentRunId = readString(p, "parentRunId") ?? event.parentRunId ?? next.parentRunId;
+        next.workspaceRoot = readString(p, "workspaceRoot") ?? next.workspaceRoot;
         break;
       case "run.started":
         next.startedAt = event.timestamp;

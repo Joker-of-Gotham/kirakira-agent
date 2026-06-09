@@ -20,6 +20,7 @@ import {
   createEmptyRunDashboard,
   createRunInspector,
   projectRunDashboard,
+  type RuntimeArtifactContent,
   type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
@@ -49,6 +50,13 @@ interface RunHistoryItem {
   status: RunDashboardStatus;
   eventCount: number;
   updatedAt: string;
+}
+
+interface ArtifactPreviewState {
+  artifactId: string;
+  status: "loading" | "ready" | "error";
+  content?: RuntimeArtifactContent;
+  message?: string;
 }
 
 const defaultPrompt =
@@ -108,6 +116,9 @@ export function KirakiraWorkbench({
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
+  const [artifactPreviews, setArtifactPreviews] = useState<Record<string, ArtifactPreviewState>>(
+    {},
+  );
 
   useEffect(() => {
     let disposed = false;
@@ -197,6 +208,7 @@ export function KirakiraWorkbench({
       unsubscribeRef.current?.();
       setRunId(result.runId);
       setEvents([]);
+      setArtifactPreviews({});
       unsubscribeRef.current = runtime.subscribeRun(result.runId, handleTransportEvent);
     } catch (err) {
       setConnection("degraded");
@@ -228,6 +240,14 @@ export function KirakiraWorkbench({
   const artifacts = Object.values(projection.artifactDetails).sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
+  const selectedArtifactId = inspector.selectedFocus?.kind === "artifact"
+    ? inspector.selectedFocus.id.replace(/^artifact:/, "")
+    : undefined;
+  const selectedArtifactPreviewKey =
+    runId && selectedArtifactId ? `${runId}:${selectedArtifactId}` : undefined;
+  const selectedArtifactPreview = selectedArtifactPreviewKey
+    ? artifactPreviews[selectedArtifactPreviewKey]
+    : undefined;
   const pendingApproval = projection.pendingApprovalIds[0];
   const graph = projection.graph;
   const graphNodes = Object.values(graph.nodes).sort((a, b) => {
@@ -238,6 +258,53 @@ export function KirakiraWorkbench({
   const graphProgress = graph.nodeCount > 0
     ? Math.round((graph.completedNodeCount / graph.nodeCount) * 100)
     : 0;
+
+  useEffect(() => {
+    if (!runId || !selectedArtifactId || !selectedArtifactPreviewKey) return;
+    const existing = artifactPreviews[selectedArtifactPreviewKey];
+    if (existing) return;
+    let disposed = false;
+    setArtifactPreviews((items) => ({
+      ...items,
+      [selectedArtifactPreviewKey]: {
+        artifactId: selectedArtifactId,
+        status: "loading",
+      },
+    }));
+    runtime
+      .getArtifactContent({ runId, artifactId: selectedArtifactId })
+      .then((content) => {
+        if (disposed) return;
+        setArtifactPreviews((items) => ({
+          ...items,
+          [selectedArtifactPreviewKey]: {
+            artifactId: selectedArtifactId,
+            status: "ready",
+            content,
+          },
+        }));
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        setArtifactPreviews((items) => ({
+          ...items,
+          [selectedArtifactPreviewKey]: {
+            artifactId: selectedArtifactId,
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+          },
+        }));
+      });
+    return () => {
+      disposed = true;
+    };
+  }, [
+    artifactPreviews,
+    runId,
+    runtime,
+    selectedArtifactId,
+    selectedArtifactPreviewKey,
+  ]);
 
   return (
     <main className="kk-shell">
@@ -376,7 +443,11 @@ export function KirakiraWorkbench({
           </div>
         </section>
 
-        <RunInspectorPanel inspector={inspector} onSelectFocus={setSelectedFocusId} />
+        <RunInspectorPanel
+          inspector={inspector}
+          artifactPreview={selectedArtifactPreview}
+          onSelectFocus={setSelectedFocusId}
+        />
 
         <form className="kk-composer" onSubmit={submit}>
           <div className="kk-mode-switch" role="group" aria-label="Run mode">
@@ -565,6 +636,41 @@ export function KirakiraWorkbench({
   );
 }
 
+function ArtifactContentPreview({ preview }: { preview?: ArtifactPreviewState }) {
+  if (!preview) return null;
+  if (preview.status === "loading") {
+    return <div className="kk-artifact-preview kk-artifact-preview-muted">Loading preview</div>;
+  }
+  if (preview.status === "error") {
+    return (
+      <div className="kk-artifact-preview kk-artifact-preview-muted">
+        {preview.message ?? "Preview unavailable"}
+      </div>
+    );
+  }
+  const content = preview.content;
+  if (!content) return null;
+  if (content.encoding !== "utf8") {
+    return (
+      <div className="kk-artifact-preview kk-artifact-preview-muted">
+        Binary artifact, {content.sizeBytes} bytes
+        {content.truncated ? " (truncated)" : ""}
+      </div>
+    );
+  }
+  return (
+    <div className="kk-artifact-preview">
+      <div>
+        <strong>{content.path}</strong>
+        <span>
+          {content.sizeBytes} bytes{content.truncated ? ", truncated" : ""}
+        </span>
+      </div>
+      <pre>{content.content || "Empty artifact"}</pre>
+    </div>
+  );
+}
+
 function OutputArtifactsPanel({
   artifacts,
   onSelectArtifact,
@@ -638,9 +744,11 @@ const focusKindLabel: Record<RunInspectorFocus["kind"], string> = {
 
 function RunInspectorPanel({
   inspector,
+  artifactPreview,
   onSelectFocus,
 }: {
   inspector: RunInspectorProjection;
+  artifactPreview?: ArtifactPreviewState;
   onSelectFocus: (id: string) => void;
 }) {
   const focus = inspector.selectedFocus;
@@ -720,6 +828,9 @@ function RunInspectorPanel({
                   ))}
                 </dl>
               )}
+              {focus.kind === "artifact" ? (
+                <ArtifactContentPreview preview={artifactPreview} />
+              ) : null}
             </>
           ) : (
             <div className="kk-empty">No runtime focus</div>

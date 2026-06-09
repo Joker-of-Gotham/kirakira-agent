@@ -1,4 +1,4 @@
-import { EventReader } from "@kirakira/event-store";
+import { EventReader, RunStateProjector } from "@kirakira/event-store";
 import {
   runtimeDaemonHealth,
   runtimeManifest,
@@ -25,6 +25,10 @@ import {
 import { UdsServer } from "../server/uds-server.js";
 import { buildRunStateSnapshot } from "../snapshot.js";
 import { ProcessManager } from "./process-manager.js";
+import {
+  RuntimeArtifactContentError,
+  readRuntimeArtifactContent,
+} from "../server/artifact-content.js";
 
 export interface DaemonConfig {
   socketPath?: string;
@@ -89,6 +93,7 @@ export class DaemonLifecycle {
   private _running = false;
   private socketPath = "";
   private eventStorePath = "";
+  private workspaceRoot = "";
   private shutdownTimeoutMs = 30_000;
   private capabilities: RuntimeCapabilityOverrides = {};
 
@@ -99,6 +104,10 @@ export class DaemonLifecycle {
     this.shutdownTimeoutMs = config.shutdownTimeoutMs ?? 30_000;
     this.socketPath = resolveDaemonSocketPath(config.socketPath);
     this.eventStorePath = config.eventStorePath ?? "";
+    this.workspaceRoot =
+      config.kernel?.workspaceRoot ??
+      process.env.KIRAKIRA_WORKSPACE_ROOT ??
+      process.cwd();
     this.capabilities = daemonCapabilityOverrides(config.kernel);
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
@@ -224,6 +233,9 @@ export class DaemonLifecycle {
         });
         break;
       }
+      case "get_artifact":
+        await this.handleGetArtifact(clientId, msg);
+        break;
       case "control":
         await this.handleControl(clientId, session, msg.message, msg.messageId);
         break;
@@ -282,6 +294,74 @@ export class DaemonLifecycle {
         });
         break;
       }
+    }
+  }
+
+  private sendRequestError(
+    clientId: string,
+    messageId: string,
+    code: string,
+    message: string,
+    details?: unknown,
+  ): void {
+    this.sendToClient(clientId, {
+      type: "error",
+      code,
+      message,
+      messageId,
+      ...(details !== undefined ? { details } : {}),
+    });
+  }
+
+  private async handleGetArtifact(
+    clientId: string,
+    msg: Extract<ClientMessage, { type: "get_artifact" }>,
+  ): Promise<void> {
+    const reader = new EventReader(this.eventStorePath);
+    try {
+      const events = reader.readAll(msg.runId);
+      if (events.length === 0) {
+        this.sendRequestError(
+          clientId,
+          msg.messageId,
+          "unknown_run",
+          `Run not found: ${msg.runId}`,
+        );
+        return;
+      }
+      const state = new RunStateProjector().project(events);
+      const artifact = await readRuntimeArtifactContent({
+        state,
+        artifactId: msg.artifactId,
+        fallbackWorkspaceRoot: this.workspaceRoot,
+        maxBytes: msg.maxBytes,
+      });
+      this.sendToClient(clientId, { type: "artifact_content", artifact });
+      this.sendToClient(clientId, {
+        type: "ack",
+        messageId: msg.messageId,
+        result: artifact,
+      });
+    } catch (error) {
+      if (error instanceof RuntimeArtifactContentError) {
+        this.sendRequestError(
+          clientId,
+          msg.messageId,
+          error.code,
+          error.message,
+          error.details,
+        );
+        return;
+      }
+      this.sendRequestError(
+        clientId,
+        msg.messageId,
+        "artifact_unreadable",
+        `Artifact content is not readable: ${msg.artifactId}`,
+        error instanceof Error ? error.message : String(error),
+      );
+    } finally {
+      reader.close();
     }
   }
 

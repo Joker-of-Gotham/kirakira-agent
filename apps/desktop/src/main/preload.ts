@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
   ApprovalDecision,
+  RuntimeArtifactContent,
+  RuntimeArtifactContentRequest,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
   SubmitPromptRequest,
@@ -20,6 +22,8 @@ contextBridge.exposeInMainWorld("kirakiraRuntime", {
     ipcRenderer.invoke("runtime:submitPrompt", request) as Promise<{ runId: string }>,
   getState: (runId: string) =>
     ipcRenderer.invoke("runtime:getState", runId) as Promise<{ runId: string; state: unknown }>,
+  getArtifactContent: (request: RuntimeArtifactContentRequest) =>
+    ipcRenderer.invoke("runtime:getArtifactContent", request) as Promise<RuntimeArtifactContent>,
   subscribeRun: (
     runId: string,
     options: SubscribeRunOptions | undefined,

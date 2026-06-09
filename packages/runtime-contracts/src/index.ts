@@ -1,4 +1,14 @@
 export type {
+  RuntimeArtifactContent,
+  RuntimeArtifactContentEncoding,
+  RuntimeArtifactContentRequest,
+} from "./artifact-content.js";
+export {
+  DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
+  RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
+  normalizeRuntimeArtifactContentMaxBytes,
+} from "./artifact-content.js";
+export type {
   ControlMessage,
   RuntimeRunMode,
   RuntimeRunOptions,
