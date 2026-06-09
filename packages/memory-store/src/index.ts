@@ -16,6 +16,10 @@ export {
   PostgresCheckpointRepository,
   type PostgresCheckpointRepositoryOptions,
 } from "./postgres/repositories/checkpoint-repo.js";
+export {
+  PostgresCheckpointEnvelopeRepository,
+  type PostgresCheckpointEnvelopeRepositoryOptions,
+} from "./postgres/repositories/checkpoint-envelope-repo.js";
 export { ArtifactMetaRepository, type ArtifactMetaRepoOptions } from "./postgres/repositories/artifact-meta-repo.js";
 export {
   OutboxRepository,

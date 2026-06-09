@@ -22,6 +22,7 @@ import {
   createMcpDirectoryView,
   createEmptyRunDashboard,
   createRunInspector,
+  createRunWorkstream,
   createSubagentTopologyView,
   projectRunDashboard,
   runtimeTransportOrchestration,
@@ -36,6 +37,11 @@ import {
   type RunInspectorProjection,
   type RunDashboardProjection,
   type RunDashboardStatus,
+  type RunWorkstreamActivity,
+  type RunWorkstreamAttentionItem,
+  type RunWorkstreamCard,
+  type RunWorkstreamDetailDrawer,
+  type RunWorkstreamProjection,
   type RuntimeConnectionState,
   type RuntimeTransport,
   type RuntimeTransportEvent,
@@ -134,6 +140,7 @@ export function KirakiraWorkbench({
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
+  const [selectedWorkstreamItemId, setSelectedWorkstreamItemId] = useState<string | undefined>();
   const [artifactPreviews, setArtifactPreviews] = useState<Record<string, ArtifactPreviewState>>(
     {},
   );
@@ -226,13 +233,17 @@ export function KirakiraWorkbench({
     () => projectRunDashboard(createEmptyRunDashboard(runId), events, { latestEventLimit: 40 }),
     [events, runId],
   );
+  const workstream = useMemo(
+    () =>
+      createRunWorkstream(projection, events, {
+        selectedItemId: selectedWorkstreamItemId,
+        maxActivityItems: 14,
+      }),
+    [events, projection, selectedWorkstreamItemId],
+  );
   const inspector = useMemo(
     () => createRunInspector(projection, { selectedFocusId }),
     [projection, selectedFocusId],
-  );
-  const timelineEvents = useMemo(
-    () => [...projection.latestEvents].reverse(),
-    [projection.latestEvents],
   );
 
   useEffect(() => {
@@ -272,6 +283,7 @@ export function KirakiraWorkbench({
       unsubscribeRef.current?.();
       setRunId(result.runId);
       setEvents([]);
+      setSelectedWorkstreamItemId(undefined);
       setArtifactPreviews({});
       unsubscribeRef.current = runtime.subscribeRun(result.runId, handleTransportEvent);
     } catch (err) {
@@ -297,6 +309,11 @@ export function KirakiraWorkbench({
     if (!runId) return;
     await runtime.cancel(runId, "Cancelled from Kirakira workbench");
   };
+
+  const selectWorkstreamItem = useCallback((itemId: string, focusId?: string) => {
+    setSelectedWorkstreamItemId(itemId);
+    if (focusId) setSelectedFocusId(focusId);
+  }, []);
 
   const topologyManifest = runtimeTransportOrchestration(runtimeStatus);
   const topology = useMemo(
@@ -471,40 +488,12 @@ export function KirakiraWorkbench({
         </section>
 
         <section className="kk-main-grid">
-          <div className="kk-primary-pane">
-            <div className="kk-pane-header">
-              <div>
-                <p className="kk-kicker">Timeline</p>
-                <h2>Run Events</h2>
-              </div>
-              <button type="button" className="kk-icon-button" onClick={cancel} disabled={!runId}>
-                <Square size={17} />
-                <span>Cancel</span>
-              </button>
-            </div>
-
-            <ol
-              className="kk-timeline"
-              role="log"
-              aria-live="polite"
-              aria-relevant="additions text"
-            >
-              {timelineEvents.length === 0 ? (
-                <li className="kk-empty kk-empty-large">Start a run to populate the timeline</li>
-              ) : (
-                timelineEvents.map((item) => (
-                  <li key={item.id} className="kk-timeline-item">
-                    <span className="kk-timeline-rail" />
-                    <div>
-                      <strong>{item.title}</strong>
-                      <p>{item.detail ?? item.kind}</p>
-                    </div>
-                    <time>{formatClock(item.timestamp)}</time>
-                  </li>
-                ))
-              )}
-            </ol>
-          </div>
+          <RunWorkstreamPanel
+            workstream={workstream}
+            onCancel={cancel}
+            canCancel={Boolean(runId)}
+            onSelectItem={selectWorkstreamItem}
+          />
 
           <SwarmTopologyPanel
             topology={topology}
@@ -712,6 +701,266 @@ export function KirakiraWorkbench({
         </section>
       </aside>
     </main>
+  );
+}
+
+function RunWorkstreamPanel({
+  workstream,
+  onCancel,
+  canCancel,
+  onSelectItem,
+}: {
+  workstream: RunWorkstreamProjection;
+  onCancel: () => void;
+  canCancel: boolean;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  return (
+    <section className="kk-primary-pane kk-workstream-pane" aria-label="Run workstream">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Run Workstream</p>
+          <h2>Plan Board</h2>
+        </div>
+        <div className="kk-workstream-actions">
+          <span className="kk-count">{workstream.summary.activeCards} active</span>
+          <button type="button" className="kk-icon-button" onClick={onCancel} disabled={!canCancel}>
+            <Square size={17} />
+            <span>Cancel</span>
+          </button>
+        </div>
+      </div>
+
+      <AttentionStrip
+        items={workstream.attention}
+        selectedItemId={workstream.selectedItemId}
+        onSelectItem={onSelectItem}
+      />
+
+      <div className="kk-workstream-layout">
+        <div className="kk-workstream-left">
+          <PlanBoard
+            columns={workstream.columns}
+            selectedItemId={workstream.selectedItemId}
+            onSelectItem={onSelectItem}
+          />
+          <InlineActivityStream
+            activity={workstream.activity}
+            selectedItemId={workstream.selectedItemId}
+            onSelectItem={onSelectItem}
+          />
+        </div>
+        <WorkstreamDetailDrawer detail={workstream.detail} />
+      </div>
+    </section>
+  );
+}
+
+function AttentionStrip({
+  items,
+  selectedItemId,
+  onSelectItem,
+}: {
+  items: RunWorkstreamAttentionItem[];
+  selectedItemId?: string;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className="kk-attention-strip kk-attention-strip-empty" role="status">
+        <CheckCircle2 size={16} />
+        <span>No attention required</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="kk-attention-strip" aria-label="Run attention strip">
+      {items.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={
+            item.id === selectedItemId
+              ? `kk-attention-item kk-attention-${item.severity} kk-attention-active`
+              : `kk-attention-item kk-attention-${item.severity}`
+          }
+          aria-pressed={item.id === selectedItemId}
+          onClick={() => onSelectItem(item.id, item.focusId)}
+        >
+          <AlertTriangle size={15} />
+          <span>
+            <strong>{item.title}</strong>
+            <small>{item.actionLabel}</small>
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PlanBoard({
+  columns,
+  selectedItemId,
+  onSelectItem,
+}: {
+  columns: RunWorkstreamProjection["columns"];
+  selectedItemId?: string;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  return (
+    <div className="kk-plan-board" aria-label="Run plan board">
+      {columns.map((column) => (
+        <section key={column.id} className={`kk-board-column kk-board-${column.id}`}>
+          <header>
+            <div>
+              <strong>{column.label}</strong>
+              <small>{column.description}</small>
+            </div>
+            <span>{column.cards.length}</span>
+          </header>
+          <div className="kk-board-cards">
+            {column.cards.length === 0 ? (
+              <div className="kk-board-empty">Clear</div>
+            ) : (
+              column.cards.map((card) => (
+                <WorkstreamCard
+                  key={card.id}
+                  card={card}
+                  selected={card.id === selectedItemId}
+                  onSelectItem={onSelectItem}
+                />
+              ))
+            )}
+          </div>
+        </section>
+      ))}
+    </div>
+  );
+}
+
+function WorkstreamCard({
+  card,
+  selected,
+  onSelectItem,
+}: {
+  card: RunWorkstreamCard;
+  selected: boolean;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={
+        selected
+          ? `kk-board-card kk-board-card-${card.tone} kk-board-card-active`
+          : `kk-board-card kk-board-card-${card.tone}`
+      }
+      aria-pressed={selected}
+      onClick={() => onSelectItem(card.id, card.focusId)}
+    >
+      <span className={`kk-dot kk-dot-${card.phase}`} />
+      <span>
+        <strong>{card.title}</strong>
+        <small>{card.detail ?? card.kind}</small>
+      </span>
+      <span className={`kk-pill kk-pill-${card.phase}`}>{card.phase}</span>
+      {card.meta.length > 0 ? (
+        <span className="kk-board-card-meta">{card.meta.slice(0, 2).join(" / ")}</span>
+      ) : null}
+    </button>
+  );
+}
+
+function InlineActivityStream({
+  activity,
+  selectedItemId,
+  onSelectItem,
+}: {
+  activity: RunWorkstreamActivity[];
+  selectedItemId?: string;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+}) {
+  return (
+    <section className="kk-inline-activity" aria-label="Inline activity stream">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Activity</p>
+          <h3>Live Stream</h3>
+        </div>
+        <Activity size={17} />
+      </div>
+      <ol role="log" aria-live="polite" aria-relevant="additions text">
+        {activity.length === 0 ? (
+          <li className="kk-empty">Start a run to populate activity</li>
+        ) : (
+          activity.map((item) => (
+            <li key={item.id}>
+              <button
+                type="button"
+                className={
+                  item.id === selectedItemId
+                    ? `kk-activity-item kk-activity-${item.tone} kk-activity-active`
+                    : `kk-activity-item kk-activity-${item.tone}`
+                }
+                aria-pressed={item.id === selectedItemId}
+                onClick={() => onSelectItem(item.id, item.focusId)}
+              >
+                <span className="kk-timeline-rail" />
+                <span>
+                  <strong>{item.title}</strong>
+                  <small>{item.detail ?? item.kind}</small>
+                </span>
+                <time>{formatClock(item.timestamp)}</time>
+              </button>
+            </li>
+          ))
+        )}
+      </ol>
+    </section>
+  );
+}
+
+function WorkstreamDetailDrawer({ detail }: { detail?: RunWorkstreamDetailDrawer }) {
+  if (!detail) {
+    return (
+      <aside className="kk-detail-drawer" aria-label="Workstream detail">
+        <div className="kk-empty">Select work to inspect details</div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className={`kk-detail-drawer kk-detail-drawer-${detail.tone}`} aria-label="Workstream detail">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Detail Drawer</p>
+          <h3>{detail.title}</h3>
+        </div>
+        <span className={`kk-pill kk-pill-${detail.tone}`}>{detail.kind}</span>
+      </div>
+      <p>{detail.summary}</p>
+      <dl className="kk-detail-list">
+        {detail.details.map((item) => (
+          <div key={`${detail.id}-${item.label}-${item.value}`}>
+            <dt>{item.label}</dt>
+            <dd>
+              {item.href ? (
+                <a href={item.href} target="_blank" rel="noreferrer">
+                  {item.value}
+                  <ExternalLink size={13} aria-hidden="true" />
+                </a>
+              ) : (
+                item.value
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {detail.relatedEventIds.length > 0 ? (
+        <small>{detail.relatedEventIds.length} related events</small>
+      ) : null}
+    </aside>
   );
 }
 

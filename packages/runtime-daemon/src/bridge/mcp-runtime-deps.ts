@@ -8,6 +8,7 @@ import type {
   ResolvedRuntimeProfileState,
 } from "@kirakira/core";
 import {
+  McpAuditBridge,
   McpClientManager,
   parseMcpConfigJson,
 } from "@kirakira/mcp-adapter";
@@ -27,6 +28,7 @@ export interface DaemonMcpDependencyOptions {
   policyBundlePath?: string;
   mcpManager?: McpClientManager;
   mcpPep?: McpPep;
+  mcpAuditBridge?: McpAuditBridge | null;
   auditWriter?: AuditWriter;
 }
 
@@ -34,6 +36,7 @@ export interface DaemonMcpDependencies {
   workspaceRoot: string;
   mcpManager: McpClientManager;
   mcpPep: McpPep;
+  mcpAuditBridge?: McpAuditBridge;
   ownsMcpManager: boolean;
   close(): Promise<void>;
 }
@@ -100,6 +103,7 @@ export function createDaemonMcpDependencies(
   const workspaceRoot = path.resolve(options.workspaceRoot);
   const mcpManager = options.mcpManager ?? new McpClientManager();
   const ownsMcpManager = options.mcpManager === undefined;
+  const ownsDefaultPolicy = options.mcpPep === undefined;
 
   registerMcpConfigFile(mcpManager, workspaceRoot, options.mcpConfigPath);
   registerResolvedProfileServers(mcpManager, options);
@@ -115,11 +119,16 @@ export function createDaemonMcpDependencies(
         options.auditWriter ?? new LedgerAuditWriter(),
       );
     })();
+  const mcpAuditBridge =
+    options.mcpAuditBridge === null
+      ? undefined
+      : options.mcpAuditBridge ?? (ownsDefaultPolicy ? new McpAuditBridge() : undefined);
 
   return {
     workspaceRoot,
     mcpManager,
     mcpPep,
+    ...(mcpAuditBridge !== undefined ? { mcpAuditBridge } : {}),
     ownsMcpManager,
     async close() {
       if (ownsMcpManager) {

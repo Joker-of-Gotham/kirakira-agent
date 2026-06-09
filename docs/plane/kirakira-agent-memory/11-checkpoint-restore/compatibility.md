@@ -1,54 +1,46 @@
-# 与 `@kirakira/event-store` CheckpointRepository 的兼容性
+# Checkpoint Repository Compatibility
 
-**`PostgresCheckpointRepository`**（`packages/memory-store/src/postgres/repositories/checkpoint-repo.ts`）实现 **`CheckpointRepository`**（`@kirakira/event-store`），与 **`CheckpointManager`** 等内核组件对齐；**`CheckpointService`** 使用同类 **`checkpoints`** 表但面向 **`MemoryCheckpoint`** DTO。
+Return to [`README.md`](README.md).
 
-返回上级：[`README.md`](README.md)。
+## Runtime boundary
 
----
+The daemon kernel consumes `CheckpointRepository` from `@kirakira/event-store`.
+When a resolved runtime memory profile exposes Postgres, the daemon now selects
+`PostgresCheckpointEnvelopeRepository` from `@kirakira/memory-store` unless the
+test harness or caller provides `kernelOptions.checkpointRepository`.
 
-## 接口：`CheckpointRepository`
+Selection order:
 
-| 方法 | 行为 |
-|------|------|
-| `save(envelope)` | 要求 `version === "kirakira.checkpoint.v1"`；拆分 `payload` 中租户、任务、manifest 等到列 |
-| `load(id)` | `loadById`，返回 `CheckpointEnvelope` 或 `undefined` |
+1. `kernelOptions.checkpointRepository`
+2. profile/env-backed `PostgresCheckpointEnvelopeRepository`
+3. local `FsCheckpointRepository`
 
-扩展（同文件）：
+The memory-backed daemon repository stores complete `CheckpointEnvelope` JSON in
+`daemon_checkpoints`. The table uses text `id` and `run_id` columns because the
+orchestrator kernel uses opaque ULIDs for both values.
 
-- `loadLatestByRunId(runId)`
-- `listByRunId(runId)`
-- `delete(id)` — 物理删除（慎用）
+## Service boundary
 
----
+`CheckpointService` still uses the Memory API DTO shape (`MemoryCheckpoint`) and
+the existing `checkpoints` table. That path handles inline state, blob spillover,
+and `CheckpointRef` restore semantics.
 
-## Envelope → 行映射
+The two tables are intentionally separate for this phase:
 
-`CheckpointEnvelope`：
+- `daemon_checkpoints`: event-store envelope persistence for kernel restore.
+- `checkpoints`: Memory API checkpoint DTOs used by `CheckpointService`.
 
-- `payload` 整体写入 **`state_json`**
-- 从 `payload` 提取：`tenantId`, `taskId`, `stepNo`, `artifactManifest`, `parentCheckpointId`
+This avoids implicit ULID-to-UUID mapping and keeps test harnesses free to inject
+in-memory repositories without requiring a live Postgres stack.
 
-服务层 **`CheckpointService.save`** 直接构造 **`MemoryCheckpoint`**（含 ULID、大体积 blob 指针），与 Repository **共享表**，故 **id 空间一致**。
+## Profile contract
 
----
+The daemon checkpoint repository is enabled only when:
 
-## 互操作要点
+- memory is not disabled by `KIRAKIRA_MEMORY_ENABLED=0` or profile state,
+- checkpoint persistence is not disabled by `KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED=0`,
+- a resolved memory profile has a `postgres` service and its `url_env` resolves,
+  or `KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED=1` explicitly requests it.
 
-1. **同表可读**：Kernel 写入的 envelope → Service `restore` 可读（需 payload 形状兼容）。
-2. **Blob 指针**：`{ __blobUri }` 由 Service 产生；纯 Repository 写入应避免超大 `state_json` 或同样溢出。
-3. **UUID**：SQL 使用 `::uuid` cast — 主键须为合法 UUID 串。
-
----
-
-## 代码参考
-
-```typescript
-export class PostgresCheckpointRepository implements CheckpointRepository {
-  async save(envelope: CheckpointEnvelope): Promise<void> {
-    if (envelope.version !== "kirakira.checkpoint.v1") {
-      throw new TypeError(`unsupported checkpoint envelope version: ${String(envelope.version)}`);
-    }
-    // INSERT INTO checkpoints ...
-  }
-}
-```
+The default production repository fails fast if no Postgres DSN is resolved from
+profile/env. It does not silently fall back to localhost for daemon checkpoints.

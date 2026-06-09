@@ -2,8 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { PolicyDecision } from "@kirakira/core";
-import type { McpClientManager } from "@kirakira/mcp-adapter";
+import type { McpAuth, McpServerConfig, McpTransport } from "@kirakira/core";
+import type { McpAuditBridge, McpClientManager } from "@kirakira/mcp-adapter";
 import type { EnforcementResult, McpPep } from "@kirakira/policy-engine";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -11,7 +11,7 @@ import {
   createDaemonMcpDependencies,
 } from "../../../packages/runtime-daemon/src/index.js";
 
-function decision(effect: PolicyDecision["effect"]): EnforcementResult {
+function decision(effect: "allow" | "deny" | "escalate"): EnforcementResult {
   return {
     allowed: effect === "allow",
     traceId: "trace-1",
@@ -46,16 +46,33 @@ function fakePep(result: EnforcementResult): McpPep {
   } as unknown as McpPep;
 }
 
-function fakeManager(rawResult: unknown): {
+function fakeManager(
+  rawResult: unknown,
+  options: {
+    serverName?: string;
+    transport?: McpTransport;
+    auth?: McpAuth;
+    trust?: McpServerConfig["trust"];
+  } = {},
+): {
   manager: McpClientManager;
   request: ReturnType<typeof vi.fn>;
+  getConfig: ReturnType<typeof vi.fn>;
   registerServer: ReturnType<typeof vi.fn>;
   registerMany: ReturnType<typeof vi.fn>;
   startServer: ReturnType<typeof vi.fn>;
   stopAll: ReturnType<typeof vi.fn>;
 } {
   let started = false;
+  const serverName = options.serverName ?? "filesystem-core";
+  const config: McpServerConfig = {
+    name: serverName,
+    transport: options.transport ?? { kind: "stdio", command: "node", args: ["server.js"] },
+    auth: options.auth ?? { mode: "none" },
+    trust: options.trust ?? "untrusted",
+  };
   const request = vi.fn(async () => rawResult);
+  const getConfig = vi.fn((name: string) => (name === serverName ? config : undefined));
   const registerServer = vi.fn();
   const registerMany = vi.fn();
   const startServer = vi.fn(async () => {
@@ -65,14 +82,15 @@ function fakeManager(rawResult: unknown): {
   const manager = {
     registerMany,
     registerServer,
-    listServers: vi.fn(() => ["filesystem-core"]),
+    listServers: vi.fn(() => [serverName]),
+    getConfig,
     getHealth: vi.fn(() => (started ? "healthy" : "stopped")),
     getLastError: vi.fn(() => undefined),
     startServer,
     request,
     stopAll,
   } as unknown as McpClientManager;
-  return { manager, request, registerServer, registerMany, startServer, stopAll };
+  return { manager, request, getConfig, registerServer, registerMany, startServer, stopAll };
 }
 
 describe("DaemonMcpRuntime", () => {
@@ -168,6 +186,11 @@ describe("DaemonMcpRuntime", () => {
           mcpServer: "filesystem-core",
           toolName: "read_file",
           args: ["README.md"],
+          env: {
+            MCP_TRUST: "unknown",
+            KIRAKIRA_MCP_TRUST: "unknown",
+            KIRAKIRA_TRUST_TIER: "unknown",
+          },
         }),
         expect.objectContaining({
           sessionId: "run-1",
@@ -216,6 +239,8 @@ describe("DaemonMcpRuntime", () => {
           description: "Read file content",
           inputSchema: { type: "object", properties: { path: { type: "string" } } },
           outputSchema: { type: "object" },
+          annotations: { readOnlyHint: true },
+          execution: { taskSupport: "optional" },
         },
       ],
     });
@@ -234,22 +259,62 @@ describe("DaemonMcpRuntime", () => {
 
       expect(manager.startServer).toHaveBeenCalledWith("filesystem-core");
       expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {});
-      expect(result.servers).toEqual([
-        {
-          name: "filesystem-core",
-          health: "healthy",
-          toolCount: 1,
-          tools: [
-            {
-              name: "read_file",
-              title: "Read file",
-              description: "Read file content",
-              inputSchema: { type: "object", properties: { path: { type: "string" } } },
-              outputSchema: { type: "object" },
-            },
-          ],
+      expect(result.servers).toHaveLength(1);
+      expect(result.servers[0]).toMatchObject({
+        name: "filesystem-core",
+        health: "healthy",
+        toolCount: 1,
+        trust: {
+          tier: "unknown",
+          source: "first-use",
+          trustedAnnotations: false,
+          configuredLevel: "untrusted",
+          transportKind: "stdio",
+          authMode: "none",
         },
-      ]);
+        policy: {
+          decision: "not_evaluated",
+          source: "not-evaluated",
+        },
+        audit: {
+          auditRequired: false,
+          eventKinds: ["mcp.discovery"],
+          ledger: "none",
+        },
+      });
+      expect(result.servers[0]?.tools?.[0]).toMatchObject({
+        name: "read_file",
+        title: "Read file",
+        description: "Read file content",
+        inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        outputSchema: { type: "object" },
+        annotations: { readOnlyHint: true },
+        execution: { taskSupport: "optional" },
+        trust: {
+          tier: "unknown",
+          source: "first-use",
+          trustedAnnotations: false,
+        },
+        policy: {
+          decision: "ask",
+          source: "gateway-default",
+          reasonCodes: ["mcp_gateway_default_ask"],
+          approvalRequired: true,
+        },
+        audit: {
+          auditRequired: false,
+          eventKinds: ["mcp.discovery"],
+          ledger: "none",
+        },
+        otel: {
+          spanName: "mcp.tools/list.read_file",
+          attributes: {
+            "mcp.server.name": "filesystem-core",
+            "mcp.tool.name": "read_file",
+            "mcp.trust.tier": "unknown",
+          },
+        },
+      });
     } finally {
       await runtime.close();
       await rm(workspaceRoot, { recursive: true, force: true });
@@ -285,6 +350,108 @@ describe("DaemonMcpRuntime", () => {
           reasonCodes: ["policy_denied"],
           approvalRequired: false,
           traceId: "trace-1",
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("routes direct calls through shared gateway trust and audit context", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-context-"));
+    const manager = fakeManager(
+      {
+        content: [{ type: "text", text: "docs" }],
+        isError: false,
+      },
+      {
+        serverName: "docs",
+        transport: { kind: "http", url: "https://mcp.example.test" },
+        auth: { mode: "bearer", clientSecretEnv: "DOCS_MCP_TOKEN" },
+        trust: "user-approved",
+      },
+    );
+    const pep = fakePep(decision("allow"));
+    const auditBridge = {
+      recordConnection: vi.fn(async () => {}),
+      recordToolCall: vi.fn(async () => {}),
+    } as unknown as McpAuditBridge;
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: pep,
+      mcpAuditBridge: auditBridge,
+      userId: "developer-1",
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "docs",
+        tool: "search",
+        arguments: { query: "MCP annotations" },
+        runId: "run-docs",
+      });
+
+      expect(pep.enforce).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mcpServer: "docs",
+          serverId: "docs",
+          issuer: "mcp.example.test",
+          toolName: "search",
+          env: {
+            MCP_TRUST: "verified",
+            KIRAKIRA_MCP_TRUST: "verified",
+            KIRAKIRA_TRUST_TIER: "verified",
+          },
+        }),
+        expect.objectContaining({
+          sessionId: "run-docs",
+          userId: "developer-1",
+        }),
+      );
+      expect(auditBridge.recordConnection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serverId: "docs",
+          trustTier: "verified",
+          transport: "http",
+          status: "connected",
+          userId: "developer-1",
+          sessionId: "run-docs",
+        }),
+      );
+      expect(auditBridge.recordToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serverId: "docs",
+          toolName: "search",
+          trustTier: "verified",
+          authMode: "bearer",
+          decisionId: "decision-1",
+          status: "success",
+        }),
+      );
+      expect(result).toMatchObject({
+        server: "docs",
+        tool: "search",
+        success: true,
+        trust: {
+          tier: "verified",
+          source: "config",
+          trustedAnnotations: true,
+          configuredLevel: "user-approved",
+          issuer: "mcp.example.test",
+        },
+        audit: {
+          auditRequired: true,
+          ledger: "mcp-audit-bridge",
+          decisionId: "decision-1",
+        },
+        otel: {
+          attributes: {
+            "mcp.server.name": "docs",
+            "mcp.tool.name": "search",
+            "mcp.trust.tier": "verified",
+          },
         },
       });
     } finally {

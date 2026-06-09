@@ -76,6 +76,10 @@ export class KernelBridge {
     this.memoryDeps = createDaemonMemoryDependencies({
       ...(this.options.memory ?? {}),
       workspaceRoot,
+      enableCheckpointRepository:
+        this.options.memory?.enableCheckpointRepository === false
+          ? false
+          : kernelOptions.checkpointRepository === undefined,
       ...(this.options.resolvedConfig !== undefined
         ? { resolvedConfig: this.options.resolvedConfig }
         : {}),
@@ -124,6 +128,7 @@ export class KernelBridge {
       ...(subagentBridge !== undefined ? { subagentBridge } : {}),
       checkpointRepository:
         kernelOptions.checkpointRepository ??
+        this.memoryDeps.checkpointRepository ??
         new FsCheckpointRepository(join(basePath, "_graph_checkpoints")),
       checkpointDurability: kernelOptions.checkpointDurability ?? "async",
     });

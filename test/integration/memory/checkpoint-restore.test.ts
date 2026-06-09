@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
+import type { CheckpointEnvelope } from "../../../packages/event-store/src/index.js";
+import { PostgresCheckpointEnvelopeRepository } from "../../../packages/memory-store/src/index.js";
 import { PostgresStoreAdapter } from "../../../packages/memory-service/src/adapters/postgres-store-adapter.js";
 import { CheckpointService } from "../../../packages/memory-service/src/checkpoint/checkpoint-service.js";
 
@@ -58,6 +60,31 @@ describe.skipIf(skipIfNoDocker())("checkpoint restore (postgres)", () => {
 
     const restored = await cp.restore(ref, store);
     expect(restored.checkpoint.stateJson).toEqual(huge);
+  });
+
+  it("persists daemon checkpoint envelopes with opaque run and checkpoint ids", async () => {
+    const repo = new PostgresCheckpointEnvelopeRepository(hooks.sql);
+    const envelope: CheckpointEnvelope = {
+      id: "ckpt_01JZDAEMONCHECKPOINT",
+      runId: "run_01JZDAEMONCHECKPOINT",
+      createdAt: "2026-06-09T00:00:00.000Z",
+      version: "kirakira.checkpoint.v1",
+      payload: {
+        runId: "run_01JZDAEMONCHECKPOINT",
+        planId: "plan-1",
+        graph: { nodes: [], edges: [] },
+        scheduler: { readyQueue: [] },
+        controlEpoch: 0,
+        lineageRootId: "lineage-1",
+      },
+    };
+
+    await repo.save(envelope);
+
+    await expect(repo.load(envelope.id)).resolves.toEqual(envelope);
+    await expect(repo.loadLatestByRunId(envelope.runId)).resolves.toEqual(envelope);
+    await repo.delete(envelope.id);
+    await expect(repo.load(envelope.id)).resolves.toBeUndefined();
   });
 });
 

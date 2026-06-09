@@ -584,6 +584,11 @@
               ]
             }
           ]
+        },
+        "smokeChecks": {
+          "daemon": ["daemon:socket", "daemon:browser-gateway"],
+          "web": ["daemon:browser-gateway", "presentation:web"],
+          "desktop": ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"]
         }
       },
       "mcp": {

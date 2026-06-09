@@ -551,4 +551,99 @@ describe("runtime daemon subagent bridge", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it("uses memory-backed checkpoint repository from the runtime memory profile unless kernel options override it", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-memory-checkpoints-"));
+    const eventStorePath = join(workspaceRoot, "events");
+    let memoryCheckpointFactories = 0;
+    let overrideCheckpointFactories = 0;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "checkpoint-workspace",
+        deep_research: { enabled: false },
+      },
+      runtimeState: {
+        default_profile: "workbench-host",
+        profiles: [
+          {
+            name: "workbench-host",
+            mode: "host",
+            workspace_root: workspaceRoot,
+            memory: {
+              enabled: true,
+              services: [{ name: "postgres", url_env: "PROFILE_DATABASE_URL" }],
+            },
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      runtimeProfileName: "workbench-host",
+      memory: {
+        env: {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        },
+        checkpointRepositoryFactory() {
+          memoryCheckpointFactories += 1;
+          return {
+            async save() {},
+            async load() {
+              return undefined;
+            },
+            async delete() {},
+          };
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      expect(memoryCheckpointFactories).toBe(1);
+    } finally {
+      await bridge.destroy();
+    }
+
+    const overrideBridge = new KernelBridge(join(workspaceRoot, "events-override"), {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      runtimeProfileName: "workbench-host",
+      memory: {
+        env: {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        },
+        checkpointRepositoryFactory() {
+          overrideCheckpointFactories += 1;
+          return {
+            async save() {},
+            async load() {
+              return undefined;
+            },
+            async delete() {},
+          };
+        },
+      },
+      kernelOptions: {
+        checkpointRepository: {
+          async save() {},
+          async load() {
+            return undefined;
+          },
+          async delete() {},
+        },
+      },
+    });
+
+    try {
+      await overrideBridge.create();
+      expect(overrideCheckpointFactories).toBe(0);
+    } finally {
+      await overrideBridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
 });

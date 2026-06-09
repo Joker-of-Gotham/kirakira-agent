@@ -55,6 +55,14 @@ process. These workbench steps use profile-declared `waitFor` checks from the
 shared runtime readiness plan rather than local port literals. The browser
 runtime gateway is `ws://127.0.0.1:17373/runtime`.
 
+Workbench smoke validation is exposed through `pnpm e2e:workbench -- --profile
+workbench-host --surface web --timeout-ms 120000`. By default that command
+reports the resolved smoke plan without starting Docker, daemon, or Vite
+dependencies. Live execution is a second opt-in: add `--live` or set
+`KIRAKIRA_LIVE_E2E=1` to start the same resolved workbench plan under
+supervision, wait on profile-declared readiness checks such as
+`presentation:web`, and then tear down local child processes.
+
 ## Runtime services
 
 `docker-compose.yml` currently defines the runtime envelope:
@@ -168,6 +176,9 @@ server groups and command descriptors are data rather than JS literals.
 `scripts/kirakira-common.mjs` obtains managed MCP defaults from that renderer
 instead of owning separate hardcoded `/workspace`, `/app`, or server package
 constants.
+The same profile contract also declares workbench smoke checks by name, keeping
+live e2e readiness tied to resolved `runtime-profile.mjs` output instead of
+duplicating port literals in test harnesses.
 
 ## Presentation baseline
 
@@ -181,6 +192,14 @@ Both presentation shells use the `workbench-host` profile and the browser runtim
 gateway rather than duplicating CLI-only chat state. A Vite server on `5173` is
 not a Kirakira validation target; use the Kirakira web shell on `5183`, desktop
 renderer on `5174`, and browser gateway on `17373/runtime`.
+
+The same profile now drives the opt-in live smoke gate:
+`pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms
+120000 --live`. The command uses `scripts/kirakira-workbench-smoke.mjs` to start
+the profile plan, wait for profile-rendered readiness checks, and tear down
+foreground workbench processes after the selected surface is reachable. Without
+`KIRAKIRA_LIVE_E2E=1` or `--live`, it reports the smoke plan and exits without
+starting Docker, daemon, Vite, or Electron.
 
 The shared workbench MCP directory is rendered from runtime transport calls
 (`mcp_list`) and browser-safe view models in `@kirakira/frontend-core`. Web and

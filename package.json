@@ -17,6 +17,7 @@
     "start:desktop": "node scripts/kirakira-workbench.mjs desktop",
     "dev:web": "pnpm --filter @kirakira/web dev",
     "dev:desktop": "node scripts/kirakira-workbench.mjs desktop --skip-infra --skip-daemon",
+    "e2e:workbench": "node scripts/kirakira-workbench-smoke.mjs",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
     "runtime:doctor": "node scripts/runtime-doctor.mjs",

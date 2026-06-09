@@ -3,7 +3,9 @@ import type { ResolvedConfig } from "../../../packages/core/src/index.js";
 import type { MemoryBundle, RecallRequest, RetrievalTrace } from "../../../packages/memory-core/src/index.js";
 import {
   createDaemonMemoryDependencies,
+  memoryPostgresConfigFromEnv,
   memoryServiceConfigFromEnv,
+  shouldCreateDaemonMemoryCheckpointRepository,
   shouldCreateDaemonMemoryDependencies,
   type DaemonMemoryEnv,
 } from "../../../packages/runtime-daemon/src/bridge/memory-runtime-deps.js";
@@ -294,6 +296,133 @@ describe("daemon memory runtime dependencies", () => {
       limit: 5,
       level: "L2",
     });
+  });
+
+  it("selects a checkpoint repository from the resolved memory Postgres profile without enabling recall", async () => {
+    let capturedConfig: ReturnType<typeof memoryServiceConfigFromEnv> | undefined;
+    let closed = false;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "checkpoint-workspace",
+        deep_research: { enabled: false },
+      },
+      runtimeState: {
+        default_profile: "profiled",
+        profiles: [
+          {
+            name: "profiled",
+            mode: "host",
+            memory: {
+              enabled: true,
+              services: [{ name: "postgres", url_env: "PROFILE_DATABASE_URL" }],
+            },
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+
+    expect(
+      shouldCreateDaemonMemoryDependencies({
+        workspaceRoot: "C:/workspace",
+        resolvedConfig,
+        runtimeProfileName: "profiled",
+        env: {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        },
+      }),
+    ).toBe(false);
+    expect(
+      shouldCreateDaemonMemoryCheckpointRepository({
+        workspaceRoot: "C:/workspace",
+        resolvedConfig,
+        runtimeProfileName: "profiled",
+        env: {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        },
+      }),
+    ).toBe(true);
+
+    const deps = createDaemonMemoryDependencies({
+      workspaceRoot: "C:/workspace",
+      resolvedConfig,
+      runtimeProfileName: "profiled",
+      env: {
+        PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+      },
+      checkpointRepositoryFactory(config) {
+        capturedConfig = config;
+        return {
+          async save() {},
+          async load() {
+            return undefined;
+          },
+          async delete() {},
+          async close() {
+            closed = true;
+          },
+        };
+      },
+    });
+
+    expect(deps.researchSource).toBeUndefined();
+    expect(deps.checkpointRepository).toBeDefined();
+    expect(capturedConfig?.postgres).toMatchObject({
+      host: "profile-pg",
+      port: 15432,
+      database: "profile",
+      username: "profile",
+      password: "secret",
+    });
+    expect(memoryPostgresConfigFromEnv({})).toBeUndefined();
+    await deps.close();
+    expect(closed).toBe(true);
+  });
+
+  it("does not fall back to localhost for the default checkpoint repository", () => {
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "checkpoint-workspace",
+        deep_research: { enabled: false },
+      },
+      runtimeState: {
+        default_profile: "profiled",
+        profiles: [
+          {
+            name: "profiled",
+            mode: "host",
+            memory: {
+              enabled: true,
+              services: [{ name: "postgres" }],
+            },
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+
+    expect(
+      shouldCreateDaemonMemoryCheckpointRepository({
+        workspaceRoot: "C:/workspace",
+        resolvedConfig,
+        runtimeProfileName: "profiled",
+        env: {},
+      }),
+    ).toBe(false);
+    expect(
+      shouldCreateDaemonMemoryCheckpointRepository({
+        workspaceRoot: "C:/workspace",
+        resolvedConfig,
+        runtimeProfileName: "profiled",
+        env: { KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED: "1" },
+      }),
+    ).toBe(true);
+    expect(() =>
+      createDaemonMemoryDependencies({
+        workspaceRoot: "C:/workspace",
+        resolvedConfig,
+        runtimeProfileName: "profiled",
+        env: { KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED: "1" },
+      }),
+    ).toThrow(/requires a Postgres DSN/);
   });
 
   it("constructs the production service lazily on first recall", async () => {

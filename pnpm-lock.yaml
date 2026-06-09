@@ -726,6 +726,9 @@ importers:
       '@kirakira/memory-service':
         specifier: workspace:*
         version: link:../memory-service
+      '@kirakira/memory-store':
+        specifier: workspace:*
+        version: link:../memory-store
       '@kirakira/orchestrator-kernel':
         specifier: workspace:*
         version: link:../orchestrator-kernel

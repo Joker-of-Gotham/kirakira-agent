@@ -31,14 +31,28 @@ function normalizeArgs(argv) {
   const options = {
     surface: undefined,
     dryRun: false,
+    smoke: false,
     skipInfra: false,
     skipDaemon: false,
     profileName: undefined,
+    timeoutMs: undefined,
+    intervalMs: undefined,
+    probeTimeoutMs: undefined,
   };
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === "--") {
+      continue;
+    }
     if (arg === "--dry-run") {
       options.dryRun = true;
+      continue;
+    }
+    if (arg === "--smoke") {
+      options.smoke = true;
+      continue;
+    }
+    if (arg === "--live") {
       continue;
     }
     if (arg === "--skip-infra") {
@@ -57,6 +71,32 @@ function normalizeArgs(argv) {
       index += 1;
       continue;
     }
+    if (arg === "--surface") {
+      if (!args[index + 1] || args[index + 1].startsWith("--")) {
+        throw new Error("--surface requires a surface name");
+      }
+      if (options.surface !== undefined) {
+        throw new Error("Workbench surface was provided more than once");
+      }
+      options.surface = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (arg === "--timeout-ms") {
+      options.timeoutMs = parsePositiveIntegerOption(args[index + 1], "--timeout-ms");
+      index += 1;
+      continue;
+    }
+    if (arg === "--interval-ms") {
+      options.intervalMs = parsePositiveIntegerOption(args[index + 1], "--interval-ms");
+      index += 1;
+      continue;
+    }
+    if (arg === "--probe-timeout-ms") {
+      options.probeTimeoutMs = parsePositiveIntegerOption(args[index + 1], "--probe-timeout-ms");
+      index += 1;
+      continue;
+    }
     if (arg.startsWith("--")) {
       throw new Error(`Unknown workbench argument: ${arg}`);
     }
@@ -67,6 +107,14 @@ function normalizeArgs(argv) {
     throw new Error(`Unknown workbench argument: ${arg}`);
   }
   return options;
+}
+
+function parsePositiveIntegerOption(value, name) {
+  const numberValue = Number(value);
+  if (!Number.isInteger(numberValue) || numberValue <= 0) {
+    throw new Error(`${name} requires a positive integer`);
+  }
+  return numberValue;
 }
 
 export function profileFromOptions(options, env = process.env) {
@@ -189,6 +237,57 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
     env,
     readiness,
     steps,
+  };
+}
+
+function uniqueCheckNames(checks) {
+  return [...new Set(checks.filter((check) => typeof check === "string" && check.length > 0))];
+}
+
+function readinessHasCheck(readiness, checkName) {
+  return (readiness.checks ?? []).some((check) => check.name === checkName);
+}
+
+function derivedSmokeChecks(plan) {
+  const checks = [];
+  for (const step of plan.steps) {
+    checks.push(...(step.waitFor ?? []));
+  }
+  const presentationCheck = `presentation:${plan.surface}`;
+  if (readinessHasCheck(plan.readiness, presentationCheck)) {
+    checks.push(presentationCheck);
+  }
+  if (plan.surface === "daemon") {
+    for (const check of ["daemon:socket", "daemon:browser-gateway"]) {
+      if (readinessHasCheck(plan.readiness, check)) checks.push(check);
+    }
+  }
+  return uniqueCheckNames(checks);
+}
+
+function resolveSmokeChecks(profile, plan, options = {}) {
+  const configured = profile.workbench?.smokeChecks?.[plan.surface];
+  const checks = configured === undefined
+    ? derivedSmokeChecks(plan)
+    : normalizeWaitFor(configured, `smoke surface "${plan.surface}"`, options);
+  if (checks.length === 0) {
+    throw new Error(`Workbench smoke surface "${plan.surface}" has no readiness checks`);
+  }
+  readinessPlanForCheckNames(plan.readiness, checks);
+  return uniqueCheckNames(checks);
+}
+
+export function buildWorkbenchSmokePlan(profile, surface, options = {}) {
+  const plan = buildWorkbenchPlan(profile, surface, options);
+  const checks = resolveSmokeChecks(profile, plan, options);
+  return {
+    ...plan,
+    smoke: {
+      checks,
+    },
+    steps: plan.steps.map((step) =>
+      step.mode === "foreground" ? { ...step, mode: "background" } : step,
+    ),
   };
 }
 
@@ -477,6 +576,42 @@ export async function runWorkbenchPlan(plan, options = {}) {
   }
 }
 
+export async function runWorkbenchSmokePlan(plan, options = {}) {
+  const supervisor = options.supervisor ?? new WorkbenchProcessSupervisor(options.processes);
+  const waitForChecks = options.waitForReadiness ?? waitForReadinessChecks;
+  const runBlockingStep = options.runChecked ?? runChecked;
+  const smokeChecks = plan.smoke?.checks ?? [];
+  if (smokeChecks.length === 0) {
+    throw new Error(`Workbench smoke plan "${plan.profile}/${plan.surface}" has no readiness checks`);
+  }
+  const removeSignalHandlers = options.installSignalHandlers
+    ? installSignalHandlers(supervisor)
+    : () => {};
+  try {
+    for (const step of plan.steps) {
+      supervisor.assertHealthy();
+      if (step.waitFor?.length) {
+        await raceBackgroundFailure(
+          supervisor,
+          waitForChecks(plan.readiness, step.waitFor, options.readiness),
+        );
+      }
+      if (step.mode === "run") {
+        runBlockingStep(step);
+        continue;
+      }
+      supervisor.spawnBackground(step);
+    }
+    await raceBackgroundFailure(
+      supervisor,
+      waitForChecks(plan.readiness, smokeChecks, options.readiness),
+    );
+  } finally {
+    removeSignalHandlers();
+    await supervisor.stopAll();
+  }
+}
+
 function installSignalHandlers(supervisor) {
   const handlers = [
     ["SIGINT", 130],
@@ -500,7 +635,9 @@ function installSignalHandlers(supervisor) {
 async function main(argv) {
   const options = normalizeArgs(argv);
   const profile = profileFromOptions(options);
-  const plan = buildWorkbenchPlan(profile, options.surface, options);
+  const plan = options.smoke
+    ? buildWorkbenchSmokePlan(profile, options.surface, options)
+    : buildWorkbenchPlan(profile, options.surface, options);
 
   if (options.dryRun) {
     console.log(JSON.stringify(plan, null, 2));
@@ -511,7 +648,13 @@ async function main(argv) {
   ensureEnvFile(repoRoot);
   ensureMcpConfig(repoRoot, profile);
 
-  await runWorkbenchPlan(plan, { installSignalHandlers: true });
+  const readiness = {
+    timeoutMs: options.timeoutMs,
+    intervalMs: options.intervalMs,
+    probeTimeoutMs: options.probeTimeoutMs,
+  };
+  const runner = options.smoke ? runWorkbenchSmokePlan : runWorkbenchPlan;
+  await runner(plan, { installSignalHandlers: true, readiness });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

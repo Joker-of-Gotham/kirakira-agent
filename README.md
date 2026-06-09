@@ -105,6 +105,7 @@ That is the intended operating model: one command, one runtime path, one place t
 | `pnpm start:daemon` | Host daemon against Docker-published infra | `workbench-host` |
 | `pnpm start:web` | Host daemon plus web workbench at `http://127.0.0.1:5183` | `workbench-host` |
 | `pnpm start:desktop` | Host daemon, desktop renderer at `http://127.0.0.1:5174`, and the Electron shell | `workbench-host` |
+| `pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live` | Opt-in live smoke gate for Docker infra, daemon, gateway, and web readiness | `workbench-host` |
 | `pnpm runtime:profile env workbench-host` | Print the workbench env contract, including gateway `ws://127.0.0.1:17373/runtime` | `workbench-host` |
 | `kirakira-agent runtime profile env workbench-host` | CLI-facing profile env view backed by the same runtime profile script | selected profile |
 | `pnpm runtime:doctor workbench-host --json` | Probe the selected profile's current runtime readiness without starting services | selected profile |

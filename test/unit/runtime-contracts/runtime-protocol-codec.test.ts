@@ -348,11 +348,78 @@ describe("RuntimeRequestTracker", () => {
             name: "filesystem-core",
             health: "healthy",
             toolCount: 1,
+            trust: {
+              tier: "unknown",
+              source: "first-use",
+              trustedAnnotations: false,
+              firstUse: true,
+              configuredLevel: "untrusted",
+              transportKind: "stdio",
+              authMode: "none",
+            },
+            policy: {
+              decision: "not_evaluated",
+              source: "not-evaluated",
+              reasonCodes: [],
+              approvalRequired: false,
+              obligations: {
+                snapshotRequired: false,
+                dryRunRequired: false,
+                auditRequired: false,
+              },
+            },
+            audit: {
+              auditRequired: false,
+              eventKinds: ["mcp.discovery"],
+              ledger: "none",
+            },
+            otel: {
+              spanName: "mcp.tools/list",
+              attributes: {
+                "mcp.server.name": "filesystem-core",
+                "mcp.operation": "tools/list",
+                "mcp.trust.tier": "unknown",
+              },
+            },
             tools: [
               {
                 name: "read_file",
                 title: "Read file",
                 inputSchema: { type: "object", properties: {} },
+                annotations: { readOnlyHint: true },
+                trust: {
+                  tier: "unknown",
+                  source: "first-use",
+                  trustedAnnotations: false,
+                  firstUse: true,
+                  configuredLevel: "untrusted",
+                  transportKind: "stdio",
+                  authMode: "none",
+                },
+                policy: {
+                  decision: "ask",
+                  source: "gateway-default",
+                  reasonCodes: ["mcp_gateway_default_ask"],
+                  approvalRequired: true,
+                  obligations: {
+                    snapshotRequired: false,
+                    dryRunRequired: false,
+                    auditRequired: false,
+                  },
+                },
+                audit: {
+                  auditRequired: false,
+                  eventKinds: ["mcp.discovery"],
+                  ledger: "none",
+                },
+                otel: {
+                  spanName: "mcp.tools/list.read_file",
+                  attributes: {
+                    "mcp.server.name": "filesystem-core",
+                    "mcp.tool.name": "read_file",
+                    "mcp.trust.tier": "unknown",
+                  },
+                },
               },
             ],
           },
@@ -370,7 +437,20 @@ describe("RuntimeRequestTracker", () => {
       success: true,
     });
     await expect(mcpList).resolves.toMatchObject({
-      servers: [{ name: "filesystem-core", health: "healthy", toolCount: 1 }],
+      servers: [
+        {
+          name: "filesystem-core",
+          health: "healthy",
+          toolCount: 1,
+          trust: { tier: "unknown", trustedAnnotations: false },
+          tools: [
+            {
+              name: "read_file",
+              policy: { decision: "ask", source: "gateway-default" },
+            },
+          ],
+        },
+      ],
     });
   });
 
@@ -392,5 +472,25 @@ describe("RuntimeRequestTracker", () => {
     ).toBe(true);
 
     await expect(submit).rejects.toThrow("Runtime ack result is not a valid submit result");
+  });
+
+  it("rejects malformed MCP discovery metadata", () => {
+    expect(() =>
+      parseRuntimeMcpListAckResult({
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        servers: [
+          {
+            name: "docs",
+            health: "healthy",
+            trust: {
+              tier: "official",
+              source: "config",
+              trustedAnnotations: true,
+              firstUse: false,
+            },
+          },
+        ],
+      }),
+    ).toThrow("Runtime ack result is not a valid MCP list result");
   });
 });

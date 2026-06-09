@@ -73,6 +73,24 @@ export type {
   RunInspectorProjection,
 } from "./inspector.js";
 
+export { createRunWorkstream } from "./workstream.js";
+
+export type {
+  RunWorkstreamActivity,
+  RunWorkstreamAttentionItem,
+  RunWorkstreamAttentionSeverity,
+  RunWorkstreamCard,
+  RunWorkstreamColumn,
+  RunWorkstreamColumnId,
+  RunWorkstreamDetail,
+  RunWorkstreamDetailDrawer,
+  RunWorkstreamItemKind,
+  RunWorkstreamOptions,
+  RunWorkstreamProjection,
+  RunWorkstreamSummary,
+  RunWorkstreamTone,
+} from "./workstream.js";
+
 export {
   createEmptyRunDashboard,
   projectRunDashboard,

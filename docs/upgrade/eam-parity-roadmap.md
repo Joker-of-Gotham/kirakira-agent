@@ -43,8 +43,8 @@ change, a validation command, and a pushed commit.
 | --- | ---: | --- | --- |
 | EAM mechanism parity | 52% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, topology PEP/audit context, frontend topology view-model, workbench MCP directory view, and launcher fail-fast supervision now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit/OTel closure; connect memory retain/reflect/checkpoint; add unknown-role topology warnings. |
 | Web and Electron presentation | 55% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, the shared workbench renders swarm topology and MCP directory panels, and `pnpm start:desktop` now plans daemon + renderer + Electron shell with readiness gates. | Task-first workstream IA, OpenHuman-informed selected subagent activity, design-system docs, full Electron smoke automation, and broader visual QA. |
-| Hardcoding, harness, SDK/API | 47% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, PEP execution context, browser-safe topology/MCP selectors, and launcher executor tests are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden remaining test harnesses, finish shared gateway trust/audit/OTel context, and deduplicate runtime-profile/daemon manifest topology projection. |
-| Docker/local ecosystem | 50% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, profile-driven Electron shell startup, and surface-aware `waitFor` gates exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, and verify Docker/local/desktop/web paths end-to-end with live services. |
+| Hardcoding, harness, SDK/API | 48% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, PEP execution context, browser-safe topology/MCP selectors, launcher executor tests, and the workbench smoke harness are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden remaining test harnesses, finish shared gateway trust/audit/OTel context, and deduplicate runtime-profile/daemon manifest topology projection. |
+| Docker/local ecosystem | 54% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, profile-driven Electron shell startup, surface-aware `waitFor` gates, and an opt-in `workbench-host` live smoke command now exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, run the live Docker/local/web smoke gate in a slower environment, and extend smoke automation to Electron windows. |
 
 ## Gap Matrix
 
@@ -52,8 +52,8 @@ change, a validation command, and a pushed commit.
 | --- | --- | --- | --- | --- |
 | Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts`, `configs/runtime/profiles.json`, `packages/config-resolver/src/resolved-state.ts`, `packages/runtime-daemon/src/bin/daemon-config.ts`, `packages/runtime-contracts/src/status.ts`, `scripts/runtime-doctor.mjs` | Advancing. Contracts, inheritance, delegate bridge, kernel events, public topology schema, resolved profile topology projection, runtime-profile launcher topology merge, topology lane compilation, role-aware contract/routing/event projection, public topology manifest, profile doctor topology check, and PEP/audit execution context exist. | Add role defaults for bounded model/context settings; add topology lineage IDs and shared gateway trust/audit/OTel context. |
 | Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts`, `packages/runtime-daemon/src/bridge/memory-runtime-deps.ts`, structured memory runtime profile state | Advancing. Kernel research executor, daemon composition, lazy default daemon memory recall source, and profile-projected memory defaults exist. | Add gated Docker/local daemon integration coverage and connect retain/reflect/checkpoint events. |
-| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection, `packages/frontend-core/src/mcp-directory.ts`, shared workbench MCP panel | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, delegate/direct daemon MCP dependency construction, and live workbench health/discovery view now share typed contracts. | Route direct calls through gateway trust/audit/OTel, enrich discovery with policy/trust metadata, add a workbench argument playground, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
-| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, and resolved memory profile contracts exist. | Reuse the contract from harnesses and connect retain/reflect/checkpoint to runs. |
+| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection, `packages/frontend-core/src/mcp-directory.ts`, shared workbench MCP panel | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, delegate/direct daemon MCP dependency construction, live workbench health/discovery view, direct-call gateway trust/audit context, and policy/trust-enriched discovery metadata now share typed contracts. | Wire emitted OTel spans from the metadata, add a workbench argument playground, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
+| Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory`; daemon memory dependency factory builds lazy recall sources and memory-backed checkpoint repositories from structured runtime profile state plus env. | Advancing. Package surface, pipeline env bridge, default daemon recall composition, resolved memory profile contracts, and profile-selected daemon checkpoint repository exist. | Reuse the contract from harnesses, verify live Docker/local checkpoint persistence, and connect retain/reflect events to runs. |
 | Policy and harness | `reference_project/eam-agent/packages/policy-engine`, `packages/eamd`, `policies/*` | `packages/policy-engine`, `packages/kirakirad`, `policies/*`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts` | Advancing. PEP/PDP packages exist; daemon direct MCP calls and delegated subagent ToolExecutor paths now pass role/lane execution context into PEP without using topology roles as principal roles. | Ensure web/desktop tool actions and gateway paths share the same PEP/audit/OTel context; reduce remaining harness duplication. |
 | Registry and skills | `reference_project/eam-agent/packages/registry-client`, `packages/skill-runtime` | `packages/registry-client`, `packages/skill-runtime`, `skills-lock.json` | Partial. Packages exist; lockfile is currently untracked local state. | Decide tracked vs generated lockfile policy; connect registry trust decisions to runtime install/activation UI and CLI. |
 | Audit and tracing | `reference_project/eam-agent/packages/audit-ledger`, `docs/plane/eam-agent-tracing` | `packages/audit-ledger`, `docs/plane/kirakira-agent-tracing`, policy-engine ledger writer execution context | Advancing. Ledger package and tracing plane exist; policy decision/tool execution audit rows now preserve subagent role/lane execution context. | Emit OTel-compatible spans for run, tool, MCP, subagent, research, memory retrieval, and policy decisions. |
@@ -113,12 +113,25 @@ Latest four-lane audit intake on 2026-06-09:
   `packages/frontend-core/src/mcp-directory.ts` for health, tool count, and
   schema view-models. Mock preview covers healthy, degraded, and stopped MCP
   servers, and a headless Chrome visual check verified the `5183` web surface.
-  Remaining parity risk is gateway-backed MCP execution with trust, audit,
-  obligation, and OTel metadata.
+  The direct daemon MCP path now builds gateway trust/policy/audit/OTel context
+  from registered server config instead of hardcoded server names, propagates
+  trust tier into PEP, records direct-call audit bridge rows, and enriches
+  `mcp_list` discovery results with typed server/tool metadata. Remaining
+  parity risk is actual OTel span emission and richer workbench execution UI.
+- **2026-06-09 workbench live smoke gate slice:** `pnpm e2e:workbench` now
+  wraps the profile-driven workbench launcher in an opt-in smoke harness. The
+  default path reports the resolved plan without starting services; live mode
+  requires `KIRAKIRA_LIVE_E2E=1` or `--live`, starts the selected
+  `workbench-host` surface, waits for profile-rendered readiness checks, and
+  tears down foreground workbench processes after readiness passes. Remaining
+  risk is running the live gate regularly against Docker/daemon/web and adding a
+  non-interactive Electron window assertion.
 - **Runtime ecosystem:** `test/helpers/memory-env.ts` now derives the
   `test-host` memory stack fallback values from runtime profiles instead of
-  local literals. Remaining work is direct daemon startup coverage and Compose
-  duplication reduction.
+  local literals, and the workbench smoke gate now uses resolved
+  `workbench-host` readiness names instead of local presentation-port literals.
+  Remaining work is broader daemon startup coverage, Electron smoke automation,
+  and Compose duplication reduction.
 - **Architecture/API:** the largest hardcoding seam is no longer package
   presence, but split ownership of config, protocol parsing, harness readiness,
   and presentation endpoints. CLI config loading is now routed through
@@ -131,13 +144,15 @@ Latest four-lane audit intake on 2026-06-09:
   events. Delegate runtime and direct daemon MCP calls share one MCP dependency
   factory backed by resolved runtime profiles. Daemon memory now has a lazy
   runtime dependency factory that can inject a default memory recall source into
-  deep research from structured runtime memory profile state plus env. Subagent
+  deep research and select a memory-backed checkpoint repository from
+  structured runtime memory profile state plus env. Subagent
   role/lane selection now comes from resolved topology contracts and rejects raw
   lane hints once a role catalog exists. Public runtime manifests now expose a
   sanitized topology summary, runtime doctor validates role/lane/handoff shape,
-  and daemon MCP PEP/audit paths receive `context.execution` role metadata.
-  Next work should target live MCP workbench views, gateway trust/audit/OTel
-  convergence, test-harness reuse of the memory/topology contracts, and
+  daemon MCP PEP/audit paths receive `context.execution` role metadata, and
+  direct daemon MCP discovery/calls carry shared gateway trust/policy/audit/OTel
+  metadata. Next work should target live MCP workbench execution affordances,
+  real OTel span emission, test-harness reuse of the memory/topology contracts, and
   per-service readiness.
 
 ## Execution Queue
@@ -146,18 +161,23 @@ Latest four-lane audit intake on 2026-06-09:
    audit, memory, subagent, and deep-research runtime dependencies.
    MCP/PDP/audit construction is now shared for delegate and direct daemon MCP
    paths; memory recall construction now joins daemon deep-research through a
-   lazy profile/env-driven factory. Remaining work is retain/reflect/checkpoint
-   wiring, harness reuse, and OTel/audit convergence.
+   lazy profile/env-driven factory, and daemon checkpoints can use a
+   profile-selected memory-store Postgres envelope repository. Remaining work is
+   retain/reflect event wiring, live checkpoint persistence verification, and
+   OTel/audit convergence.
 2. **MCP runtime loop:** expose daemon MCP tools/health through
    `RuntimeManifest`, browser gateway, and desktop IPC.
    Tool invocation, typed live discovery, direct call run-event emission, and
-   health/discovery UI are now wired; gateway trust/audit/OTel convergence and
-   policy-enriched discovery remain.
+   health/discovery UI are now wired. Direct calls now share gateway
+   trust/audit context and discovery results include typed policy/trust/audit
+   and OTel-compatible metadata; actual OTel span export and workbench argument
+   playground remain.
 3. **Memory daemon composition:** construct memory service dependencies from
    resolved runtime profile env and inject memory recall into deep research by
    default.
-   Lazy daemon recall injection and structured memory profile projection are now
-   wired and unit-tested; gated Docker/local integration remains.
+   Lazy daemon recall injection, structured memory profile projection, and
+   profile-selected memory checkpoint repository injection are now wired and
+   unit-tested; gated Docker/local integration remains.
 4. **Swarm topology projection:** add resolved orchestration topology fields
    and compile them into kernel lane capacities, child runtime policy, and
    lineage events.
@@ -178,16 +198,20 @@ Latest four-lane audit intake on 2026-06-09:
    Electron main with profile-driven readiness gates. Remaining work is
    automated GUI smoke validation and broader desktop IA polish.
 7. **Workbench launcher supervisor:** declarative `waitFor` gates, readiness
-   plan filtering, background fail-fast racing, and process-tree cleanup are now
-   wired. Remaining work is a slower live end-to-end validation path for
-   Docker/daemon/web/desktop startup.
+   plan filtering, background fail-fast racing, process-tree cleanup, and an
+   opt-in `pnpm e2e:workbench` live smoke wrapper are now wired. Remaining work
+   is regular live execution against Docker/daemon/web plus a non-interactive
+   Electron GUI assertion.
 
 ## Validation Gates
 
 - Every runtime/profile change must run the profile contract tests and assert no
   accidental `5173` dependency:
   `test/unit/runtime/profile-resolution.test.ts`,
-  `test/unit/scripts/workbench-launcher.test.ts`, and relevant daemon tests.
+  `test/unit/scripts/workbench-launcher.test.ts`,
+  `test/unit/scripts/workbench-smoke.test.ts`, and relevant daemon tests.
+- Live workbench startup validation is opt-in and bounded:
+  `pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live`.
 - Every daemon/kernel change must run the package typecheck and focused daemon
   tests before commit.
 - Every web/desktop visual change must be checked in the in-app browser or

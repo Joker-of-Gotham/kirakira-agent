@@ -1,9 +1,14 @@
 import type { ResolvedConfig, ResolvedRuntimeMemoryState } from "@kirakira/core";
 import type { MemoryRecallPort } from "@kirakira/deep-research";
+import type { CheckpointRepository } from "@kirakira/event-store";
 import {
   MemoryServiceImpl,
   type MemoryServiceConfig,
 } from "@kirakira/memory-service";
+import {
+  createPgClient,
+  PostgresCheckpointEnvelopeRepository,
+} from "@kirakira/memory-store";
 
 import type { DaemonMemoryResearchSourceOptions } from "./deep-research.js";
 import { activeRuntimeProfile } from "./mcp-runtime-deps.js";
@@ -14,6 +19,10 @@ export type DaemonMemoryService = MemoryRecallPort & {
   close?: () => Promise<void> | void;
 };
 
+export type DaemonCheckpointRepository = CheckpointRepository & {
+  close?: () => Promise<void> | void;
+};
+
 export interface DaemonMemoryDependencyOptions {
   workspaceRoot: string;
   env?: DaemonMemoryEnv;
@@ -21,10 +30,14 @@ export interface DaemonMemoryDependencyOptions {
   runtimeProfileName?: string;
   service?: DaemonMemoryService;
   serviceFactory?: (config: MemoryServiceConfig) => DaemonMemoryService;
+  enableCheckpointRepository?: boolean;
+  checkpointRepository?: DaemonCheckpointRepository;
+  checkpointRepositoryFactory?: (config: MemoryServiceConfig) => DaemonCheckpointRepository;
 }
 
 export interface DaemonMemoryDependencies {
   researchSource?: DaemonMemoryResearchSourceOptions;
+  checkpointRepository?: CheckpointRepository;
   config?: MemoryServiceConfig;
   close(): Promise<void>;
 }
@@ -111,6 +124,16 @@ function memoryServiceEnv(
   return memory?.services?.find((service) => service.name === name)?.url_env;
 }
 
+function memoryProfileHasService(
+  options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
+  name: string,
+): boolean {
+  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
+  const memory = profile?.memory;
+  if (memory?.enabled === false) return false;
+  return (memory?.services ?? profile?.services ?? []).some((service) => service.name === name);
+}
+
 function memoryProfileHasBackingServices(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
 ): boolean {
@@ -123,12 +146,26 @@ function memoryProfileHasBackingServices(
   return [...MEMORY_SERVICE_NAMES].some((name) => serviceNames.has(name));
 }
 
+function memoryPostgresDsn(
+  env: DaemonMemoryEnv,
+  memory: ResolvedRuntimeMemoryState | undefined,
+): string | undefined {
+  return envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL");
+}
+
+function hasRuntimeMemoryPostgresEnv(
+  env: DaemonMemoryEnv,
+  memory: ResolvedRuntimeMemoryState | undefined,
+): boolean {
+  return Boolean(memoryPostgresDsn(env, memory));
+}
+
 function hasRuntimeMemoryEnv(
   env: DaemonMemoryEnv,
   memory: ResolvedRuntimeMemoryState | undefined,
 ): boolean {
   return Boolean(
-    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL") &&
+    memoryPostgresDsn(env, memory) &&
       envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") &&
       envFirst(
         env,
@@ -158,13 +195,38 @@ export function shouldCreateDaemonMemoryDependencies(
   );
 }
 
+export function shouldCreateDaemonMemoryCheckpointRepository(
+  options: DaemonMemoryDependencyOptions,
+): boolean {
+  if (options.enableCheckpointRepository === false) return false;
+  const env = options.env ?? process.env;
+  const enabled = envFlag(env, "KIRAKIRA_MEMORY_ENABLED");
+  const checkpointEnabled = envFlag(env, "KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED");
+  const memory = activeRuntimeMemory(options);
+  if (checkpointEnabled === false) return false;
+  if (enabled === false) return false;
+  if (memory?.enabled === false) return false;
+  if (options.checkpointRepository) return true;
+  if (checkpointEnabled === true) return true;
+  return Boolean(
+    memoryProfileHasService(options, "postgres") &&
+      hasRuntimeMemoryPostgresEnv(env, memory),
+  );
+}
+
+export function memoryPostgresConfigFromEnv(
+  env: DaemonMemoryEnv = process.env,
+  memory?: ResolvedRuntimeMemoryState,
+): MemoryServiceConfig["postgres"] | undefined {
+  const dsn = memoryPostgresDsn(env, memory);
+  return dsn ? postgresConfigFromDsn(dsn) : undefined;
+}
+
 export function memoryServiceConfigFromEnv(
   env: DaemonMemoryEnv = process.env,
   memory?: ResolvedRuntimeMemoryState,
 ): MemoryServiceConfig {
-  const postgresDsn =
-    envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL") ??
-    "postgresql://localhost:5432/kirakira";
+  const postgresDsn = memoryPostgresDsn(env, memory) ?? "postgresql://localhost:5432/kirakira";
   const redisUrl =
     envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") ?? "redis://localhost:6379/0";
   const qdrantUrl = envFirst(
@@ -333,43 +395,87 @@ function defaultWorkspaceId(
   );
 }
 
+function createDefaultCheckpointRepository(
+  config: MemoryServiceConfig,
+): DaemonCheckpointRepository {
+  const sql = createPgClient({
+    ...config.postgres,
+    maxConnections: config.postgres.maxConnections ?? 4,
+  });
+  const repository = new PostgresCheckpointEnvelopeRepository(sql);
+  return {
+    save: (envelope) => repository.save(envelope),
+    load: (id) => repository.load(id),
+    delete: (id) => repository.delete(id),
+    async close() {
+      await sql.end({ timeout: 5 });
+    },
+  };
+}
+
 export function createDaemonMemoryDependencies(
   options: DaemonMemoryDependencyOptions,
 ): DaemonMemoryDependencies {
-  if (!shouldCreateDaemonMemoryDependencies(options)) {
+  const shouldCreateRecall = shouldCreateDaemonMemoryDependencies(options);
+  const shouldCreateCheckpoint = shouldCreateDaemonMemoryCheckpointRepository(options);
+  if (!shouldCreateRecall && !shouldCreateCheckpoint) {
     return { async close() {} };
   }
 
   const env = options.env ?? process.env;
   const memory = activeRuntimeMemory(options);
-  const config = options.service ? undefined : memoryServiceConfigFromEnv(env, memory);
-  const service =
-    options.service ??
-    new LazyMemoryRecallPort(
-      config!,
-      options.serviceFactory ?? ((serviceConfig) => new MemoryServiceImpl(serviceConfig)),
+  const postgresConfig = memoryPostgresConfigFromEnv(env, memory);
+  if (
+    shouldCreateCheckpoint &&
+    !options.checkpointRepository &&
+    !options.checkpointRepositoryFactory &&
+    !postgresConfig
+  ) {
+    throw new Error(
+      "Memory checkpoint repository requires a Postgres DSN from resolved runtime memory profile or env",
     );
+  }
+  const needsConfig = (shouldCreateRecall && !options.service) ||
+    (shouldCreateCheckpoint && !options.checkpointRepository);
+  const config = needsConfig ? memoryServiceConfigFromEnv(env, memory) : undefined;
+  const service = shouldCreateRecall
+    ? options.service ??
+      new LazyMemoryRecallPort(
+        config!,
+        options.serviceFactory ?? ((serviceConfig) => new MemoryServiceImpl(serviceConfig)),
+      )
+    : undefined;
+  const checkpointRepository = shouldCreateCheckpoint
+    ? options.checkpointRepository ??
+      (options.checkpointRepositoryFactory ?? createDefaultCheckpointRepository)(config!)
+    : undefined;
 
   return {
     ...(config ? { config } : {}),
-    researchSource: {
-      service,
-      tenantId: () =>
-        envFirst(env, "KIRAKIRA_MEMORY_TENANT_ID", "KIRAKIRA_TENANT_ID") ??
-        defaultTenantId(options, env),
-      workspaceId: ({ workspaceRoot }) =>
-        envFirst(env, "KIRAKIRA_MEMORY_WORKSPACE_ID", "KIRAKIRA_WORKSPACE_ID") ??
-        workspaceRoot ??
-        defaultWorkspaceId(options, env),
-      tokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET") ?? memory?.recall?.token_budget,
-      limit: envNumber(env, "KIRAKIRA_MEMORY_RECALL_LIMIT") ?? memory?.recall?.limit,
-      level:
-        memoryContextLevel(envFirst(env, "KIRAKIRA_MEMORY_RECALL_LEVEL") ?? memory?.recall?.level) ??
-        DEFAULT_MEMORY_LEVEL,
-      includeRedacted: false,
-    },
+    ...(checkpointRepository ? { checkpointRepository } : {}),
+    ...(service
+      ? {
+          researchSource: {
+            service,
+            tenantId: () =>
+              envFirst(env, "KIRAKIRA_MEMORY_TENANT_ID", "KIRAKIRA_TENANT_ID") ??
+              defaultTenantId(options, env),
+            workspaceId: ({ workspaceRoot }) =>
+              envFirst(env, "KIRAKIRA_MEMORY_WORKSPACE_ID", "KIRAKIRA_WORKSPACE_ID") ??
+              workspaceRoot ??
+              defaultWorkspaceId(options, env),
+            tokenBudget: envNumber(env, "KIRAKIRA_MEMORY_RECALL_TOKEN_BUDGET") ?? memory?.recall?.token_budget,
+            limit: envNumber(env, "KIRAKIRA_MEMORY_RECALL_LIMIT") ?? memory?.recall?.limit,
+            level:
+              memoryContextLevel(envFirst(env, "KIRAKIRA_MEMORY_RECALL_LEVEL") ?? memory?.recall?.level) ??
+              DEFAULT_MEMORY_LEVEL,
+            includeRedacted: false,
+          },
+        }
+      : {}),
     async close() {
-      await service.close?.();
+      await service?.close?.();
+      await checkpointRepository?.close?.();
     },
   };
 }

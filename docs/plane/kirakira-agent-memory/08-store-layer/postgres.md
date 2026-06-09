@@ -40,7 +40,11 @@ Related child data (e.g. episode segments) lives in normalized tables where need
 
 ### `checkpoints`
 
-Agent run state: `run_id`, `step_no`, `state_json`, `artifact_manifest`, optional `parent_checkpoint_id` for lineage.
+Memory API checkpoint DTOs: `run_id`, `step_no`, `state_json`, `artifact_manifest`, optional `parent_checkpoint_id` for lineage. This table is used by `CheckpointService`.
+
+### `daemon_checkpoints`
+
+Daemon kernel checkpoint envelopes selected from the resolved runtime memory profile. This table stores the `@kirakira/event-store` `CheckpointEnvelope` as JSONB with text `id` / `run_id` columns so orchestrator ULIDs remain unchanged.
 
 ### `artifact_meta`
 
@@ -87,6 +91,7 @@ Well suited for equality and range filters on hot paths:
 - `memory_records`: `(tenant_id, kind, created_at DESC)`
 - `episodes`: `(tenant_id, workspace_id, created_at DESC)`
 - `checkpoints`: `(run_id, step_no DESC)`, `(run_id, created_at DESC)`
+- `daemon_checkpoints`: `(run_id, created_at DESC)`
 - `artifact_meta`: `(sha256)`, `(tenant_id, created_at DESC)`
 - `outbox`: `(status, available_at)` for processor polling
 - `deletion_jobs`: `(tenant_id, status, created_at DESC)`
@@ -397,6 +402,20 @@ CREATE INDEX IF NOT EXISTS retrieval_traces_created_idx
 
 CREATE INDEX IF NOT EXISTS retrieval_traces_query_id_idx
   ON retrieval_traces (query_id);
+```
+
+### `009_daemon_checkpoints.sql`
+
+```sql
+CREATE TABLE IF NOT EXISTS daemon_checkpoints (
+  id TEXT PRIMARY KEY,
+  run_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL,
+  envelope JSONB NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS daemon_checkpoints_run_created_idx
+  ON daemon_checkpoints (run_id, created_at DESC);
 ```
 
 ---

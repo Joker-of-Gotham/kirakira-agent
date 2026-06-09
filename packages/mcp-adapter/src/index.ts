@@ -9,6 +9,7 @@ export * from "./pdp-bridge.js";
 export * from "./trust-evaluator.js";
 export * from "./timeout.js";
 export * from "./gateway.js";
+export * from "./gateway-context.js";
 export * from "./auth/oauth.js";
 export * from "./auth/bearer.js";
 export * from "./auth/env.js";

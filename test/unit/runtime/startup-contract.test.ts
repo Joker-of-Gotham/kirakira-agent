@@ -22,6 +22,7 @@ describe("startup contract", () => {
     expect(pkg.scripts["dev:desktop"]).toBe(
       "node scripts/kirakira-workbench.mjs desktop --skip-infra --skip-daemon",
     );
+    expect(pkg.scripts["e2e:workbench"]).toBe("node scripts/kirakira-workbench-smoke.mjs");
     expect(pkg.scripts["runtime:profile"]).toBe("node scripts/runtime-profile.mjs");
     expect(pkg.scripts["runtime:doctor"]).toBe("node scripts/runtime-doctor.mjs");
 
