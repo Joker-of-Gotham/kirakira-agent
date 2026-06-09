@@ -67,6 +67,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     { profileName: "test-host" },
     options.env ?? process.env,
   );
+  const deepResearchLiveAdapters = buildDeepResearchLiveAdapterGate(workspaceRoot);
   const presentationProjection = buildPresentationProjectionGate(projection);
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
@@ -82,6 +83,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     projection,
     parity,
     memoryPersistenceSmoke,
+    deepResearchLiveAdapters,
     presentationProjection,
     harnessHardcoding,
   };
@@ -118,6 +120,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     tracks,
     gates: {
       memoryPersistence: memoryPersistenceSmoke,
+      deepResearchLiveAdapters,
       presentationProjection,
       harnessHardcoding,
     },
@@ -230,7 +233,7 @@ function buildAdvisoryWarnings(tracks) {
   );
 }
 
-function eamMechanismTrack({ workspaceRoot, parity }) {
+function eamMechanismTrack({ workspaceRoot, parity, deepResearchLiveAdapters }) {
   return {
     id: "eam-mechanism-parity",
     title: "EAM Mechanism Parity",
@@ -257,7 +260,102 @@ function eamMechanismTrack({ workspaceRoot, parity }) {
         ),
         `depth=${parity.depth}`,
       ),
+      deepResearchLiveAdapterCheck(deepResearchLiveAdapters),
     ],
+  };
+}
+
+function buildDeepResearchLiveAdapterGate(workspaceRoot) {
+  const requiredSuites = [
+    {
+      name: "file",
+      source: "packages/deep-research/src/file.ts",
+      tests: ["test/unit/deep-research/file.test.ts"],
+    },
+    {
+      name: "web",
+      source: "packages/deep-research/src/web.ts",
+      tests: ["test/unit/deep-research/web.test.ts"],
+    },
+    {
+      name: "mcp",
+      source: "packages/deep-research/src/mcp.ts",
+      tests: [
+        "test/unit/deep-research/mcp.test.ts",
+        "test/unit/runtime-daemon/deep-research-mcp-source.test.ts",
+      ],
+    },
+  ];
+  const suites = requiredSuites.map((suite) => {
+    const sourceExists = existsSync(join(workspaceRoot, suite.source));
+    const tests = suite.tests.map((testPath) => ({
+      path: testPath,
+      exists: existsSync(join(workspaceRoot, testPath)),
+    }));
+    const covered = sourceExists && tests.every((test) => test.exists);
+    return {
+      ...suite,
+      sourceExists,
+      tests,
+      covered,
+    };
+  });
+  const coveredSuites = suites.filter((suite) => suite.covered).map((suite) => suite.name);
+  const missingSuites = suites.filter((suite) => !suite.covered).map((suite) => suite.name);
+  const liveGatePath = "docs/upgrade/gates/deep-research-live-adapters.json";
+  const liveGate = readOptionalGateResult(join(workspaceRoot, liveGatePath));
+  const livePassed = liveGate.status === "passed";
+  const explicitFailed = liveGate.status === "failed" || liveGate.status === "malformed";
+  const status =
+    missingSuites.length > 0 || explicitFailed
+      ? "fail"
+      : livePassed
+        ? "pass"
+        : "warn";
+  return {
+    status,
+    gate: "deep-research:live-adapters",
+    requiredSuites: requiredSuites.map((suite) => suite.name),
+    coveredSuites,
+    missingSuites,
+    suites,
+    liveGate: {
+      resultPath: liveGatePath,
+      status: liveGate.status,
+      ...(liveGate.details !== undefined ? { details: liveGate.details } : {}),
+    },
+    evidence: [
+      `covered=${coveredSuites.join(",") || "none"}`,
+      `missing=${missingSuites.join(",") || "none"}`,
+      `liveGate=${liveGate.status}`,
+      `result=${liveGatePath}`,
+    ].join("; "),
+  };
+}
+
+function readOptionalGateResult(path) {
+  if (!existsSync(path)) return { status: "missing" };
+  try {
+    const payload = readJson(path);
+    const status = payload?.status;
+    if (status === "passed" || status === "failed") {
+      return { status, details: payload };
+    }
+    return { status: "malformed", details: { reason: "status must be passed or failed" } };
+  } catch (error) {
+    return {
+      status: "malformed",
+      details: { reason: error instanceof Error ? error.message : String(error) },
+    };
+  }
+}
+
+function deepResearchLiveAdapterCheck(gate) {
+  return {
+    label: "Deep research live adapter suites are evidenced",
+    status: gate.status === "pass" ? "pass" : gate.status === "fail" ? "fail" : "warn",
+    evidence: gate.evidence,
+    ...(gate.status === "warn" ? { actionable: false } : {}),
   };
 }
 

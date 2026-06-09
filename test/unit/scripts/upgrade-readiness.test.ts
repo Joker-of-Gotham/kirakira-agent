@@ -35,8 +35,15 @@ describe("upgrade readiness gate", () => {
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
     expect(report.summary.openWork).toBe(0);
-    expect(report.summary.advisoryWarnings).toBe(0);
-    expect(report.advisoryWarnings).toEqual([]);
+    expect(report.summary.advisoryWarnings).toBe(1);
+    expect(report.advisoryWarnings).toEqual([
+      expect.objectContaining({
+        track: "EAM Mechanism Parity",
+        item: "Deep research live adapter suites are evidenced",
+        status: "warn",
+        evidence: expect.stringContaining("liveGate=missing"),
+      }),
+    ]);
     expect(report.openWork).toEqual([]);
     expect(
       report.openWork.some((item) =>
@@ -67,6 +74,17 @@ describe("upgrade readiness gate", () => {
     expect(report.gates.memoryPersistence.evidence).toMatchObject({
       resultPath: "docs/upgrade/gates/memory-persistence-smoke.json",
       resultMatches: true,
+    });
+    expect(report.gates.deepResearchLiveAdapters).toMatchObject({
+      status: "warn",
+      gate: "deep-research:live-adapters",
+      requiredSuites: ["file", "web", "mcp"],
+      coveredSuites: ["file", "web", "mcp"],
+      missingSuites: [],
+      liveGate: {
+        resultPath: "docs/upgrade/gates/deep-research-live-adapters.json",
+        status: "missing",
+      },
     });
     expect(report.gates.presentationProjection).toMatchObject({
       status: "pass",
@@ -138,12 +156,13 @@ describe("upgrade readiness gate", () => {
     const json = JSON.parse(renderUpgradeReadinessReport(report, "json"));
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
-    expect(markdown).not.toContain("## Advisory Warnings");
+    expect(markdown).toContain("## Advisory Warnings");
     expect(markdown).not.toContain("## Open Work");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
     expect(json.openWork.length).toBe(report.openWork.length);
     expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
+    expect(json.gates.deepResearchLiveAdapters.status).toBe("warn");
     expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });

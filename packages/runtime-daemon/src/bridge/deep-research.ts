@@ -3,9 +3,13 @@ import {
   composeResearchSourceAdapters,
   fileProviderFromWorkspace,
   memoryProviderFromService,
+  mcpProviderFromToolCalls,
   type FileSourceAdapterOptions,
   type MemoryRecallPort,
   type MemorySourceAdapterOptions,
+  type McpResearchRuntimeContext,
+  type McpResearchSourceAdapterOptions,
+  type McpResearchToolCallPort,
   type ResearchSourceAdapter,
   type ResearchSourceRequest,
 } from "@kirakira/deep-research";
@@ -27,6 +31,13 @@ type DaemonFileResearchSourceOptions =
       | boolean
       | Omit<FileSourceAdapterOptions, "workspaceRoot">
       | undefined);
+type DaemonMcpResearchSourceOptions =
+  | false
+  | Omit<McpResearchSourceAdapterOptions, "context">
+  | ((input: ResearchTaskKernelInput) =>
+      | false
+      | Omit<McpResearchSourceAdapterOptions, "context">
+      | undefined);
 
 export interface DaemonMemoryResearchSourceOptions
   extends Omit<
@@ -44,6 +55,7 @@ export type DaemonRunEventSink = (event: RunEvent) => void | Promise<void>;
 
 export interface DaemonDeepResearchOptions extends DeepResearchKernelOptions {
   file?: DaemonFileResearchSourceOptions;
+  mcp?: DaemonMcpResearchSourceOptions | readonly DaemonMcpResearchSourceOptions[];
   memory?: DaemonMemoryResearchSourceOptions | readonly DaemonMemoryResearchSourceOptions[];
   eventSink?: DaemonRunEventSink;
 }
@@ -68,11 +80,12 @@ export function createDaemonDeepResearchKernelOptions(
     input.daemonDeepResearch?.sourceAdapters,
   ].filter((source): source is AdapterSource => source !== undefined);
   const memorySources = normalizeMemorySources(input.daemonDeepResearch?.memory);
+  const mcpSources = normalizeMcpSources(input.daemonDeepResearch?.mcp);
   const includeFileSource = shouldIncludeFileSource(
     input.daemonDeepResearch?.file,
     configSources.length > 0,
     adapterSources.length > 0,
-    memorySources.length > 0,
+    memorySources.length > 0 || mcpSources.length > 0,
   );
   const planner = input.daemonDeepResearch?.planner ?? input.kernelDeepResearch?.planner;
   const eventSink = input.daemonDeepResearch?.eventSink ?? input.eventSink;
@@ -81,6 +94,7 @@ export function createDaemonDeepResearchKernelOptions(
     configSources.length === 0 &&
     adapterSources.length === 0 &&
     !includeFileSource &&
+    mcpSources.length === 0 &&
     memorySources.length === 0 &&
     planner === undefined
   ) {
@@ -96,7 +110,7 @@ export function createDaemonDeepResearchKernelOptions(
             ),
         }
       : {}),
-    ...(adapterSources.length > 0 || includeFileSource || memorySources.length > 0
+    ...(adapterSources.length > 0 || includeFileSource || mcpSources.length > 0 || memorySources.length > 0
       ? {
           sourceAdapters: (taskInput) =>
             composeResearchSourceAdapters([
@@ -106,6 +120,7 @@ export function createDaemonDeepResearchKernelOptions(
                 includeFileSource,
               ),
               ...adapterSources.flatMap((source) => resolveAdapterSource(source, taskInput)),
+              ...mcpSourceAdapters(mcpSources, taskInput),
               ...memorySources.map((source) => memorySourceAdapter(source, taskInput, eventSink)),
             ]),
         }
@@ -131,6 +146,14 @@ function normalizeMemorySources(
   if (!value) return [];
   if (Array.isArray(value)) return [...value];
   return [value as DaemonMemoryResearchSourceOptions];
+}
+
+function normalizeMcpSources(
+  value: DaemonDeepResearchOptions["mcp"],
+): DaemonMcpResearchSourceOptions[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return [...value];
+  return [value as DaemonMcpResearchSourceOptions];
 }
 
 function resolveDynamicValue<T>(
@@ -178,6 +201,56 @@ function fileSourceAdapters(
       workspaceRoot: input.workspaceRoot,
     }),
   ];
+}
+
+function mcpSourceAdapters(
+  sources: readonly DaemonMcpResearchSourceOptions[],
+  input: ResearchTaskKernelInput,
+): ResearchSourceAdapter[] {
+  return sources
+    .map((source) => mcpSourceAdapter(source, input))
+    .filter((adapter): adapter is ResearchSourceAdapter => adapter !== undefined);
+}
+
+function mcpSourceAdapter(
+  source: DaemonMcpResearchSourceOptions,
+  input: ResearchTaskKernelInput,
+): ResearchSourceAdapter | undefined {
+  const resolved = typeof source === "function" ? source(input) : source;
+  if (!resolved) return undefined;
+  return mcpProviderFromToolCalls({
+    ...resolved,
+    port: daemonMcpResearchPort(resolved.port, input),
+    context: daemonMcpResearchContext(input),
+  });
+}
+
+function daemonMcpResearchPort(
+  port: McpResearchToolCallPort,
+  input: ResearchTaskKernelInput,
+): McpResearchToolCallPort {
+  return {
+    async callTool(request) {
+      return port.callTool({
+        ...request,
+        runId: request.runId ?? input.runId,
+        ...(request.traceId !== undefined || input.traceId === undefined
+          ? {}
+          : { traceId: input.traceId }),
+        requestedLane: request.requestedLane ?? input.lane,
+      });
+    },
+  };
+}
+
+function daemonMcpResearchContext(
+  input: ResearchTaskKernelInput,
+): McpResearchRuntimeContext {
+  return compactRecord({
+    runId: input.runId,
+    traceId: input.traceId,
+    requestedLane: input.lane,
+  }) as McpResearchRuntimeContext;
 }
 
 function mergeDeepResearchConfig(

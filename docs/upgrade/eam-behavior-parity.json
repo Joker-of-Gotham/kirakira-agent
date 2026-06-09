@@ -50,6 +50,17 @@
         }
       ],
       "expectation": "Readiness presentation targets must match URLs projected from the same runtime profile env fragment instead of hardcoded readiness constants."
+    },
+    "deepResearchLiveAdapterGate": {
+      "script": "scripts/upgrade-readiness.mjs",
+      "reportPath": "gates.deepResearchLiveAdapters",
+      "requiredSuites": [
+        "file",
+        "web",
+        "mcp"
+      ],
+      "liveResultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
+      "expectation": "Provider-neutral file, web, and MCP adapter suites are unit-evidenced, while the missing live adapter result remains an advisory warning instead of being mistaken for final completion."
     }
   },
   "nextMechanismGap": {
@@ -57,8 +68,8 @@
     "targetName": "deep-research",
     "priority": "high",
     "status": "partial",
-    "gap": "Expand product-level live source-adapter validation from generic source-kind fanout plus concrete file/web evidence into the MCP adapter suite and end-to-end live gates.",
-    "rationale": "EAM package drift rows are behavior-covered; shared adapter fanout plus workspace-bounded file and configurable web evidence are now centralized in deep-research, so remaining live source-adapter work belongs to Kirakira's standalone MCP adapter suite and live gates rather than an EAM parity gap.",
+    "gap": "Expand product-level live source-adapter validation from provider-neutral file/web/MCP adapter suites into an end-to-end live MCP research gate.",
+    "rationale": "EAM package drift rows are behavior-covered; shared adapter fanout plus workspace-bounded file, configurable web evidence, and provider-neutral MCP tool-call evidence are now centralized in deep-research, so remaining live source-adapter work belongs to a Kirakira live MCP research gate rather than an EAM parity gap.",
     "evidence": [
       {
         "kind": "source",
@@ -67,6 +78,10 @@
       {
         "kind": "source",
         "path": "packages/deep-research/src/file.ts"
+      },
+      {
+        "kind": "source",
+        "path": "packages/deep-research/src/mcp.ts"
       },
       {
         "kind": "source",
@@ -86,6 +101,10 @@
       },
       {
         "kind": "test",
+        "path": "test/unit/deep-research/mcp.test.ts"
+      },
+      {
+        "kind": "test",
         "path": "test/unit/deep-research/planner.test.ts"
       },
       {
@@ -95,6 +114,10 @@
       {
         "kind": "test",
         "path": "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
+      },
+      {
+        "kind": "test",
+        "path": "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
       },
       {
         "kind": "test",
@@ -115,10 +138,15 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-deep-research-web-source-adapter.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-deep-research-mcp-source-adapter.md"
       }
     ],
     "commands": [
-      "pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts",
+      "pnpm exec vitest run test/unit/deep-research/mcp.test.ts test/unit/deep-research/web.test.ts test/unit/deep-research/file.test.ts test/unit/deep-research/planner.test.ts",
+      "pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts",
       "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
     ]
   },
@@ -569,7 +597,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, and configurable HTTPS-first web evidence are covered, while the concrete MCP live adapter suite and end-to-end live research gates remain product roadmap work."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, and provider-neutral MCP tool-call evidence are covered, while the end-to-end live MCP research gate remains product roadmap work."
     },
     {
       "targetName": "frontend-app",

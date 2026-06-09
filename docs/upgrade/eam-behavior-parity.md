@@ -28,26 +28,30 @@ runtime validation before upgrade readiness can treat them as closed?
 After runtime-daemon profile composition and orchestrator kernel bridge closure,
 the highest-leverage remaining mechanism gap is now product-level
 `deep-research-live-source-adapter-validation`: expand live source-adapter
-validation from generic source-kind fanout plus concrete file/web evidence into
-the MCP adapter suite and end-to-end live gates.
+validation from provider-neutral file/web/MCP adapter suites into an end-to-end
+live MCP research gate.
 
 Evidence:
 
 - `packages/deep-research/src`
 - `packages/deep-research/src/file.ts`
+- `packages/deep-research/src/mcp.ts`
 - `packages/deep-research/src/source-adapters.ts`
 - `packages/deep-research/src/web.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
 - `test/unit/deep-research/file.test.ts`
+- `test/unit/deep-research/mcp.test.ts`
 - `test/unit/deep-research/planner.test.ts`
 - `test/unit/deep-research/web.test.ts`
+- `test/unit/runtime-daemon/deep-research-mcp-source.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 
 Focused validation command:
 
 ```powershell
-pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts
+pnpm exec vitest run test/unit/deep-research/mcp.test.ts test/unit/deep-research/web.test.ts test/unit/deep-research/file.test.ts test/unit/deep-research/planner.test.ts
+pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts
 ```
 
 ## External Behavior Constraints
@@ -82,7 +86,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, and configurable HTTPS-first web evidence; the concrete MCP live adapter suite and end-to-end live research gates remain product roadmap work. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, and provider-neutral MCP tool-call evidence; the end-to-end live MCP research gate remains product roadmap work. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
@@ -101,6 +105,12 @@ cross-checks `presentation:web` and `presentation:desktop` readiness targets
 against `KIRAKIRA_WEB_URL` and `KIRAKIRA_DESKTOP_RENDERER_URL` from the runtime
 profile env fragment. This keeps presentation readiness tied to the profile
 projection instead of duplicating port-specific constants in the readiness gate.
+
+`gates.deepResearchLiveAdapters` now keeps the remaining live research gap
+machine-visible. It requires unit-evidenced file, web, and MCP source adapter
+suites, and stays at advisory `warn` until
+`docs/upgrade/gates/deep-research-live-adapters.json` records an end-to-end live
+MCP research gate result.
 
 ## Readiness Interpretation
 
