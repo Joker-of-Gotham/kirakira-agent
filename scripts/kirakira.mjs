@@ -67,6 +67,22 @@ function optionalStringArray(value, label, fallback) {
   return stringArray(value, label);
 }
 
+function optionalOverlayFiles(value, label) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`Container startup requires ${label} as an array`);
+  }
+  return value.map((entry, index) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new Error(`Container startup ${label}[${index}] must be an object`);
+    }
+    return {
+      source: stringValue(entry.source, `${label}[${index}].source`),
+      target: stringValue(entry.target, `${label}[${index}].target`),
+    };
+  });
+}
+
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
 }
@@ -127,6 +143,7 @@ export function resolveContainerStartup(profile) {
         startup.overlay?.containerScriptsRoot,
         "overlay.containerScriptsRoot",
       ),
+      files: optionalOverlayFiles(startup.overlay?.files, "overlay.files"),
     },
   };
 }
@@ -439,6 +456,13 @@ export function packageOverlayVolumeArgs(startup) {
         "--volume",
         `${dockerHostPath(scriptPath)}:${posix.join(startup.overlay.containerScriptsRoot, scriptName)}:ro`,
       );
+    }
+  }
+
+  for (const file of startup.overlay.files) {
+    const sourcePath = resolveRepoPath(file.source, `overlay file ${file.source}`);
+    if (existsSync(sourcePath)) {
+      args.push("--volume", `${dockerHostPath(sourcePath)}:${file.target}:ro`);
     }
   }
 

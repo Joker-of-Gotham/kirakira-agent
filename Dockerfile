@@ -21,6 +21,7 @@ RUN pnpm fetch --frozen-lockfile
 COPY packages ./packages
 COPY scripts ./scripts
 COPY policies ./policies
+COPY configs ./configs
 
 RUN pnpm install --frozen-lockfile --offline
 RUN pnpm build

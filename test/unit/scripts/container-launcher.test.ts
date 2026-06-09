@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildComposeRunArgs,
   buildContainerStartupPlan,
+  packageOverlayVolumeArgs,
   resolveContainerStartup,
   selectContainerProfile,
 } from "../../../scripts/kirakira.mjs";
@@ -103,6 +104,21 @@ describe("container launcher plan", () => {
       "mcp",
       "list",
     ]);
+  });
+
+  it("mounts profile-declared overlay files into the runtime container", () => {
+    const profile = resolveRuntimeProfile("container", loadRuntimeProfiles(), {});
+    const startup = resolveContainerStartup(profile);
+    const args = packageOverlayVolumeArgs(startup);
+
+    expect(args.some((arg) =>
+      arg.includes("configs/runtime/profiles.json")
+      && arg.endsWith(":/app/configs/runtime/profiles.json:ro"),
+    )).toBe(true);
+    expect(args.some((arg) =>
+      arg.includes("scripts/runtime-profile.mjs")
+      && arg.endsWith(":/app/scripts/runtime-profile.mjs:ro"),
+    )).toBe(true);
   });
 
   it("does not fall back to hard-coded service names for custom profiles", () => {

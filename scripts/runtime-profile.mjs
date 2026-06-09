@@ -8,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
 const defaultProfilesPath = join(repoRoot, "configs", "runtime", "profiles.json");
+const resolvedProfileConfigs = new WeakMap();
 const ROOT_OVERRIDE_ENV_KEYS = [
   "KIRAKIRA_RUNTIME_PROFILE",
   "KIRAKIRA_WORKSPACE_ROOT",
@@ -180,6 +181,20 @@ function runtimeServiceCatalogEntry(config, serviceName) {
   return isRecord(entry) ? entry : undefined;
 }
 
+function runtimeMcpCatalog(config) {
+  return isRecord(config.mcpCatalog) ? config.mcpCatalog : {};
+}
+
+function runtimeMcpServerGroups(config) {
+  const groups = runtimeMcpCatalog(config).groups;
+  return isRecord(groups) ? groups : {};
+}
+
+function runtimeMcpServerCatalog(config) {
+  const servers = runtimeMcpCatalog(config).servers;
+  return isRecord(servers) ? servers : {};
+}
+
 function runtimeComposeServiceName(config, serviceName) {
   const entry = runtimeServiceCatalogEntry(config, serviceName);
   return typeof entry?.composeService === "string" && entry.composeService.length > 0
@@ -205,6 +220,30 @@ export function expandRuntimeServiceRefs(refs = [], config = loadRuntimeProfiles
     const group = groups[groupName];
     if (!Array.isArray(group)) {
       throw new Error(`Unknown runtime service group "${groupName}"`);
+    }
+    expanded.push(...group);
+  }
+  return uniqueStrings(expanded);
+}
+
+export function expandMcpServerRefs(refs = [], config = loadRuntimeProfiles()) {
+  if (!Array.isArray(refs)) {
+    throw new Error("MCP server references must be a string array");
+  }
+  const groups = runtimeMcpServerGroups(config);
+  const expanded = [];
+  for (const ref of refs) {
+    if (typeof ref !== "string" || ref.length === 0) {
+      throw new Error("MCP server references must be non-empty strings");
+    }
+    if (!ref.startsWith("@")) {
+      expanded.push(ref);
+      continue;
+    }
+    const groupName = ref.slice(1);
+    const group = groups[groupName];
+    if (!Array.isArray(group)) {
+      throw new Error(`Unknown MCP server group "${groupName}"`);
     }
     expanded.push(...group);
   }
@@ -605,7 +644,7 @@ export function resolveRuntimeProfile(
   }
   const envBindings = mergeEnvBindings(config.envBindings, profile.envBindings);
   const dynamicProfile = resolveDynamicProfile(config, profile, env);
-  return {
+  const resolvedProfile = {
     name,
     ...profile,
     ...dynamicProfile,
@@ -626,6 +665,8 @@ export function resolveRuntimeProfile(
         ?? profile.appRoot,
     },
   };
+  resolvedProfileConfigs.set(resolvedProfile, config);
+  return resolvedProfile;
 }
 
 export function runtimeProfileEnv(env = process.env, options = {}) {
@@ -662,56 +703,133 @@ export function renderComposeArgs(profile = resolveRuntimeProfile()) {
   return args;
 }
 
-export function renderMcpServers(profile = resolveRuntimeProfile()) {
-  const workspaceRoot = profile.mcp?.workspaceRoot ?? profile.workspaceRoot;
-  const appRoot = profile.mcp?.appRoot ?? profile.appRoot;
+function runtimeConfigForProfile(profile, options = {}) {
+  return options.config
+    ?? (isRecord(profile) ? resolvedProfileConfigs.get(profile) : undefined)
+    ?? loadRuntimeProfiles();
+}
+
+function defaultMcpServerRefs(config) {
+  const catalog = runtimeMcpCatalog(config);
+  return [
+    ...serviceGroupRefs(catalog.defaultServerGroups),
+    ...(Array.isArray(catalog.defaultServers) ? catalog.defaultServers : []),
+  ];
+}
+
+function mcpServerRefs(profile, config) {
+  const mcp = isRecord(profile.mcp) ? profile.mcp : {};
+  if (Array.isArray(mcp.serverRefs)) return mcp.serverRefs;
+  const refs = [
+    ...serviceGroupRefs(mcp.serverGroups),
+    ...(Array.isArray(mcp.servers) ? mcp.servers : []),
+  ];
+  return refs.length > 0 ? refs : defaultMcpServerRefs(config);
+}
+
+function mcpRenderContext(profile) {
   return {
-    "filesystem-core": {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-filesystem", workspaceRoot],
-      env: { NODE_NO_WARNINGS: "1" },
-    },
-    "filesystem-search": {
-      command: "npx",
-      args: ["-y", "mcp-ripgrep@latest"],
-      env: { NODE_NO_WARNINGS: "1" },
-    },
-    "filesystem-git": {
-      command: "npx",
-      args: ["-y", "@cyanheads/git-mcp-server"],
-      env: { NODE_NO_WARNINGS: "1", NODE_ENV: "production" },
-    },
-    "filesystem-patch": {
-      command: "node",
-      args: [
-        posix.join(appRoot, "packages/mcp-filesystem-patch/dist/index.js"),
-        "--workspace",
-        workspaceRoot,
-      ],
-    },
-    "filesystem-artifact": {
-      command: "node",
-      args: [
-        posix.join(appRoot, "packages/mcp-filesystem-artifact/dist/index.js"),
-        "--workspace",
-        workspaceRoot,
-      ],
-    },
-    memory: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-memory"],
-      env: { NODE_NO_WARNINGS: "1" },
-    },
-    github: {
-      command: "npx",
-      args: ["-y", "@modelcontextprotocol/server-github"],
-      env: { NODE_NO_WARNINGS: "1" },
-    },
+    profileName: profile.name,
+    mode: profile.mode,
+    workspaceRoot: profile.mcp?.workspaceRoot ?? profile.workspaceRoot,
+    appRoot: profile.mcp?.appRoot ?? profile.appRoot,
   };
 }
 
-export function renderMcpConfig(profile = resolveRuntimeProfile()) {
-  return { mcpServers: renderMcpServers(profile) };
+function renderMcpTemplate(value, context, label) {
+  return value.replace(/\{([A-Za-z][A-Za-z0-9_]*)\}/gu, (_match, key) => {
+    const replacement = context[key];
+    if (replacement === undefined || replacement === null) {
+      throw new Error(`Unknown MCP template variable "${key}" in ${label}`);
+    }
+    return String(replacement);
+  });
+}
+
+function renderMcpValue(value, context, label) {
+  if (typeof value === "string") {
+    return renderMcpTemplate(value, context, label);
+  }
+  if (isRecord(value) && typeof value.value === "string") {
+    const resolved = context[value.value];
+    if (resolved === undefined || resolved === null) {
+      throw new Error(`Unknown MCP value reference "${value.value}" in ${label}`);
+    }
+    return String(resolved);
+  }
+  if (isRecord(value) && Array.isArray(value.join)) {
+    const [rootKey, ...segments] = value.join;
+    if (typeof rootKey !== "string" || context[rootKey] === undefined || context[rootKey] === null) {
+      throw new Error(`Unknown MCP join root "${rootKey}" in ${label}`);
+    }
+    return posix.join(
+      String(context[rootKey]),
+      ...segments.map((segment, index) =>
+        renderMcpValue(segment, context, `${label}.join[${index + 1}]`),
+      ),
+    );
+  }
+  throw new Error(`Invalid MCP descriptor value in ${label}`);
+}
+
+function renderMcpArgs(args, context, serverName) {
+  if (args === undefined) return undefined;
+  if (!Array.isArray(args)) {
+    throw new Error(`MCP server "${serverName}" args must be an array`);
+  }
+  return args.map((arg, index) => renderMcpValue(arg, context, `server "${serverName}" arg ${index}`));
+}
+
+function renderMcpEnv(env, context, serverName) {
+  if (env === undefined) return undefined;
+  if (!isRecord(env)) {
+    throw new Error(`MCP server "${serverName}" env must be an object`);
+  }
+  const rendered = {};
+  for (const [key, value] of Object.entries(env)) {
+    rendered[key] = renderMcpValue(value, context, `server "${serverName}" env ${key}`);
+  }
+  return Object.keys(rendered).length > 0 ? rendered : undefined;
+}
+
+function renderMcpServerDescriptor(serverName, descriptor, context) {
+  if (!isRecord(descriptor)) {
+    throw new Error(`MCP server "${serverName}" is missing a catalog descriptor`);
+  }
+  if (descriptor.command === undefined) {
+    throw new Error(`MCP server "${serverName}" requires a command`);
+  }
+  const command = renderMcpValue(descriptor.command, context, `server "${serverName}" command`);
+  const args = renderMcpArgs(descriptor.args, context, serverName);
+  const env = renderMcpEnv(descriptor.env, context, serverName);
+  return {
+    command,
+    ...(args !== undefined ? { args } : {}),
+    ...(env !== undefined ? { env } : {}),
+  };
+}
+
+export function renderMcpServers(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const serverNames = expandMcpServerRefs(options.serverRefs ?? mcpServerRefs(profile, config), config);
+  const catalog = runtimeMcpServerCatalog(config);
+  const overrides = isRecord(profile.mcp?.serverOverrides) ? profile.mcp.serverOverrides : {};
+  const context = mcpRenderContext(profile);
+  const rendered = {};
+  for (const serverName of serverNames) {
+    const descriptor = catalog[serverName];
+    const override = overrides[serverName];
+    rendered[serverName] = renderMcpServerDescriptor(
+      serverName,
+      isRecord(override) ? mergeSpecRecord(descriptor, override) : descriptor,
+      context,
+    );
+  }
+  return rendered;
+}
+
+export function renderMcpConfig(profile = resolveRuntimeProfile(), options = {}) {
+  return { mcpServers: renderMcpServers(profile, options) };
 }
 
 function printEnv(env) {

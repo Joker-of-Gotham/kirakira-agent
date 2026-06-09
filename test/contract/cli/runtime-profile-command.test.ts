@@ -62,6 +62,35 @@ describe("runtime profile CLI command contract", () => {
     );
   });
 
+  it("prints MCP JSON through the built oclif command tree", () => {
+    const result = runCli(["runtime", "profile", "mcp", "workbench-host"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain("5173");
+
+    const config = JSON.parse(result.stdout) as {
+      mcpServers: Record<string, { args: string[] }>;
+    };
+
+    expect(Object.keys(config.mcpServers)).toEqual([
+      "filesystem-core",
+      "filesystem-search",
+      "filesystem-git",
+      "filesystem-patch",
+      "filesystem-artifact",
+      "memory",
+      "github",
+    ]);
+    expect(config.mcpServers["filesystem-core"].args.at(-1)).toBe(".");
+    expect(config.mcpServers["filesystem-patch"].args[0]).toBe(
+      "packages/mcp-filesystem-patch/dist/index.js",
+    );
+    expect(config.mcpServers["filesystem-artifact"].args[0]).toBe(
+      "packages/mcp-filesystem-artifact/dist/index.js",
+    );
+  });
+
   it("returns the shared profile failure for unknown runtime profiles", () => {
     const result = runCli(["runtime", "profile", "show", "definitely-missing-profile"]);
 

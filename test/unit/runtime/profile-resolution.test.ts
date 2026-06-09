@@ -3,10 +3,12 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildRuntimeReadinessPlan,
+  expandMcpServerRefs,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderComposeArgs,
   renderMcpConfig,
+  renderMcpServers,
   renderRuntimeEnv,
   resolveRuntimeProfile,
 } from "../../../scripts/runtime-profile.mjs";
@@ -64,6 +66,148 @@ describe("runtime profile rendering", () => {
     expect(workbench.workbench.infraServices).toEqual(container.containerStartup.runtimeServices);
   });
 
+  it("renders MCP servers from declarative catalog groups", () => {
+    const config = {
+      schemaVersion: 1,
+      defaultProfile: "custom",
+      mcpCatalog: {
+        defaultServerGroups: ["custom"],
+        groups: {
+          custom: ["filesystem-core", "local-tool"],
+        },
+        servers: {
+          "filesystem-core": {
+            command: "npx",
+            args: ["-y", "@modelcontextprotocol/server-filesystem", { value: "workspaceRoot" }],
+          },
+          "local-tool": {
+            command: "node",
+            args: [
+              { join: ["appRoot", "packages/custom-mcp/dist/index.js"] },
+              "--workspace",
+              "{workspaceRoot}",
+            ],
+            env: {
+              KIRAKIRA_PROFILE: "{profileName}",
+            },
+          },
+        },
+      },
+      profiles: {
+        custom: {
+          mode: "host",
+          workspaceRoot: "/repo",
+          appRoot: "/app",
+          mcp: {
+            workspaceRoot: "/mcp-workspace",
+            appRoot: "/mcp-app",
+          },
+        },
+      },
+    };
+
+    const profile = resolveRuntimeProfile("custom", config, {});
+    const mcp = renderMcpConfig(profile, { config });
+    const servers = renderMcpServers(profile, { config });
+
+    expect(expandMcpServerRefs(["@custom"], config)).toEqual(["filesystem-core", "local-tool"]);
+    expect(Object.keys(mcp.mcpServers)).toEqual(["filesystem-core", "local-tool"]);
+    expect(servers).toEqual(mcp.mcpServers);
+    expect(mcp.mcpServers["filesystem-core"].args.at(-1)).toBe("/mcp-workspace");
+    expect(mcp.mcpServers["local-tool"].args).toEqual([
+      "/mcp-app/packages/custom-mcp/dist/index.js",
+      "--workspace",
+      "/mcp-workspace",
+    ]);
+    expect(mcp.mcpServers["local-tool"].env.KIRAKIRA_PROFILE).toBe("custom");
+  });
+
+  it("honors profile MCP server refs and overrides", () => {
+    const config = {
+      schemaVersion: 1,
+      defaultProfile: "custom",
+      mcpCatalog: {
+        defaultServerGroups: ["default"],
+        groups: {
+          default: ["base"],
+        },
+        servers: {
+          base: {
+            command: "node",
+            args: ["base.js"],
+          },
+          custom: {
+            command: "node",
+            args: ["custom.js", "{workspaceRoot}"],
+            env: {
+              BASE_ENV: "base",
+            },
+          },
+        },
+      },
+      profiles: {
+        custom: {
+          mode: "host",
+          workspaceRoot: "/repo",
+          appRoot: "/app",
+          mcp: {
+            workspaceRoot: "/mcp",
+            appRoot: "/mcp-app",
+            serverRefs: ["custom"],
+            serverOverrides: {
+              custom: {
+                args: ["override.js", { value: "appRoot" }],
+                env: {
+                  EXTRA_ENV: "{profileName}",
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const profile = resolveRuntimeProfile("custom", config, {});
+    const mcp = renderMcpConfig(profile, { config });
+
+    expect(Object.keys(mcp.mcpServers)).toEqual(["custom"]);
+    expect(mcp.mcpServers.custom.args).toEqual(["override.js", "/mcp-app"]);
+    expect(mcp.mcpServers.custom.env).toEqual({
+      BASE_ENV: "base",
+      EXTRA_ENV: "custom",
+    });
+  });
+
+  it("fails clearly for unknown MCP catalog refs and descriptors", () => {
+    const config = {
+      schemaVersion: 1,
+      defaultProfile: "custom",
+      mcpCatalog: {
+        groups: {},
+        servers: {},
+      },
+      profiles: {
+        custom: {
+          mode: "host",
+          workspaceRoot: ".",
+          appRoot: ".",
+          mcp: {
+            workspaceRoot: ".",
+            appRoot: ".",
+          },
+        },
+      },
+    };
+    const profile = resolveRuntimeProfile("custom", config, {});
+
+    expect(() => expandMcpServerRefs(["@missing"], config)).toThrow(
+      'Unknown MCP server group "missing"',
+    );
+    expect(() => renderMcpServers(profile, { config, serverRefs: ["missing"] })).toThrow(
+      'MCP server "missing" is missing a catalog descriptor',
+    );
+  });
+
   it("renders env and MCP roots from the selected profile", () => {
     const profile = resolveRuntimeProfile("host", loadRuntimeProfiles());
     const env = renderRuntimeEnv(profile);
@@ -71,8 +215,42 @@ describe("runtime profile rendering", () => {
 
     expect(env.KIRAKIRA_RUNTIME_PROFILE).toBe("host");
     expect(env.KIRAKIRA_MCP_WORKSPACE_ROOT).toBe(".");
+    expect(Object.keys(mcp.mcpServers)).toEqual([
+      "filesystem-core",
+      "filesystem-search",
+      "filesystem-git",
+      "filesystem-patch",
+      "filesystem-artifact",
+      "memory",
+      "github",
+    ]);
     expect(mcp.mcpServers["filesystem-core"].args.at(-1)).toBe(".");
+    expect(mcp.mcpServers["filesystem-patch"].args[0]).toBe(
+      "packages/mcp-filesystem-patch/dist/index.js",
+    );
     expect(mcp.mcpServers["filesystem-patch"].args.at(-1)).toBe(".");
+    expect(mcp.mcpServers["filesystem-artifact"].args[0]).toBe(
+      "packages/mcp-filesystem-artifact/dist/index.js",
+    );
+    expect(mcp.mcpServers.memory.args).toEqual(["-y", "@modelcontextprotocol/server-memory"]);
+    expect(mcp.mcpServers.github.args).toEqual(["-y", "@modelcontextprotocol/server-github"]);
+  });
+
+  it("renders container MCP defaults from the same catalog", () => {
+    const profile = resolveRuntimeProfile("container", loadRuntimeProfiles(), {});
+    const mcp = renderMcpConfig(profile);
+
+    expect(mcp.mcpServers["filesystem-core"].args.at(-1)).toBe("/workspace");
+    expect(mcp.mcpServers["filesystem-patch"].args).toEqual([
+      "/app/packages/mcp-filesystem-patch/dist/index.js",
+      "--workspace",
+      "/workspace",
+    ]);
+    expect(mcp.mcpServers["filesystem-artifact"].args).toEqual([
+      "/app/packages/mcp-filesystem-artifact/dist/index.js",
+      "--workspace",
+      "/workspace",
+    ]);
   });
 
   it("allows environment roots to override profile defaults", () => {

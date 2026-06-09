@@ -200,6 +200,74 @@
       }
     }
   },
+  "mcpCatalog": {
+    "defaultServerGroups": ["default"],
+    "groups": {
+      "default": [
+        "filesystem-core",
+        "filesystem-search",
+        "filesystem-git",
+        "filesystem-patch",
+        "filesystem-artifact",
+        "memory",
+        "github"
+      ]
+    },
+    "servers": {
+      "filesystem-core": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-filesystem", { "value": "workspaceRoot" }],
+        "env": {
+          "NODE_NO_WARNINGS": "1"
+        }
+      },
+      "filesystem-search": {
+        "command": "npx",
+        "args": ["-y", "mcp-ripgrep@latest"],
+        "env": {
+          "NODE_NO_WARNINGS": "1"
+        }
+      },
+      "filesystem-git": {
+        "command": "npx",
+        "args": ["-y", "@cyanheads/git-mcp-server"],
+        "env": {
+          "NODE_NO_WARNINGS": "1",
+          "NODE_ENV": "production"
+        }
+      },
+      "filesystem-patch": {
+        "command": "node",
+        "args": [
+          { "join": ["appRoot", "packages/mcp-filesystem-patch/dist/index.js"] },
+          "--workspace",
+          { "value": "workspaceRoot" }
+        ]
+      },
+      "filesystem-artifact": {
+        "command": "node",
+        "args": [
+          { "join": ["appRoot", "packages/mcp-filesystem-artifact/dist/index.js"] },
+          "--workspace",
+          { "value": "workspaceRoot" }
+        ]
+      },
+      "memory": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-memory"],
+        "env": {
+          "NODE_NO_WARNINGS": "1"
+        }
+      },
+      "github": {
+        "command": "npx",
+        "args": ["-y", "@modelcontextprotocol/server-github"],
+        "env": {
+          "NODE_NO_WARNINGS": "1"
+        }
+      }
+    }
+  },
   "profiles": {
     "container": {
       "mode": "container",
@@ -248,7 +316,13 @@
           "packagesRoot": "packages",
           "containerPackagesRoot": "/app/packages",
           "scripts": ["kirakira-container.mjs", "kirakira-common.mjs", "runtime-profile.mjs"],
-          "containerScriptsRoot": "/app/scripts"
+          "containerScriptsRoot": "/app/scripts",
+          "files": [
+            {
+              "source": "configs/runtime/profiles.json",
+              "target": "/app/configs/runtime/profiles.json"
+            }
+          ]
         }
       }
     },

@@ -160,8 +160,12 @@ The profile contract is deliberately separate from a single Docker compose file:
 
 [`scripts/runtime-profile.mjs`](../scripts/runtime-profile.mjs) renders the
 selected profile into environment variables, compose flags, and MCP defaults.
-`scripts/kirakira-common.mjs` now obtains managed MCP defaults from the same
-renderer instead of owning separate hardcoded `/workspace` and `/app` constants.
+MCP defaults are selected from `mcpCatalog` in
+[`configs/runtime/profiles.json`](../configs/runtime/profiles.json), where
+server groups and command descriptors are data rather than JS literals.
+`scripts/kirakira-common.mjs` obtains managed MCP defaults from that renderer
+instead of owning separate hardcoded `/workspace`, `/app`, or server package
+constants.
 
 ## Presentation baseline
 
