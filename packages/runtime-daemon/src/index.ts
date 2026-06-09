@@ -57,6 +57,17 @@ export {
 export { KernelBridge } from "./bridge/kernel-bridge.js";
 export { RuntimeBridge } from "./bridge/runtime-bridge.js";
 export type {
+  DaemonMcpDependencies,
+  DaemonMcpDependencyOptions,
+} from "./bridge/mcp-runtime-deps.js";
+export {
+  activeRuntimeProfile,
+  createDaemonMcpDependencies,
+  mcpServerConfigFromResolved,
+  registerMcpConfigFile,
+  registerResolvedProfileServers,
+} from "./bridge/mcp-runtime-deps.js";
+export type {
   DaemonMcpRuntimeOptions,
   DaemonMcpToolCallInput,
 } from "./bridge/mcp-runtime.js";

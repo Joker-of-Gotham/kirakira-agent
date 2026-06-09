@@ -6,7 +6,10 @@ import type { PolicyDecision } from "@kirakira/core";
 import type { McpClientManager } from "@kirakira/mcp-adapter";
 import type { EnforcementResult, McpPep } from "@kirakira/policy-engine";
 import { describe, expect, it, vi } from "vitest";
-import { DaemonMcpRuntime } from "../../../packages/runtime-daemon/src/index.js";
+import {
+  DaemonMcpRuntime,
+  createDaemonMcpDependencies,
+} from "../../../packages/runtime-daemon/src/index.js";
 
 function decision(effect: PolicyDecision["effect"]): EnforcementResult {
   return {
@@ -46,28 +49,93 @@ function fakePep(result: EnforcementResult): McpPep {
 function fakeManager(rawResult: unknown): {
   manager: McpClientManager;
   request: ReturnType<typeof vi.fn>;
+  registerServer: ReturnType<typeof vi.fn>;
+  registerMany: ReturnType<typeof vi.fn>;
   startServer: ReturnType<typeof vi.fn>;
   stopAll: ReturnType<typeof vi.fn>;
 } {
   let started = false;
   const request = vi.fn(async () => rawResult);
+  const registerServer = vi.fn();
+  const registerMany = vi.fn();
   const startServer = vi.fn(async () => {
     started = true;
   });
   const stopAll = vi.fn(async () => {});
   const manager = {
-    registerMany: vi.fn(),
-    registerServer: vi.fn(),
+    registerMany,
+    registerServer,
     listServers: vi.fn(() => ["filesystem-core"]),
     getHealth: vi.fn(() => (started ? "healthy" : "stopped")),
     startServer,
     request,
     stopAll,
   } as unknown as McpClientManager;
-  return { manager, request, startServer, stopAll };
+  return { manager, request, registerServer, registerMany, startServer, stopAll };
 }
 
 describe("DaemonMcpRuntime", () => {
+  it("registers resolved profile MCP servers through the shared dependency factory", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-deps-"));
+    const manager = fakeManager({ content: [] });
+    const deps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      runtimeProfileName: "container",
+      resolvedConfig: {
+        runtimeState: {
+          default_profile: "host",
+          profiles: [
+            {
+              name: "host",
+              mode: "host",
+              mcp_servers: [
+                {
+                  name: "host-filesystem",
+                  command: "node",
+                  args: ["host.js"],
+                },
+              ],
+            },
+            {
+              name: "container",
+              mode: "container",
+              mcp_servers: [
+                {
+                  name: "container-filesystem",
+                  command: "node",
+                  args: ["container.js", "/workspace"],
+                  env: { KIRAKIRA_WORKSPACE_ROOT: "/workspace" },
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    try {
+      expect(deps.workspaceRoot).toBe(workspaceRoot);
+      expect(manager.registerServer).toHaveBeenCalledTimes(1);
+      expect(manager.registerServer).toHaveBeenCalledWith({
+        name: "container-filesystem",
+        transport: {
+          kind: "stdio",
+          command: "node",
+          args: ["container.js", "/workspace"],
+          env: { KIRAKIRA_WORKSPACE_ROOT: "/workspace" },
+        },
+        auth: { mode: "none" },
+        trust: "untrusted",
+      });
+    } finally {
+      await deps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+    expect(manager.stopAll).not.toHaveBeenCalled();
+  });
+
   it("enforces MCP PEP, starts the target server, and returns a typed tool result", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-"));
     const manager = fakeManager({

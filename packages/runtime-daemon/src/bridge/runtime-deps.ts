@@ -1,5 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
+import type { ResolvedConfig } from "@kirakira/core";
 
 import {
   BudgetTracker,
@@ -21,23 +20,21 @@ import {
   type ToolSchema,
   type Workspace,
 } from "@kirakira/agent-runtime";
-import {
-  McpClientManager,
-  parseMcpConfigJson,
-} from "@kirakira/mcp-adapter";
+import type { McpClientManager } from "@kirakira/mcp-adapter";
 import {
   DisabledAuditWriter,
-  EmbeddedPdp,
-  McpPep,
-  ObligationExecutor,
   type PepContext,
 } from "@kirakira/policy-engine";
+import type { McpPep } from "@kirakira/policy-engine";
 import { discoverSkills } from "@kirakira/skill-runtime";
+import { createDaemonMcpDependencies } from "./mcp-runtime-deps.js";
 
 export interface DaemonDelegateRuntimeOptions {
   workspaceRoot: string;
   eventWriter: RuntimeDeps["eventWriter"];
   mcpConfigPath?: string;
+  resolvedConfig?: Pick<ResolvedConfig, "runtimeState">;
+  runtimeProfileName?: string;
   mcpManager?: McpClientManager;
   modelGateway?: GatewayClientLike;
   policyBundlePath?: string;
@@ -65,26 +62,6 @@ interface RuntimeDepsContext {
   workspace: Workspace;
   skills: SkillRegistration[];
   discoveredTools: ToolSchema[];
-}
-
-function resolveMcpConfigPath(workspaceRoot: string, configPath?: string): string {
-  return path.isAbsolute(configPath ?? "")
-    ? configPath!
-    : path.join(workspaceRoot, configPath ?? ".mcp.json");
-}
-
-function registerMcpConfig(
-  manager: McpClientManager,
-  workspaceRoot: string,
-  configPath?: string,
-): void {
-  const resolved = resolveMcpConfigPath(workspaceRoot, configPath);
-  if (!existsSync(resolved)) return;
-  try {
-    manager.registerMany(parseMcpConfigJson(readFileSync(resolved, "utf8")));
-  } catch {
-    // Invalid or partial MCP config should not prevent the daemon kernel from starting.
-  }
 }
 
 async function discoverRuntimeSkills(workspaceRoot: string): Promise<SkillRegistration[]> {
@@ -172,17 +149,20 @@ function createRuntimeDeps(
 export async function createDaemonDelegateRuntime(
   options: DaemonDelegateRuntimeOptions,
 ): Promise<DaemonDelegateRuntime> {
-  const workspaceRoot = path.resolve(options.workspaceRoot);
-  const mcpManager = options.mcpManager ?? new McpClientManager();
-  const ownsMcpManager = options.mcpManager === undefined;
-  registerMcpConfig(mcpManager, workspaceRoot, options.mcpConfigPath);
-
-  const pdp = new EmbeddedPdp(options.policyBundlePath ?? path.join(workspaceRoot, "policies"));
-  const mcpPep = new McpPep(
-    pdp,
-    new ObligationExecutor(),
-    new DisabledAuditWriter(),
-  );
+  const deps = createDaemonMcpDependencies({
+    workspaceRoot: options.workspaceRoot,
+    ...(options.mcpConfigPath !== undefined ? { mcpConfigPath: options.mcpConfigPath } : {}),
+    ...(options.resolvedConfig !== undefined ? { resolvedConfig: options.resolvedConfig } : {}),
+    ...(options.runtimeProfileName !== undefined
+      ? { runtimeProfileName: options.runtimeProfileName }
+      : {}),
+    ...(options.policyBundlePath !== undefined ? { policyBundlePath: options.policyBundlePath } : {}),
+    ...(options.mcpManager !== undefined ? { mcpManager: options.mcpManager } : {}),
+    auditWriter: new DisabledAuditWriter(),
+  });
+  const workspaceRoot = deps.workspaceRoot;
+  const mcpManager = deps.mcpManager;
+  const mcpPep = deps.mcpPep;
   const modelClient = new ModelClient(options.modelGateway);
   const context: RuntimeDepsContext = {
     workspaceRoot,
@@ -219,10 +199,7 @@ export async function createDaemonDelegateRuntime(
   return {
     delegateRunner,
     async close() {
-      if (ownsMcpManager) {
-        await mcpManager.stopAll();
-      }
-      await pdp.close();
+      await deps.close();
     },
   };
 }

@@ -171,8 +171,33 @@ describe("runtime daemon subagent bridge", () => {
     const seen: RunEvent[] = [];
     let factoryOptions: DaemonDelegateRuntimeOptions | undefined;
     let closed = false;
+    const resolvedConfig = {
+      agentToml: {
+        deep_research: {
+          enabled: false,
+        },
+      },
+      runtimeState: {
+        default_profile: "workbench-host",
+        profiles: [
+          {
+            name: "workbench-host",
+            mode: "hybrid",
+            mcp_servers: [
+              {
+                name: "filesystem-core",
+                command: "node",
+                args: ["filesystem.js", workspaceRoot],
+              },
+            ],
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
     const bridge = new KernelBridge(eventStorePath, {
       workspaceRoot,
+      resolvedConfig,
+      runtimeProfileName: "workbench-host",
       kernelOptions: {
         planContext: {
           workspace: workspaceRoot,
@@ -248,6 +273,8 @@ describe("runtime daemon subagent bridge", () => {
       unsubscribe();
 
       expect(factoryOptions?.workspaceRoot).toBe(workspaceRoot);
+      expect(factoryOptions?.resolvedConfig).toBe(resolvedConfig);
+      expect(factoryOptions?.runtimeProfileName).toBe("workbench-host");
       expect(seen).toContainEqual(
         expect.objectContaining({
           kind: "model.response",

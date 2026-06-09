@@ -1,21 +1,7 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
-
-import type {
-  McpServerConfig,
-  ResolvedConfig,
-  ResolvedRuntimeMcpServerState,
-  ResolvedRuntimeProfileState,
-} from "@kirakira/core";
+import type { ResolvedConfig } from "@kirakira/core";
+import type { McpClientManager } from "@kirakira/mcp-adapter";
 import {
-  McpClientManager,
-  parseMcpConfigJson,
-} from "@kirakira/mcp-adapter";
-import {
-  EmbeddedPdp,
-  LedgerAuditWriter,
   McpPep,
-  ObligationExecutor,
   type AuditWriter,
   type EnforcementResult,
   type PepContext,
@@ -26,6 +12,7 @@ import type {
   RuntimeMcpToolPolicyResult,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
+import { createDaemonMcpDependencies } from "./mcp-runtime-deps.js";
 
 export interface DaemonMcpRuntimeOptions {
   workspaceRoot: string;
@@ -43,60 +30,6 @@ export type DaemonMcpToolCallInput = RuntimeMcpToolCallRequest;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
-
-function resolveMcpConfigPath(workspaceRoot: string, configPath?: string): string {
-  return path.isAbsolute(configPath ?? "")
-    ? configPath!
-    : path.join(workspaceRoot, configPath ?? ".mcp.json");
-}
-
-function activeRuntimeProfile(
-  resolvedConfig: Pick<ResolvedConfig, "runtimeState"> | undefined,
-  runtimeProfileName: string | undefined,
-): ResolvedRuntimeProfileState | undefined {
-  const runtimeState = resolvedConfig?.runtimeState;
-  const profiles = runtimeState?.profiles ?? [];
-  const profileName = runtimeProfileName ?? runtimeState?.default_profile;
-  return profiles.find((profile) => profile.name === profileName) ?? profiles[0];
-}
-
-function mcpServerConfigFromResolved(server: ResolvedRuntimeMcpServerState): McpServerConfig {
-  return {
-    name: server.name,
-    transport: {
-      kind: "stdio",
-      command: server.command,
-      args: server.args ?? [],
-      ...(server.env !== undefined ? { env: server.env } : {}),
-    },
-    auth: { mode: "none" },
-    trust: "untrusted",
-  };
-}
-
-function registerMcpConfigFile(
-  manager: McpClientManager,
-  workspaceRoot: string,
-  configPath?: string,
-): void {
-  const resolved = resolveMcpConfigPath(workspaceRoot, configPath);
-  if (!existsSync(resolved)) return;
-  try {
-    manager.registerMany(parseMcpConfigJson(readFileSync(resolved, "utf8")));
-  } catch {
-    // Invalid or partial MCP config should not prevent the daemon presentation runtime from starting.
-  }
-}
-
-function registerResolvedProfileServers(
-  manager: McpClientManager,
-  options: Pick<DaemonMcpRuntimeOptions, "resolvedConfig" | "runtimeProfileName">,
-): void {
-  const profile = activeRuntimeProfile(options.resolvedConfig, options.runtimeProfileName);
-  for (const server of profile?.mcp_servers ?? []) {
-    manager.registerServer(mcpServerConfigFromResolved(server));
-  }
-}
 
 function policyResultFromEnforcement(
   result: EnforcementResult,
@@ -155,31 +88,16 @@ export class DaemonMcpRuntime {
   private readonly workspaceRoot: string;
   private readonly manager: McpClientManager;
   private readonly mcpPep: McpPep;
-  private readonly ownsManager: boolean;
-  private readonly pdp: EmbeddedPdp | null;
+  private readonly closeDeps: () => Promise<void>;
   private readonly userId: string;
 
   constructor(options: DaemonMcpRuntimeOptions) {
-    this.workspaceRoot = path.resolve(options.workspaceRoot);
-    this.manager = options.mcpManager ?? new McpClientManager();
-    this.ownsManager = options.mcpManager === undefined;
+    const deps = createDaemonMcpDependencies(options);
+    this.workspaceRoot = deps.workspaceRoot;
+    this.manager = deps.mcpManager;
+    this.mcpPep = deps.mcpPep;
+    this.closeDeps = deps.close;
     this.userId = options.userId ?? process.env.USERNAME ?? process.env.USER ?? "local-user";
-
-    registerMcpConfigFile(this.manager, this.workspaceRoot, options.mcpConfigPath);
-    registerResolvedProfileServers(this.manager, options);
-
-    if (options.mcpPep) {
-      this.mcpPep = options.mcpPep;
-      this.pdp = null;
-    } else {
-      const pdp = new EmbeddedPdp(options.policyBundlePath ?? path.join(this.workspaceRoot, "policies"));
-      this.pdp = pdp;
-      this.mcpPep = new McpPep(
-        pdp,
-        new ObligationExecutor(),
-        options.auditWriter ?? new LedgerAuditWriter(),
-      );
-    }
   }
 
   private pepContext(input: RuntimeMcpToolCallRequest): PepContext {
@@ -242,9 +160,6 @@ export class DaemonMcpRuntime {
   }
 
   async close(): Promise<void> {
-    if (this.ownsManager) {
-      await this.manager.stopAll();
-    }
-    await this.pdp?.close();
+    await this.closeDeps();
   }
 }

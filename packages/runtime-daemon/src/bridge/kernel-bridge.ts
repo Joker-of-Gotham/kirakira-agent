@@ -77,6 +77,12 @@ export class KernelBridge {
         ...(this.options.mcpConfigPath !== undefined
           ? { mcpConfigPath: this.options.mcpConfigPath }
           : {}),
+        ...(this.options.resolvedConfig !== undefined
+          ? { resolvedConfig: this.options.resolvedConfig }
+          : {}),
+        ...(this.options.runtimeProfileName !== undefined
+          ? { runtimeProfileName: this.options.runtimeProfileName }
+          : {}),
         eventWriter: {
           emit: async (event) => {
             this.dispatchEvent(writer.append(event));
