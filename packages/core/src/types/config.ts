@@ -82,6 +82,75 @@ export interface PresentationConfig {
   };
 }
 
+export interface ResolvedRuntimeServiceState {
+  name: string;
+  url_env?: string;
+  required?: boolean;
+  compose_service?: string;
+}
+
+export interface ResolvedRuntimeMcpServerState {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface ResolvedRuntimePresentationState {
+  web?: {
+    url?: string;
+    host?: string;
+    port?: string | number;
+  };
+  desktop?: {
+    renderer_url?: string;
+    host?: string;
+    port?: string | number;
+  };
+}
+
+export interface ResolvedRuntimeBrowserGatewayState {
+  enabled?: boolean;
+  endpoint?: string;
+  host?: string;
+  port?: string | number;
+  path?: string;
+}
+
+export interface ResolvedRuntimeProfileState {
+  name: string;
+  mode: "container" | "host" | "hybrid";
+  workspace_root?: string;
+  app_root?: string;
+  compose_files?: string[];
+  compose_profiles?: string[];
+  env_files?: string[];
+  service_groups?: string[];
+  services?: ResolvedRuntimeServiceState[];
+  runtime_services?: string[];
+  workbench_infra_services?: string[];
+  mcp_workspace_root?: string;
+  mcp_app_root?: string;
+  mcp_server_groups?: string[];
+  mcp_servers?: ResolvedRuntimeMcpServerState[];
+  presentation?: ResolvedRuntimePresentationState;
+  browser_gateway?: ResolvedRuntimeBrowserGatewayState;
+}
+
+export interface ResolvedRuntimeState {
+  default_profile?: string;
+  profiles: ResolvedRuntimeProfileState[];
+  service_catalog?: {
+    groups?: Record<string, string[]>;
+    services?: Record<string, { compose_service?: string }>;
+  };
+  mcp_catalog?: {
+    default_server_groups?: string[];
+    groups?: Record<string, string[]>;
+    servers?: string[];
+  };
+}
+
 export interface AgentToml {
   schema_version: number;
   workspace_name?: string;
@@ -243,7 +312,9 @@ export interface ResolvedConfig {
     agentToml?: string;
     policyYaml?: string;
     localConfig?: string;
+    runtimeProfiles?: string;
   };
+  runtimeState?: ResolvedRuntimeState;
   fingerprint: string;
   resolvedAt: string;
 }

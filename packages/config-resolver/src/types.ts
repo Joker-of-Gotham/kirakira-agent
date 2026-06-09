@@ -5,9 +5,22 @@ import type {
   LocalConfig,
   PolicyYaml,
   ResolvedConfig,
+  ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeProfileState,
+  ResolvedRuntimeState,
 } from "@kirakira/core";
 
-export type { AgentToml, ConfigLayer, ConfigLayerName, LocalConfig, PolicyYaml, ResolvedConfig };
+export type {
+  AgentToml,
+  ConfigLayer,
+  ConfigLayerName,
+  LocalConfig,
+  PolicyYaml,
+  ResolvedConfig,
+  ResolvedRuntimeMcpServerState,
+  ResolvedRuntimeProfileState,
+  ResolvedRuntimeState,
+};
 
 export interface LoaderOptions {
   workspaceRoot: string;
