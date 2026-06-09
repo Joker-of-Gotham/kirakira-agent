@@ -101,6 +101,11 @@ describe("runtime protocol codec", () => {
         arguments: { path: "README.md" },
         runId: "run-1",
         traceId: "trace-1",
+        traceContext: {
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+          tracestate: "rojo=2222222222222222",
+          baggage: "tenant=acme",
+        },
         subagentId: "sub-implementer-1",
         role: "implementer",
         requestedLane: "delegated",
@@ -115,6 +120,11 @@ describe("runtime protocol codec", () => {
         arguments: { path: "README.md" },
         runId: "run-1",
         traceId: "trace-1",
+        traceContext: {
+          traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+          tracestate: "rojo=2222222222222222",
+          baggage: "tenant=acme",
+        },
         subagentId: "sub-implementer-1",
         role: "implementer",
         requestedLane: "delegated",
@@ -136,12 +146,30 @@ describe("runtime protocol codec", () => {
 
     expect(
       parseRuntimeClientMessage({
+        type: "mcp_call",
+        messageId: "mcp-bad-trace",
+        server: "filesystem-core",
+        tool: "read_file",
+        traceContext: { baggage: 42 },
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_message", messageId: "mcp-bad-trace" },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
         type: "mcp_list",
         messageId: "mcp-list-1",
         server: "filesystem-core",
         includeTools: true,
         startServers: true,
         traceId: "trace-list-1",
+        traceContext: {
+          traceparent: "00-33333333333333333333333333333333-4444444444444444-01",
+          tracestate: "rojo=4444444444444444",
+          baggage: "tenant=acme",
+        },
       }),
     ).toEqual({
       ok: true,
@@ -152,6 +180,11 @@ describe("runtime protocol codec", () => {
         includeTools: true,
         startServers: true,
         traceId: "trace-list-1",
+        traceContext: {
+          traceparent: "00-33333333333333333333333333333333-4444444444444444-01",
+          tracestate: "rojo=4444444444444444",
+          baggage: "tenant=acme",
+        },
       },
     });
 

@@ -21,6 +21,17 @@ const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
 const DEFAULT_WAIT_INTERVAL_MS = 750;
 const DEFAULT_PROBE_TIMEOUT_MS = 1_500;
 const DEFAULT_STOP_GRACE_MS = 7_000;
+export const WORKBENCH_ELECTRON_SMOKE_ENV = "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE";
+const DEFAULT_SMOKE_STEP_OVERRIDES = [
+  {
+    surface: "desktop",
+    step: "desktop-shell",
+    mode: "foreground",
+    env: {
+      [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+    },
+  },
+];
 
 function pnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -277,17 +288,56 @@ function resolveSmokeChecks(profile, plan, options = {}) {
   return uniqueCheckNames(checks);
 }
 
+function resolveSmokeStepOverrides(plan) {
+  return DEFAULT_SMOKE_STEP_OVERRIDES
+    .filter((override) =>
+      override.surface === plan.surface &&
+      plan.steps.some((step) => step.name === override.step),
+    )
+    .map((override) => ({
+      step: override.step,
+      mode: override.mode,
+      env: { ...override.env },
+    }));
+}
+
+export function resolveWorkbenchSmokeContract(profile, plan, options = {}) {
+  const checks = resolveSmokeChecks(profile, plan, options);
+  const stepOverrides = resolveSmokeStepOverrides(plan);
+  return {
+    checks,
+    ...(stepOverrides.length > 0 ? { stepOverrides } : {}),
+  };
+}
+
+function applySmokeStepContract(plan, smoke) {
+  const overrides = new Map((smoke.stepOverrides ?? []).map((override) => [override.step, override]));
+  return plan.steps.map((step) => {
+    const smokeStep = step.mode === "foreground" ? { ...step, mode: "background" } : step;
+    const override = overrides.get(step.name);
+    if (!override) return smokeStep;
+    return {
+      ...smokeStep,
+      ...(override.mode ? { mode: override.mode } : {}),
+      ...(override.env
+        ? {
+            env: {
+              ...smokeStep.env,
+              ...override.env,
+            },
+          }
+        : {}),
+    };
+  });
+}
+
 export function buildWorkbenchSmokePlan(profile, surface, options = {}) {
   const plan = buildWorkbenchPlan(profile, surface, options);
-  const checks = resolveSmokeChecks(profile, plan, options);
+  const smoke = resolveWorkbenchSmokeContract(profile, plan, options);
   return {
     ...plan,
-    smoke: {
-      checks,
-    },
-    steps: plan.steps.map((step) =>
-      step.mode === "foreground" ? { ...step, mode: "background" } : step,
-    ),
+    smoke,
+    steps: applySmokeStepContract(plan, smoke),
   };
 }
 
@@ -543,6 +593,14 @@ async function raceBackgroundFailure(supervisor, task) {
   ]);
 }
 
+async function waitForStepReadiness(supervisor, waitForChecks, readiness, checkNames, options) {
+  if (!checkNames?.length) return;
+  await raceBackgroundFailure(
+    supervisor,
+    waitForChecks(readiness, checkNames, options),
+  );
+}
+
 export async function runWorkbenchPlan(plan, options = {}) {
   const supervisor = options.supervisor ?? new WorkbenchProcessSupervisor(options.processes);
   const waitForChecks = options.waitForReadiness ?? waitForReadinessChecks;
@@ -554,12 +612,7 @@ export async function runWorkbenchPlan(plan, options = {}) {
   try {
     for (const step of plan.steps) {
       supervisor.assertHealthy();
-      if (step.waitFor?.length) {
-        await raceBackgroundFailure(
-          supervisor,
-          waitForChecks(plan.readiness, step.waitFor, options.readiness),
-        );
-      }
+      await waitForStepReadiness(supervisor, waitForChecks, plan.readiness, step.waitFor, options.readiness);
       if (step.mode === "background") {
         supervisor.spawnBackground(step);
         continue;
@@ -591,12 +644,7 @@ export async function runWorkbenchSmokePlan(plan, options = {}) {
   try {
     for (const step of plan.steps) {
       supervisor.assertHealthy();
-      if (step.waitFor?.length) {
-        await raceBackgroundFailure(
-          supervisor,
-          waitForChecks(plan.readiness, step.waitFor, options.readiness),
-        );
-      }
+      await waitForStepReadiness(supervisor, waitForChecks, plan.readiness, step.waitFor, options.readiness);
       if (step.mode === "run") {
         runBlockingStep(step);
         continue;

@@ -36,6 +36,7 @@ export type {
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
+  RuntimeMcpTraceContextCarrier,
   RuntimeMcpToolSummary,
 } from "./mcp-call.js";
 export {

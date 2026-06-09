@@ -2,6 +2,9 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildMcpConfigPlan,
+  buildMemoryStackPlan,
+  buildRuntimeProfileProjection,
   buildRuntimeReadinessPlan,
   expandMcpServerRefs,
   expandRuntimeServiceRefs,
@@ -120,6 +123,71 @@ describe("runtime profile rendering", () => {
       "/mcp-workspace",
     ]);
     expect(mcp.mcpServers["local-tool"].env.KIRAKIRA_PROFILE).toBe("custom");
+  });
+
+  it("renders unified MCP and memory-stack projection fragments from a profile", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("container", config, {});
+    const memoryServices = expandRuntimeServiceRefs(["@memory-stack"], config);
+    const projection = buildRuntimeProfileProjection(profile, { config });
+
+    expect(projection).toMatchObject({
+      schemaVersion: 1,
+      profile: "container",
+      mode: "container",
+    });
+    expect(projection.fragments.mcpConfig).toEqual(buildMcpConfigPlan(profile, { config }));
+    expect(projection.fragments.mcpConfig.config).toEqual(renderMcpConfig(profile));
+    expect(projection.fragments.memoryStack).toEqual(buildMemoryStackPlan(profile, { config }));
+    expect(projection.fragments.memoryStack.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "--profile",
+      "cli",
+      "up",
+      "-d",
+      "--wait",
+      ...memoryServices,
+    ]);
+    expect(projection.fragments.memoryStack.services.map((service) => service.name))
+      .toEqual(memoryServices);
+    expect(projection.fragments.memoryStack.checks.map((check) => check.service))
+      .toEqual(memoryServices);
+    expect(JSON.stringify(projection)).not.toContain(".mcp.json");
+    expect(JSON.stringify(projection)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(projection)).not.toContain("testpassword");
+    expect(JSON.stringify(projection)).not.toContain("minioadmin");
+  });
+
+  it("renders host memory-stack projection as external checks without compose ownership", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("host", config, {});
+    const plan = buildMemoryStackPlan(profile, { config });
+
+    expect(plan.profile).toBe("host");
+    expect(plan.compose).toBeUndefined();
+    expect(plan.services.map((service) => service.name)).toEqual(
+      expandRuntimeServiceRefs(["@memory-stack"], config),
+    );
+    expect(plan.services.find((service) => service.name === "postgres")).toMatchObject({
+      target: "postgres://127.0.0.1:5432/kirakira",
+      env: ["DATABASE_URL"],
+    });
+    expect(plan.checks).toContainEqual(
+      expect.objectContaining({
+        name: "service:postgres",
+        type: "external-service",
+        target: "postgres://127.0.0.1:5432/kirakira",
+      }),
+    );
+    expect(plan.env).toContainEqual({
+      name: "DATABASE_URL",
+      generated: true,
+      value: "postgres://127.0.0.1:5432/kirakira",
+    });
+    expect(JSON.stringify(plan)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(plan)).not.toContain(".mcp.json");
   });
 
   it("honors profile MCP server refs and overrides", () => {
@@ -628,6 +696,32 @@ describe("runtime profile rendering", () => {
   });
 
   it("strictly parses runtime profile CLI arguments", () => {
+    const projectionResult = spawnSync(
+      process.execPath,
+      [runtimeProfileScript, "projection", "--profile", "test-host"],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+      },
+    );
+    const projection = JSON.parse(projectionResult.stdout);
+
+    expect(projectionResult.status).toBe(0);
+    expect(projection.fragments.memoryStack.compose.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.test.yml",
+      "up",
+      "-d",
+      "--wait",
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+    ]);
+    expect(JSON.stringify(projection)).not.toContain(".mcp.json");
+
     const readinessResult = spawnSync(
       process.execPath,
       [runtimeProfileScript, "readiness", "--profile", "workbench-host"],

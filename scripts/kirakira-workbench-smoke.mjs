@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
 import {
-  buildWorkbenchSmokePlan as buildLauncherWorkbenchSmokePlan,
+  buildWorkbenchSmokePlan,
   profileFromOptions,
   runWorkbenchSmokePlan,
 } from "./kirakira-workbench.mjs";
@@ -13,7 +13,6 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_SMOKE_TIMEOUT_MS = 120_000;
 const DEFAULT_SMOKE_INTERVAL_MS = 1_000;
 const DEFAULT_SMOKE_PROBE_TIMEOUT_MS = 2_000;
-const ELECTRON_SMOKE_ENV = "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE";
 
 function readValue(args, index, name) {
   const value = args[index + 1];
@@ -110,11 +109,10 @@ function liveRequested(options, env) {
 
 export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
   const profile = profileFromOptions(options, env);
-  const basePlan = buildLauncherWorkbenchSmokePlan(profile, options.surface, {
+  const plan = buildWorkbenchSmokePlan(profile, options.surface, {
     skipInfra: options.skipInfra,
     skipDaemon: options.skipDaemon,
   });
-  const plan = withSmokeStepOverrides(basePlan);
   return {
     live: liveRequested(options, env),
     profile,
@@ -125,24 +123,6 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
       intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
       probeTimeoutMs: options.probeTimeoutMs ?? DEFAULT_SMOKE_PROBE_TIMEOUT_MS,
     },
-  };
-}
-
-function withSmokeStepOverrides(plan) {
-  if (plan.surface !== "desktop") return plan;
-  return {
-    ...plan,
-    steps: plan.steps.map((step) => {
-      if (step.name !== "desktop-shell") return step;
-      return {
-        ...step,
-        mode: "foreground",
-        env: {
-          ...step.env,
-          [ELECTRON_SMOKE_ENV]: "1",
-        },
-      };
-    }),
   };
 }
 
@@ -166,6 +146,7 @@ async function main(argv) {
     surface: smokePlan.plan.surface,
     live: smokePlan.live,
     checks: smokePlan.checks,
+    stepOverrides: smokePlan.plan.smoke?.stepOverrides ?? [],
     readiness: smokePlan.readiness,
     steps: smokePlan.plan.steps.map((step) => ({
       name: step.name,

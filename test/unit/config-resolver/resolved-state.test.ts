@@ -1,6 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  buildResolvedRuntimeProfileProjection,
+  selectResolvedRuntimeProfile,
+} from "../../../packages/config-resolver/src/runtime-projection.js";
 import { resolveConfig } from "../../../packages/config-resolver/src/resolved-state.js";
 import type { ConfigLayer } from "../../../packages/config-resolver/src/types.js";
 import { getRepoRoot } from "../../helpers/repo-root.js";
@@ -164,6 +168,59 @@ describe("resolved runtime state", () => {
     expect(workbench?.mcp_app_root).toBe("/custom-mcp-app");
     expect(workbench?.mcp_servers?.find((server) => server.name === "filesystem-core")?.args?.at(-1))
       .toBe("/custom-mcp-workspace");
+  });
+
+  it("builds resolved MCP and memory-stack startup fragments without local config files", () => {
+    const resolved = resolveConfig([repoLayer()], undefined, undefined, {
+      runtimeProfilesConfig: runtimeProfilesConfig(),
+      runtimeProfilesPath,
+      runtimeEnv: {},
+    });
+
+    const projection = buildResolvedRuntimeProfileProjection(resolved.runtimeState, "container");
+    const memoryServices = resolved.runtimeState.service_catalog?.groups?.["memory-stack"] ?? [];
+
+    expect(projection.fragments.mcpConfig.config.mcpServers["filesystem-core"].args?.at(-1))
+      .toBe("/workspace");
+    expect(projection.fragments.mcpConfig.config.mcpServers["filesystem-patch"].args?.[0])
+      .toBe("/app/packages/mcp-filesystem-patch/dist/index.js");
+    expect(projection.fragments.memoryStack.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "--profile",
+      "cli",
+      "up",
+      "-d",
+      "--wait",
+      ...memoryServices,
+    ]);
+    expect(projection.fragments.memoryStack.services.map((service) => service.name))
+      .toEqual(memoryServices);
+    expect(JSON.stringify(projection)).not.toContain(".mcp.json");
+    expect(JSON.stringify(projection)).not.toContain("kirakira:kirakira");
+  });
+
+  it("selects the default resolved runtime profile for host-only consumers", () => {
+    const resolved = resolveConfig([repoLayer()], undefined, undefined, {
+      runtimeProfilesConfig: {
+        ...runtimeProfilesConfig(),
+        defaultProfile: "host",
+      },
+      runtimeProfilesPath,
+      runtimeEnv: {},
+    });
+
+    const profile = selectResolvedRuntimeProfile(resolved.runtimeState);
+    const projection = buildResolvedRuntimeProfileProjection(resolved.runtimeState);
+
+    expect(profile.name).toBe("host");
+    expect(projection.profile).toBe("host");
+    expect(projection.fragments.memoryStack.compose).toBeUndefined();
+    expect(projection.fragments.memoryStack.env).toContainEqual({
+      name: "DATABASE_URL",
+      generated: false,
+    });
   });
 
   it("includes runtime profile state in the resolved fingerprint", () => {

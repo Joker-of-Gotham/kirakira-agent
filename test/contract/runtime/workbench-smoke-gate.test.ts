@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildWorkbenchSmokePlan,
   runWorkbenchSmokePlan,
+  WORKBENCH_ELECTRON_SMOKE_ENV,
   WorkbenchProcessSupervisor,
 } from "../../../scripts/kirakira-workbench.mjs";
 import {
@@ -82,6 +83,67 @@ describe("workbench live smoke gate contract", () => {
       ["daemon", "background"],
       ["web", "background"],
     ]);
+  });
+
+  it("reports the same hidden Electron smoke contract from launcher desktop dry-run", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/kirakira-workbench.mjs",
+        "--smoke",
+        "--dry-run",
+        "--profile",
+        "workbench-host",
+        "--surface",
+        "desktop",
+        "--skip-infra",
+        "--timeout-ms",
+        "120000",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain("5173");
+
+    const plan = JSON.parse(result.stdout) as {
+      profile: string;
+      surface: string;
+      smoke: {
+        checks: string[];
+        stepOverrides?: Array<{ step: string; mode: string; env: Record<string, string> }>;
+      };
+      steps: Array<{ name: string; mode: string; env?: Record<string, string> }>;
+    };
+    const shell = plan.steps.find((step) => step.name === "desktop-shell");
+
+    expect(plan.profile).toBe("workbench-host");
+    expect(plan.surface).toBe("desktop");
+    expect(plan.smoke.checks).toEqual([
+      "daemon:socket",
+      "daemon:browser-gateway",
+      "presentation:desktop",
+    ]);
+    expect(plan.smoke.stepOverrides).toEqual([
+      {
+        step: "desktop-shell",
+        mode: "foreground",
+        env: {
+          [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+        },
+      },
+    ]);
+    expect(shell).toMatchObject({
+      mode: "foreground",
+      env: {
+        [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+      },
+    });
   });
 
   it("waits for surface readiness after all smoke processes are supervised", async () => {

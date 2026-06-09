@@ -6,10 +6,13 @@ import { describe, expect, it } from "vitest";
 import { ensureMcpConfig } from "../../../scripts/kirakira-common.mjs";
 import {
   buildWorkbenchPlan,
+  buildWorkbenchSmokePlan,
   profileFromOptions,
   readinessPlanForCheckNames,
+  resolveWorkbenchSmokeContract,
   runWorkbenchPlan,
   waitForReadinessChecks,
+  WORKBENCH_ELECTRON_SMOKE_ENV,
   WorkbenchProcessSupervisor,
 } from "../../../scripts/kirakira-workbench.mjs";
 import {
@@ -326,6 +329,38 @@ describe("workbench launcher plan", () => {
     expect(() => readinessPlanForCheckNames(plan.readiness, ["missing:check"])).toThrow(
       /Readiness checks not found: missing:check/u,
     );
+  });
+
+  it("exposes the shared web and desktop smoke contracts from launcher plans", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const webPlan = buildWorkbenchPlan(profile, "web", { skipInfra: true });
+    const desktopPlan = buildWorkbenchPlan(profile, "desktop", { skipInfra: true });
+
+    expect(resolveWorkbenchSmokeContract(profile, webPlan)).toEqual({
+      checks: ["daemon:browser-gateway", "presentation:web"],
+    });
+    expect(resolveWorkbenchSmokeContract(profile, desktopPlan)).toEqual({
+      checks: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+      stepOverrides: [
+        {
+          step: "desktop-shell",
+          mode: "foreground",
+          env: {
+            [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+          },
+        },
+      ],
+    });
+
+    const desktopSmoke = buildWorkbenchSmokePlan(profile, "desktop", { skipInfra: true });
+    const shell = desktopSmoke.steps.find((step) => step.name === "desktop-shell");
+    expect(shell).toMatchObject({
+      mode: "foreground",
+      env: {
+        [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+      },
+    });
+    expect(JSON.stringify({ webPlan, desktopPlan, desktopSmoke })).not.toContain("5173");
   });
 
   it("polls waitFor readiness checks until the selected checks pass", async () => {

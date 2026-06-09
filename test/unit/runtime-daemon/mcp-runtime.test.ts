@@ -452,6 +452,49 @@ describe("DaemonMcpRuntime", () => {
     }
   });
 
+  it("passes W3C trace context through MCP _meta without a span recorder", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-pass-through-"));
+    const traceContext = {
+      traceparent: "00-11111111111111111111111111111111-2222222222222222-01",
+      tracestate: "rojo=2222222222222222,congo=t61rcWkgMzE",
+      baggage: "tenant=acme,run=run-1",
+    };
+    const manager = fakeManager({
+      content: [{ type: "text", text: "hello" }],
+      isError: false,
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      mcpSpanRecorder: null,
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        runId: "run-1",
+        traceContext,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/call", {
+        name: "read_file",
+        arguments: { path: "README.md" },
+        _meta: traceContext,
+      });
+      expect(result.otel).toMatchObject({
+        spanName: "tools/call read_file",
+        traceContext,
+        status: "OK",
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
   it("returns policy denials as tool-call results without starting MCP servers", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-deny-"));
     const manager = fakeManager({ content: [] });

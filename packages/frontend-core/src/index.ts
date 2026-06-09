@@ -101,6 +101,17 @@ export type {
   RunWorkstreamTone,
 } from "./workstream.js";
 
+export { createRunActivityRailView } from "./activity-rail.js";
+
+export type {
+  RunActivityRailDetail,
+  RunActivityRailMcpTool,
+  RunActivityRailMetric,
+  RunActivityRailOptions,
+  RunActivityRailSelection,
+  RunActivityRailView,
+} from "./activity-rail.js";
+
 export {
   createEmptyRunDashboard,
   projectRunDashboard,

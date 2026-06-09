@@ -11,7 +11,11 @@ import {
 } from "./events.js";
 import type { RunStateSnapshot } from "./snapshot.js";
 import type { RuntimeAckResultParser } from "./ack-result.js";
-import type { RuntimeMcpListRequest, RuntimeMcpToolCallRequest } from "./mcp-call.js";
+import type {
+  RuntimeMcpListRequest,
+  RuntimeMcpToolCallRequest,
+  RuntimeMcpTraceContextCarrier,
+} from "./mcp-call.js";
 
 export type RuntimeClientMessage =
   | {
@@ -284,6 +288,24 @@ function parseRecordArguments(value: unknown): Record<string, unknown> | undefin
   return isRecord(value) ? value : null;
 }
 
+function parseRuntimeMcpTraceContext(
+  value: unknown,
+): RuntimeMcpTraceContextCarrier | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const traceparent = optionalString(value.traceparent);
+  if (value.traceparent !== undefined && traceparent === undefined) return null;
+  const tracestate = optionalString(value.tracestate);
+  if (value.tracestate !== undefined && tracestate === undefined) return null;
+  const baggage = optionalString(value.baggage);
+  if (value.baggage !== undefined && baggage === undefined) return null;
+  return {
+    ...(traceparent !== undefined ? { traceparent } : {}),
+    ...(tracestate !== undefined ? { tracestate } : {}),
+    ...(baggage !== undefined ? { baggage } : {}),
+  };
+}
+
 export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessageParseResult {
   if (!isRecord(raw) || typeof raw.type !== "string") {
     return error("invalid_message", "Client message must be an object with a type", undefined, raw);
@@ -355,6 +377,15 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
       if (raw.traceId !== undefined && traceId === undefined) {
         return error("invalid_message", "mcp_call traceId must be a string", raw, raw.traceId);
       }
+      const traceContext = parseRuntimeMcpTraceContext(raw.traceContext);
+      if (traceContext === null) {
+        return error(
+          "invalid_message",
+          "mcp_call traceContext must contain string traceparent, tracestate, and baggage fields",
+          raw,
+          raw.traceContext,
+        );
+      }
       const subagentId = optionalString(raw.subagentId);
       if (raw.subagentId !== undefined && subagentId === undefined) {
         return error("invalid_message", "mcp_call subagentId must be a string", raw, raw.subagentId);
@@ -382,6 +413,7 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           ...(args !== undefined ? { arguments: args } : {}),
           ...(runId !== undefined ? { runId } : {}),
           ...(traceId !== undefined ? { traceId } : {}),
+          ...(traceContext !== undefined ? { traceContext } : {}),
           ...(subagentId !== undefined ? { subagentId } : {}),
           ...(role !== undefined ? { role } : {}),
           ...(requestedLane !== undefined ? { requestedLane } : {}),
@@ -418,6 +450,15 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
       if (raw.traceId !== undefined && traceId === undefined) {
         return error("invalid_message", "mcp_list traceId must be a string", raw, raw.traceId);
       }
+      const traceContext = parseRuntimeMcpTraceContext(raw.traceContext);
+      if (traceContext === null) {
+        return error(
+          "invalid_message",
+          "mcp_list traceContext must contain string traceparent, tracestate, and baggage fields",
+          raw,
+          raw.traceContext,
+        );
+      }
       return {
         ok: true,
         message: {
@@ -427,6 +468,7 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           ...(includeTools !== undefined ? { includeTools } : {}),
           ...(startServers !== undefined ? { startServers } : {}),
           ...(traceId !== undefined ? { traceId } : {}),
+          ...(traceContext !== undefined ? { traceContext } : {}),
         },
       };
     }

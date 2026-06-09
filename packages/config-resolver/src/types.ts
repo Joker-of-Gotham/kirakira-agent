@@ -9,6 +9,7 @@ import type {
   ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
+  ResolvedRuntimeServiceState,
   ResolvedRuntimeState,
 } from "@kirakira/core";
 
@@ -23,6 +24,7 @@ export type {
   ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
+  ResolvedRuntimeServiceState,
   ResolvedRuntimeState,
 };
 

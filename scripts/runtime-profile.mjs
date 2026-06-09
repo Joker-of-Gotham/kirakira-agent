@@ -546,6 +546,125 @@ function browserGatewayHealthUrl(endpoint) {
   }
 }
 
+const SENSITIVE_ENV_NAME = /(?:PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE|CREDENTIAL|(?:^|_)TOKEN(?:_|$))/iu;
+
+function sanitizedPlanEnvValue(name, value) {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  if (SENSITIVE_ENV_NAME.test(name) && !name.endsWith("_TOKEN_BUDGET")) return "<redacted>";
+  return sanitizedReadinessUrl(value) ?? value;
+}
+
+function memoryStackServiceNames(profile) {
+  if (!isRecord(profile.memory) || profile.memory.enabled === false) return [];
+  return uniqueStrings(Array.isArray(profile.memory.services) ? profile.memory.services : []);
+}
+
+function memoryStackEnvBindings(profile, serviceNames) {
+  const bindings = profile.envBindings ?? {};
+  const env = renderRuntimeEnv(profile);
+  const names = new Set();
+  for (const serviceName of serviceNames) {
+    for (const name of envNames(bindings.services?.[serviceName])) {
+      names.add(name);
+    }
+  }
+  for (const [path, target] of Object.entries(bindings.values ?? {})) {
+    if (!path.startsWith("memory.")) continue;
+    for (const name of envNames(target)) names.add(name);
+  }
+  for (const [path, target] of Object.entries(bindings.booleans ?? {})) {
+    if (!path.startsWith("memory.")) continue;
+    for (const name of envNames(target)) names.add(name);
+  }
+  for (const [path, target] of Object.entries(bindings.joined ?? {})) {
+    if (!path.startsWith("memory.")) continue;
+    for (const name of envNames(target)) names.add(name);
+  }
+  return [...names].sort().map((name) => {
+    const value = sanitizedPlanEnvValue(name, env[name]);
+    return {
+      name,
+      generated: value !== undefined,
+      ...(value !== undefined ? { value } : {}),
+    };
+  });
+}
+
+function memoryStackServicePlan(config, profile, serviceName) {
+  const catalogEntry = runtimeServiceCatalogEntry(config, serviceName);
+  const target = sanitizedReadinessUrl(profile.services?.[serviceName]);
+  return {
+    name: serviceName,
+    composeService: runtimeComposeServiceName(config, serviceName),
+    source: "memory.services",
+    required: true,
+    env: envNames(profile.envBindings?.services?.[serviceName]),
+    ...(target ? { target } : {}),
+    ...(catalogEntry?.primaryPort ? { primaryPort: catalogEntry.primaryPort } : {}),
+  };
+}
+
+export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const serviceNames = memoryStackServiceNames(profile);
+  const composeArgs = renderComposeArgs(profile);
+  const composeServiceNames = uniqueStrings(
+    serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
+  );
+  const composeEnabled = composeArgs.length > 0 && composeServiceNames.length > 0;
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.memory",
+    enabled: isRecord(profile.memory) && profile.memory.enabled !== false,
+    services: serviceNames.map((serviceName) => memoryStackServicePlan(config, profile, serviceName)),
+    compose: composeEnabled
+      ? {
+          command: "docker",
+          args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
+          services: composeServiceNames,
+          wait: "running|healthy",
+        }
+      : undefined,
+    checks: serviceNames.map((serviceName) =>
+      serviceReadinessCheck(config, profile, serviceName, composeEnabled),
+    ),
+    env: memoryStackEnvBindings(profile, serviceNames),
+  };
+}
+
+export function buildMcpConfigPlan(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const serverRefs = options.serverRefs ?? mcpServerRefs(profile, config);
+  const servers = expandMcpServerRefs(serverRefs, config);
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.mcp",
+    roots: {
+      workspaceRoot: profile.mcp?.workspaceRoot ?? profile.workspaceRoot,
+      appRoot: profile.mcp?.appRoot ?? profile.appRoot,
+    },
+    serverRefs,
+    servers,
+    config: renderMcpConfig(profile, options),
+  };
+}
+
+export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(), options = {}) {
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    fragments: {
+      mcpConfig: buildMcpConfigPlan(profile, options),
+      memoryStack: buildMemoryStackPlan(profile, options),
+    },
+  };
+}
+
 const ORCHESTRATION_LANE_NAMES = ["foreground", "queued", "background", "delegated"];
 const ORCHESTRATION_MODES = ["tool", "supervisor", "swarm"];
 const ORCHESTRATION_CONTEXT_MODES = ["isolated", "filtered", "inherit"];
@@ -1038,6 +1157,9 @@ const PROFILE_ACTIONS = {
   },
   readiness(profile) {
     console.log(JSON.stringify(buildRuntimeReadinessPlan(profile), null, 2));
+  },
+  projection(profile) {
+    console.log(JSON.stringify(buildRuntimeProfileProjection(profile), null, 2));
   },
   mcp(profile) {
     console.log(JSON.stringify(renderMcpConfig(profile), null, 2));

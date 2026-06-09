@@ -1,7 +1,8 @@
 import type { ResolvedConfig } from "@kirakira/core";
 import {
   McpGatewayContextFactory,
-  mcpMetaFromSpanContext,
+  mcpMetaFromSpanHandle,
+  normalizeMcpTraceContextCarrier,
   filterTools,
   type McpAuditBridge,
   type McpClientManager,
@@ -14,6 +15,7 @@ import {
   type McpSpanHandle,
   type McpSpanRecorder,
   type McpSpanStatusCode,
+  type McpTraceContextCarrier,
   type McpGatewayTrustContext,
 } from "@kirakira/mcp-adapter";
 import {
@@ -35,6 +37,7 @@ import type {
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
   RuntimeMcpOtelSpanStatus,
+  RuntimeMcpTraceContextCarrier,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { createDaemonMcpDependencies } from "./mcp-runtime-deps.js";
@@ -81,6 +84,7 @@ interface RuntimeMcpSpanProjection {
   traceId?: string;
   spanId?: string;
   parentSpanId?: string;
+  traceContext?: RuntimeMcpTraceContextCarrier;
   status?: RuntimeMcpOtelSpanStatus;
   durationMs?: number;
 }
@@ -145,6 +149,7 @@ interface DiscoveredMcpTool {
 interface ActiveRuntimeMcpSpan {
   startedAt: number;
   handle?: McpSpanHandle;
+  traceContext?: McpTraceContextCarrier;
 }
 
 function projectTrust(context: McpGatewayTrustContext): RuntimeMcpTrustMetadata {
@@ -199,6 +204,7 @@ function projectOtel(
     ...(span?.traceId !== undefined ? { traceId: span.traceId } : {}),
     ...(span?.spanId !== undefined ? { spanId: span.spanId } : {}),
     ...(span?.parentSpanId !== undefined ? { parentSpanId: span.parentSpanId } : {}),
+    ...(span?.traceContext !== undefined ? { traceContext: span.traceContext } : {}),
     ...(span?.status !== undefined ? { status: span.status } : {}),
     ...(span?.durationMs !== undefined ? { durationMs: span.durationMs } : {}),
   };
@@ -262,11 +268,15 @@ export class DaemonMcpRuntime {
     context: McpGatewayOtelContext,
     options: {
       traceId?: string;
+      traceContext?: McpTraceContextCarrier;
       attributes?: McpSpanAttributes;
     } = {},
   ): ActiveRuntimeMcpSpan {
     const startedAt = Date.now();
-    if (this.mcpSpanRecorder === undefined) return { startedAt };
+    const traceContext = normalizeMcpTraceContextCarrier(options.traceContext);
+    if (this.mcpSpanRecorder === undefined) {
+      return traceContext === undefined ? { startedAt } : { startedAt, traceContext };
+    }
 
     try {
       const handle = this.mcpSpanRecorder.startSpan({
@@ -279,10 +289,11 @@ export class DaemonMcpRuntime {
         },
         startTimeUnixMs: startedAt,
         ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+        ...(traceContext !== undefined ? { traceContext } : {}),
       });
-      return { startedAt, handle };
+      return traceContext === undefined ? { startedAt, handle } : { startedAt, handle, traceContext };
     } catch {
-      return { startedAt };
+      return traceContext === undefined ? { startedAt } : { startedAt, traceContext };
     }
   }
 
@@ -303,12 +314,16 @@ export class DaemonMcpRuntime {
       }),
     ).catch(() => {});
 
+    const traceContext =
+      span.handle !== undefined ? mcpMetaFromSpanHandle(span.handle) : span.traceContext;
+
     return {
       ...(span.handle?.context.traceId !== undefined ? { traceId: span.handle.context.traceId } : {}),
       ...(span.handle?.context.spanId !== undefined ? { spanId: span.handle.context.spanId } : {}),
       ...(span.handle?.context.parentSpanId !== undefined
         ? { parentSpanId: span.handle.context.parentSpanId }
         : {}),
+      ...(traceContext !== undefined ? { traceContext } : {}),
       status,
       durationMs: Math.max(0, endTimeUnixMs - span.startedAt),
     };
@@ -318,8 +333,8 @@ export class DaemonMcpRuntime {
     params: T,
     span: ActiveRuntimeMcpSpan,
   ): T {
-    if (span.handle === undefined) return params;
-    const traceMeta = mcpMetaFromSpanContext(span.handle.context);
+    const traceMeta =
+      span.handle !== undefined ? mcpMetaFromSpanHandle(span.handle) : span.traceContext;
     if (traceMeta === undefined) return params;
     const existingMeta = isRecord(params._meta) ? params._meta : {};
     return {
@@ -424,6 +439,7 @@ export class DaemonMcpRuntime {
       const serverContext = this.contextFactory.serverContext(server, "tools/list");
       const span = this.startMcpSpan(serverContext.otel, {
         ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
+        ...(input.traceContext !== undefined ? { traceContext: input.traceContext } : {}),
         attributes: { "kirakira.runtime.message.type": "mcp_list" },
       });
       let spanStatus: McpSpanStatusCode = "OK";
@@ -503,6 +519,7 @@ export class DaemonMcpRuntime {
     const callContext = this.contextFactory.toolContext(input.server, input.tool, "tools/call");
     const span = this.startMcpSpan(callContext.otel, {
       ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
+      ...(input.traceContext !== undefined ? { traceContext: input.traceContext } : {}),
       attributes: {
         "kirakira.runtime.message.type": "mcp_call",
         ...(input.runId !== undefined ? { "kirakira.run.id": input.runId } : {}),

@@ -21,6 +21,7 @@
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
     "runtime:doctor": "node scripts/runtime-doctor.mjs",
+    "parity:eam": "node scripts/eam-parity-audit.mjs",
     "test": "vitest run",
     "test:integration": "vitest run test/integration",
     "clean": "turbo clean",

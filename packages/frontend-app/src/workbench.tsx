@@ -22,6 +22,7 @@ import {
   createMcpDirectoryView,
   createMcpToolPlaygroundView,
   createEmptyRunDashboard,
+  createRunActivityRailView,
   createRunInspector,
   createRunWorkstream,
   createSubagentTopologyView,
@@ -35,6 +36,9 @@ import {
   type RuntimeMcpListResult,
   type RuntimeMcpToolCallResult,
   type RuntimeMcpToolPlaygroundView,
+  type RunActivityRailMcpTool,
+  type RunActivityRailSelection,
+  type RunActivityRailView,
   type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
@@ -91,6 +95,8 @@ interface McpToolCallState {
   result?: RuntimeMcpToolCallResult;
   message?: string;
 }
+
+type McpToolDetailTab = "details" | "run" | "schema";
 
 const defaultPrompt =
   "Port the runtime contract surface into a browser-safe UI and secure desktop bridge.";
@@ -285,6 +291,16 @@ export function KirakiraWorkbench({
         selectedMcpToolCallResult,
       ),
     [selectedMcpTool, selectedMcpToolCallResult, selectedMcpToolDraft],
+  );
+  const activityRail = useMemo(
+    () =>
+      createRunActivityRailView({
+        workstream,
+        inspector,
+        mcpPlayground: selectedMcpPlayground,
+        maxActivityItems: 5,
+      }),
+    [inspector, selectedMcpPlayground, workstream],
   );
 
   useEffect(() => {
@@ -616,6 +632,12 @@ export function KirakiraWorkbench({
       </section>
 
       <aside className="kk-right-rail" aria-label="Run intelligence">
+        <ActivityRailPanel
+          view={activityRail}
+          onSelectItem={selectWorkstreamItem}
+          onSelectFocus={setSelectedFocusId}
+        />
+
         <section className="kk-rail-section" aria-label="Execution graph">
           <div className="kk-pane-header">
             <div>
@@ -709,6 +731,7 @@ export function KirakiraWorkbench({
           selectedTool={selectedMcpTool}
           selectedToolId={selectedMcpTool?.id}
           playground={selectedMcpPlayground}
+          toolDetail={activityRail.mcpTool}
           callState={mcpToolCall}
           onSelectTool={setSelectedMcpToolId}
           onArgumentDraftChange={updateMcpArgumentDraft}
@@ -1047,12 +1070,144 @@ function WorkstreamDetailDrawer({ detail }: { detail?: RunWorkstreamDetailDrawer
   );
 }
 
+function ActivityRailPanel({
+  view,
+  onSelectItem,
+  onSelectFocus,
+}: {
+  view: RunActivityRailView;
+  onSelectItem: (itemId: string, focusId?: string) => void;
+  onSelectFocus: (id: string) => void;
+}) {
+  return (
+    <section className="kk-rail-section kk-activity-rail" aria-label="Run activity summary">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Run Activity</p>
+          <h2>Task Focus</h2>
+        </div>
+        <Activity size={18} />
+      </div>
+
+      <dl className="kk-activity-rail-metrics">
+        {view.metrics.map((metric) => (
+          <div key={metric.id} className={`kk-activity-metric kk-activity-metric-${metric.tone}`}>
+            <dt>{metric.label}</dt>
+            <dd>{metric.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {view.empty ? (
+        <div className="kk-empty">Start a run to populate task activity</div>
+      ) : (
+        <>
+          <ActivitySelectionCard title="Selected Work" selection={view.selected} />
+
+          {view.subagent ? (
+            <button
+              type="button"
+              className="kk-activity-subagent"
+              onClick={() => onSelectFocus(view.subagent!.id)}
+            >
+              <Bot size={16} />
+              <span>
+                <small>Subagent</small>
+                <strong>{view.subagent.title}</strong>
+                <em>{view.subagent.summary}</em>
+              </span>
+            </button>
+          ) : (
+            <div className="kk-empty">No subagent detail yet</div>
+          )}
+
+          <div className="kk-activity-rail-stream">
+            <div className="kk-section-heading">
+              <span>Latest activity</span>
+              <span>{view.activity.length}</span>
+            </div>
+            <ol role="log" aria-live="polite" aria-relevant="additions text">
+              {view.activity.length === 0 ? (
+                <li className="kk-empty">No runtime events yet</li>
+              ) : (
+                view.activity.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className={`kk-activity-rail-item kk-activity-${item.tone}`}
+                      onClick={() => onSelectItem(item.id, item.focusId)}
+                    >
+                      <span className="kk-timeline-rail" />
+                      <span>
+                        <strong>{item.title}</strong>
+                        <small>{item.detail ?? item.kind}</small>
+                      </span>
+                      <time>{formatClock(item.timestamp)}</time>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ol>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function ActivitySelectionCard({
+  title,
+  selection,
+}: {
+  title: string;
+  selection?: RunActivityRailSelection;
+}) {
+  if (!selection) {
+    return <div className="kk-empty">Select work to inspect current task state</div>;
+  }
+  return (
+    <article className={`kk-activity-focus kk-activity-focus-${selection.tone}`}>
+      <header>
+        <div>
+          <small>{title}</small>
+          <h3>{selection.title}</h3>
+        </div>
+        <span className={`kk-pill kk-pill-${selection.tone}`}>{selection.kind}</span>
+      </header>
+      <p>{selection.summary}</p>
+      {selection.details.length > 0 ? (
+        <dl className="kk-detail-list">
+          {selection.details.slice(0, 4).map((item) => (
+            <div key={`${selection.id}-${item.label}-${item.value}`}>
+              <dt>{item.label}</dt>
+              <dd>
+                {item.href ? (
+                  <a href={item.href} target="_blank" rel="noreferrer">
+                    {item.value}
+                    <ExternalLink size={13} aria-hidden="true" />
+                  </a>
+                ) : (
+                  item.value
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      ) : null}
+      {selection.relatedEventCount > 0 ? (
+        <small>{selection.relatedEventCount} related events</small>
+      ) : null}
+    </article>
+  );
+}
+
 function McpDirectoryPanel({
   state,
   view,
   selectedTool,
   selectedToolId,
   playground,
+  toolDetail,
   callState,
   onSelectTool,
   onArgumentDraftChange,
@@ -1065,6 +1220,7 @@ function McpDirectoryPanel({
   selectedTool?: RuntimeMcpDirectoryTool;
   selectedToolId?: string;
   playground: RuntimeMcpToolPlaygroundView;
+  toolDetail?: RunActivityRailMcpTool;
   callState: McpToolCallState;
   onSelectTool: (id: string) => void;
   onArgumentDraftChange: (toolId: string, draft: string) => void;
@@ -1163,6 +1319,7 @@ function McpDirectoryPanel({
 
           <McpToolDetail
             tool={selectedTool}
+            toolDetail={toolDetail}
             playground={playground}
             callState={callState}
             onArgumentDraftChange={onArgumentDraftChange}
@@ -1176,108 +1333,140 @@ function McpDirectoryPanel({
 
 function McpToolDetail({
   tool,
+  toolDetail,
   playground,
   callState,
   onArgumentDraftChange,
   onCallTool,
 }: {
   tool?: RuntimeMcpDirectoryTool;
+  toolDetail?: RunActivityRailMcpTool;
   playground: RuntimeMcpToolPlaygroundView;
   callState: McpToolCallState;
   onArgumentDraftChange: (toolId: string, draft: string) => void;
   onCallTool: () => void;
 }) {
-  if (!tool) return <div className="kk-empty">No tools discovered</div>;
+  const [activeTab, setActiveTab] = useState<McpToolDetailTab>("details");
+  if (!tool || !toolDetail) return <div className="kk-empty">No tools discovered</div>;
   const activeCall = callState.toolId === tool.id ? callState : { status: "idle" as const };
   const calling = activeCall.status === "loading";
   const invalidDraft = playground.draft.status === "invalid";
+  const tabs: Array<{ id: McpToolDetailTab; label: string }> = [
+    { id: "details", label: "Details" },
+    { id: "run", label: "Run" },
+    { id: "schema", label: "Schema" },
+  ];
   return (
     <article className="kk-mcp-tool-detail" aria-busy={calling}>
       <header>
-        <span>{tool.server}</span>
-        <h3>{tool.title}</h3>
-        <p>{tool.description ?? tool.name}</p>
+        <span>{toolDetail.server}</span>
+        <h3>{toolDetail.title}</h3>
+        <p>{toolDetail.description ?? toolDetail.name}</p>
       </header>
-      <dl>
-        <div>
-          <dt>Tool</dt>
-          <dd>{tool.name}</dd>
-        </div>
-        <div>
-          <dt>Inputs</dt>
-          <dd>
-            {tool.inputPropertyCount} fields, {tool.requiredInputCount} required
-          </dd>
-        </div>
-        {tool.otel ? (
-          <div>
-            <dt>Span</dt>
-            <dd>{tool.otel.spanName}</dd>
-          </div>
-        ) : null}
-      </dl>
-      {tool.inputFields.length > 0 ? (
-        <div className="kk-mcp-field-list" aria-label="MCP input fields">
-          {tool.inputFields.map((field) => (
-            <span key={field.name} className={field.required ? "kk-mcp-field-required" : ""}>
-              {field.name}
-              <small>{field.type}{field.required ? " required" : ""}</small>
-            </span>
-          ))}
-        </div>
-      ) : null}
-      <McpMetadataSection title="Trust" rows={playground.trustRows} />
-      <McpMetadataSection title="Policy" rows={playground.policyRows} />
-      <McpMetadataSection title="Audit" rows={playground.auditRows} />
-      <label className="kk-mcp-arguments">
-        <span>Arguments JSON</span>
-        <textarea
-          rows={5}
-          value={playground.draft.text}
-          spellCheck={false}
-          onChange={(event) => onArgumentDraftChange(tool.id, event.target.value)}
-        />
-      </label>
-      <div className="kk-mcp-call-actions">
-        <button
-          type="button"
-          className="kk-icon-button"
-          onClick={() => onArgumentDraftChange(tool.id, tool.argumentDraft)}
-          disabled={calling}
-        >
-          <RefreshCw size={15} />
-          <span>Reset</span>
-        </button>
-        <button
-          type="button"
-          className="kk-submit kk-mcp-call-button"
-          onClick={onCallTool}
-          disabled={calling || invalidDraft}
-        >
-          <Play size={16} />
-          {calling ? "Calling" : "Call tool"}
-        </button>
+      <div className="kk-mcp-tabs" role="tablist" aria-label={`${toolDetail.title} detail tabs`}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className={activeTab === tab.id ? "kk-mcp-tab kk-mcp-tab-active" : "kk-mcp-tab"}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
-      {invalidDraft ? (
-        <div className="kk-empty kk-mcp-error" role="alert">
-          {playground.draft.error ?? "MCP arguments must be a JSON object"}
+
+      {activeTab === "details" ? (
+        <div className="kk-mcp-tab-panel" role="tabpanel">
+          <dl>
+            <div>
+              <dt>Tool</dt>
+              <dd>{toolDetail.name}</dd>
+            </div>
+            <div>
+              <dt>Inputs</dt>
+              <dd>{toolDetail.inputSummary}</dd>
+            </div>
+            {tool.otel ? (
+              <div>
+                <dt>Span</dt>
+                <dd>{tool.otel.spanName}</dd>
+              </div>
+            ) : null}
+          </dl>
+          {toolDetail.inputFields.length > 0 ? (
+            <div className="kk-mcp-field-list" aria-label="MCP input fields">
+              {toolDetail.inputFields.map((field) => (
+                <span key={field.name} className={field.required ? "kk-mcp-field-required" : ""}>
+                  {field.name}
+                  <small>{field.type}{field.required ? " required" : ""}</small>
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <McpMetadataSection title="Trust" rows={toolDetail.trustRows} />
+          <McpMetadataSection title="Policy" rows={toolDetail.policyRows} />
+          <McpMetadataSection title="Audit" rows={toolDetail.auditRows} />
         </div>
       ) : null}
-      {activeCall.status === "error" ? (
-        <div className="kk-empty kk-mcp-error">{activeCall.message ?? "MCP call failed"}</div>
-      ) : null}
-      {activeCall.status === "ready" && playground.callSummary ? (
-        <div className={`kk-mcp-call-result kk-mcp-call-result-${playground.callSummary.status}`}>
-          <strong>{playground.callSummary.title}</strong>
-          <small>{playground.callSummary.detail}</small>
-          <McpMetadataRows rows={playground.callSummary.rows} />
-          <pre>{playground.callSummary.contentText}</pre>
+
+      {activeTab === "run" ? (
+        <div className="kk-mcp-tab-panel" role="tabpanel">
+          <label className="kk-mcp-arguments">
+            <span>Arguments JSON</span>
+            <textarea
+              rows={5}
+              value={playground.draft.text}
+              spellCheck={false}
+              onChange={(event) => onArgumentDraftChange(tool.id, event.target.value)}
+            />
+          </label>
+          <div className="kk-mcp-call-actions">
+            <button
+              type="button"
+              className="kk-icon-button"
+              onClick={() => onArgumentDraftChange(tool.id, tool.argumentDraft)}
+              disabled={calling}
+            >
+              <RefreshCw size={15} />
+              <span>Reset</span>
+            </button>
+            <button
+              type="button"
+              className="kk-submit kk-mcp-call-button"
+              onClick={onCallTool}
+              disabled={calling || invalidDraft}
+            >
+              <Play size={16} />
+              {calling ? "Calling" : "Call tool"}
+            </button>
+          </div>
+          {invalidDraft ? (
+            <div className="kk-empty kk-mcp-error" role="alert">
+              {toolDetail.draftError ?? "MCP arguments must be a JSON object"}
+            </div>
+          ) : null}
+          {activeCall.status === "error" ? (
+            <div className="kk-empty kk-mcp-error">{activeCall.message ?? "MCP call failed"}</div>
+          ) : null}
+          {activeCall.status === "ready" && playground.callSummary ? (
+            <div className={`kk-mcp-call-result kk-mcp-call-result-${playground.callSummary.status}`}>
+              <strong>{playground.callSummary.title}</strong>
+              <small>{playground.callSummary.detail}</small>
+              <McpMetadataRows rows={playground.callSummary.rows} />
+              <pre>{playground.callSummary.contentText}</pre>
+            </div>
+          ) : null}
         </div>
       ) : null}
-      <details className="kk-mcp-schema">
-        <summary>Input schema</summary>
-        <pre>{JSON.stringify(tool.inputSchema ?? { type: "object" }, null, 2)}</pre>
-      </details>
+
+      {activeTab === "schema" ? (
+        <div className="kk-mcp-tab-panel" role="tabpanel">
+          <pre>{toolDetail.schemaText}</pre>
+        </div>
+      ) : null}
     </article>
   );
 }

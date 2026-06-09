@@ -1,9 +1,16 @@
+export interface RuntimeMcpTraceContextCarrier {
+  traceparent?: string;
+  tracestate?: string;
+  baggage?: string;
+}
+
 export interface RuntimeMcpToolCallRequest {
   server: string;
   tool: string;
   arguments?: Record<string, unknown>;
   runId?: string;
   traceId?: string;
+  traceContext?: RuntimeMcpTraceContextCarrier;
   subagentId?: string;
   role?: string;
   requestedLane?: string;
@@ -14,6 +21,7 @@ export interface RuntimeMcpListRequest {
   includeTools?: boolean;
   startServers?: boolean;
   traceId?: string;
+  traceContext?: RuntimeMcpTraceContextCarrier;
 }
 
 export interface RuntimeMcpToolPolicyResult {
@@ -97,6 +105,7 @@ export interface RuntimeMcpOtelMetadata {
   traceId?: string;
   spanId?: string;
   parentSpanId?: string;
+  traceContext?: RuntimeMcpTraceContextCarrier;
   status?: RuntimeMcpOtelSpanStatus;
   durationMs?: number;
 }
@@ -254,6 +263,15 @@ function isRuntimeMcpOtelSpanStatus(value: unknown): value is RuntimeMcpOtelSpan
   return value === "UNSET" || value === "OK" || value === "ERROR";
 }
 
+function isRuntimeMcpTraceContextCarrier(value: unknown): value is RuntimeMcpTraceContextCarrier {
+  return (
+    isRecord(value) &&
+    isOptionalString(value.traceparent) &&
+    isOptionalString(value.tracestate) &&
+    isOptionalString(value.baggage)
+  );
+}
+
 function isRuntimeMcpOtelMetadata(value: unknown): value is RuntimeMcpOtelMetadata {
   return (
     isRecord(value) &&
@@ -263,6 +281,7 @@ function isRuntimeMcpOtelMetadata(value: unknown): value is RuntimeMcpOtelMetada
     isOptionalString(value.traceId) &&
     isOptionalString(value.spanId) &&
     isOptionalString(value.parentSpanId) &&
+    (value.traceContext === undefined || isRuntimeMcpTraceContextCarrier(value.traceContext)) &&
     (value.status === undefined || isRuntimeMcpOtelSpanStatus(value.status)) &&
     (value.durationMs === undefined ||
       (typeof value.durationMs === "number" && Number.isFinite(value.durationMs)))

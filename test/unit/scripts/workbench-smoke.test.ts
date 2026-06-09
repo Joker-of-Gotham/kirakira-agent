@@ -5,6 +5,14 @@ import {
   normalizeSmokeArgs,
   runWorkbenchSmoke,
 } from "../../../scripts/kirakira-workbench-smoke.mjs";
+import {
+  buildWorkbenchSmokePlan,
+  WORKBENCH_ELECTRON_SMOKE_ENV,
+} from "../../../scripts/kirakira-workbench.mjs";
+import {
+  loadRuntimeProfiles,
+  resolveRuntimeProfile,
+} from "../../../scripts/runtime-profile.mjs";
 
 describe("workbench smoke gate", () => {
   it("parses the opt-in live command shape", () => {
@@ -63,6 +71,25 @@ describe("workbench smoke gate", () => {
     expect(smoke.live).toBe(true);
   });
 
+  it("reuses the launcher smoke plan contract for web and desktop commands", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+
+    for (const surface of ["web", "desktop"]) {
+      const smoke = buildWorkbenchSmokeCommand(
+        {
+          profileName: "workbench-host",
+          surface,
+          skipInfra: true,
+        },
+        {},
+      );
+      const launcherPlan = buildWorkbenchSmokePlan(profile, surface, { skipInfra: true });
+
+      expect(smoke.plan).toEqual(launcherPlan);
+      expect(JSON.stringify(smoke.plan)).not.toContain("5173");
+    }
+  });
+
   it("reads desktop smoke checks from the selected runtime profile", () => {
     const smoke = buildWorkbenchSmokeCommand(
       {
@@ -98,8 +125,17 @@ describe("workbench smoke gate", () => {
     ]);
     expect(
       smoke.plan.steps.find((step) => step.name === "desktop-shell")?.env
-        .KIRAKIRA_WORKBENCH_ELECTRON_SMOKE,
+        [WORKBENCH_ELECTRON_SMOKE_ENV],
     ).toBe("1");
+    expect(smoke.plan.smoke.stepOverrides).toEqual([
+      {
+        step: "desktop-shell",
+        mode: "foreground",
+        env: {
+          [WORKBENCH_ELECTRON_SMOKE_ENV]: "1",
+        },
+      },
+    ]);
     expect(smoke.checks).toEqual([
       "daemon:socket",
       "daemon:browser-gateway",
@@ -184,7 +220,7 @@ describe("workbench smoke gate", () => {
       supervisor,
       runForeground: async (step: { name: string; env: Record<string, string> }) => {
         events.push(
-          `foreground:${step.name}:${step.env.KIRAKIRA_WORKBENCH_ELECTRON_SMOKE}`,
+          `foreground:${step.name}:${step.env[WORKBENCH_ELECTRON_SMOKE_ENV]}`,
         );
       },
       waitForReadiness: async (_readiness, checks, options) => {

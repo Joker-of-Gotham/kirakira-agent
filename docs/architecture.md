@@ -62,10 +62,19 @@ without starting Docker, daemon, Vite, or Electron dependencies. Live execution
 is a second opt-in: add `--live` or set `KIRAKIRA_LIVE_E2E=1` to start the same
 resolved workbench plan under supervision, wait on profile-declared readiness
 checks such as `presentation:web` or `presentation:desktop`, and then tear down
-local child processes. Desktop live smoke injects
-`KIRAKIRA_WORKBENCH_ELECTRON_SMOKE=1` into the Electron shell so it opens a
-hidden window, exits after the renderer load completes, and fails non-zero on
-load failure or timeout.
+local child processes. The launcher owns the smoke contract for each surface,
+including the desktop Electron foreground assertion and its hidden-window
+environment. The standalone smoke entrypoint only selects dry-run versus live
+execution, so dry-run output and live execution share the same step/readiness
+plan.
+
+Runtime profile projection is exposed through `pnpm runtime:profile projection
+<profile>`. The projection emits two reusable fragments without writing local
+files: an MCP config JSON object rendered from `mcpCatalog` and the selected
+profile roots, and a memory-stack startup fragment rendered from the profile's
+memory services, compose files, checks, and non-secret env bindings. This keeps
+Docker, host, workbench, and test profiles on the same profile-derived plan
+instead of copying `.mcp.json` or memory service lists into each launcher.
 
 ## Runtime services
 
@@ -205,9 +214,11 @@ desktop --timeout-ms 120000 --live`. The command uses
 profile-rendered readiness checks, and tear down foreground workbench processes
 after the selected surface is reachable. For desktop, the Electron shell runs as
 a foreground smoke assertion in hidden-window mode and exits only after the
-renderer reports `did-finish-load`. Without `KIRAKIRA_LIVE_E2E=1` or `--live`,
-it reports the smoke plan and exits without starting Docker, daemon, Vite, or
-Electron.
+renderer reports `did-finish-load`. That assertion is resolved by
+`scripts/kirakira-workbench.mjs` as part of the shared smoke contract rather
+than patched by the smoke wrapper. Without `KIRAKIRA_LIVE_E2E=1` or `--live`,
+it reports the same smoke plan and exits without starting Docker, daemon, Vite,
+or Electron.
 
 The shared workbench MCP directory is rendered from runtime transport calls
 (`mcp_list`) and browser-safe view models in `@kirakira/frontend-core`. Web and
