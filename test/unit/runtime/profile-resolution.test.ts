@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   buildRuntimeReadinessPlan,
@@ -8,6 +10,9 @@ import {
   renderRuntimeEnv,
   resolveRuntimeProfile,
 } from "../../../scripts/runtime-profile.mjs";
+
+const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
+const runtimeProfileScript = resolve(repoRoot, "scripts", "runtime-profile.mjs");
 
 describe("runtime profile rendering", () => {
   it("resolves the default container profile", () => {
@@ -354,5 +359,33 @@ describe("runtime profile rendering", () => {
     expect(env.KIRAKIRA_GATEWAY_TOKEN_ALIAS).toBe("test-token");
     expect(env.VITE_GATEWAY_TOKEN_ALIAS).toBe("test-token");
     expect(env.CUSTOM_WEB_URL).toBe("http://127.0.0.1:9001");
+  });
+
+  it("strictly parses runtime profile CLI arguments", () => {
+    const readinessResult = spawnSync(
+      process.execPath,
+      [runtimeProfileScript, "readiness", "--profile", "workbench-host"],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+      },
+    );
+    const readiness = JSON.parse(readinessResult.stdout);
+
+    expect(readinessResult.status).toBe(0);
+    expect(readiness.profile).toBe("workbench-host");
+    expect(JSON.stringify(readiness)).not.toContain("5173");
+
+    const extraArgResult = spawnSync(
+      process.execPath,
+      [runtimeProfileScript, "env", "workbench-host", "extra"],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+      },
+    );
+
+    expect(extraArgResult.status).toBe(1);
+    expect(extraArgResult.stderr).toContain("Unknown runtime profile argument");
   });
 });

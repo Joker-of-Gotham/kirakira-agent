@@ -720,30 +720,68 @@ function printEnv(env) {
   }
 }
 
-function main(argv) {
-  const [command = "show", profileName] = argv;
-  const profile = resolveRuntimeProfile(profileName);
-  if (command === "show") {
+const PROFILE_ACTIONS = {
+  show(profile) {
     console.log(JSON.stringify(profile, null, 2));
-    return;
-  }
-  if (command === "env") {
+  },
+  env(profile) {
     printEnv(renderRuntimeEnv(profile));
-    return;
-  }
-  if (command === "compose-args") {
+  },
+  "compose-args"(profile) {
     console.log(renderComposeArgs(profile).join(" "));
-    return;
-  }
-  if (command === "readiness") {
+  },
+  readiness(profile) {
     console.log(JSON.stringify(buildRuntimeReadinessPlan(profile), null, 2));
-    return;
-  }
-  if (command === "mcp") {
+  },
+  mcp(profile) {
     console.log(JSON.stringify(renderMcpConfig(profile), null, 2));
-    return;
+  },
+};
+
+function parseProfileArgs(argv) {
+  const args = argv[0] === "--" ? argv.slice(1) : argv;
+  const options = {
+    command: "show",
+    profileName: undefined,
+  };
+  let commandSet = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      continue;
+    }
+    if (arg === "--profile") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) throw new Error("--profile requires a profile name");
+      options.profileName = value;
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown runtime profile argument: ${arg}`);
+    }
+    if (!commandSet) {
+      if (!PROFILE_ACTIONS[arg]) {
+        const available = Object.keys(PROFILE_ACTIONS).sort().join(", ");
+        throw new Error(`Unknown runtime profile command "${arg}". Available commands: ${available}`);
+      }
+      options.command = arg;
+      commandSet = true;
+      continue;
+    }
+    if (options.profileName === undefined) {
+      options.profileName = arg;
+      continue;
+    }
+    throw new Error(`Unknown runtime profile argument: ${arg}`);
   }
-  throw new Error(`Unknown command "${command}"`);
+  return options;
+}
+
+function main(argv) {
+  const options = parseProfileArgs(argv);
+  const profile = resolveRuntimeProfile(options.profileName);
+  PROFILE_ACTIONS[options.command](profile);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

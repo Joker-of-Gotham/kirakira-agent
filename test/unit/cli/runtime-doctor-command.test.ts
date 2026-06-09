@@ -40,7 +40,7 @@ describe("runtime doctor CLI invocation", () => {
 
     expect(() =>
       buildRuntimeDoctorScriptInvocation({}, { KIRAKIRA_REPO_ROOT: repoRoot }),
-    ).toThrow(/Runtime doctor script not found/u);
+    ).toThrow(/Runtime script not found/u);
   });
 
   it("fails clearly when the repo root marker cannot be found", () => {

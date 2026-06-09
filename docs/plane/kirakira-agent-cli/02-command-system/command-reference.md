@@ -10,8 +10,14 @@ Commands are implemented as oclif `Command` subclasses under
 |---------|--------|---------|
 | `init` | `commands/init.ts` | Scaffold workspace agent config |
 | `doctor` | `commands/doctor.ts` | Environment / dependency health |
+| `runtime profile` | `commands/runtime/profile.ts` | Runtime profile `show`, `env`, `compose-args`, `readiness`, and `mcp` views |
 | `runtime doctor` | `commands/runtime/doctor.ts` | Runtime profile readiness via the shared repo doctor |
 | `self-update` | `commands/self-update.ts` | Update CLI binary |
+
+`runtime profile` and `runtime doctor` are thin CLI bridges through
+`packages/cli/src/runtime/runtime-script-command.ts`; profile resolution,
+service catalog rendering, readiness planning, and MCP rendering stay in the
+repo runtime scripts.
 
 ## Auth
 
@@ -116,6 +122,7 @@ HTTP client: `packages/cli/src/registry/client.ts`.
 
 ```bash
 kirakira-agent exec -p "Summarize README.md" --json
+kirakira-agent runtime profile env workbench-host
 kirakira-agent runtime doctor workbench-host --json --no-probe
 kirakira-agent skill list
 kirakira-agent mcp test <server>

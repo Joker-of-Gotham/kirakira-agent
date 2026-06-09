@@ -21,7 +21,7 @@ Completion generation lists the same canonical set
 9. **registry** - `commands/registry/` (`login`, `whoami`, `search`, `publish`, `yank`)
 10. **trace** - `commands/trace/` (`show`, `tail`, `export`)
 11. **eval** - `commands/eval/` (`run`, `list`, `report`)
-12. **runtime** - `commands/runtime/` (`doctor`)
+12. **runtime** - `commands/runtime/` (`profile`, `doctor`)
 13. **doctor** - `commands/doctor.ts`
 14. **completion** - `commands/completion.ts`
 15. **self-update** - `commands/self-update.ts`

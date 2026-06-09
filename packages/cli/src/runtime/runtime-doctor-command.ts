@@ -1,7 +1,7 @@
-import { existsSync } from "node:fs";
-import { join } from "node:path";
-
-import { findRepoRoot } from "../util/repo-root.js";
+import {
+  buildRuntimeScriptInvocation,
+  type RuntimeScriptInvocation,
+} from "./runtime-script-command.js";
 
 export interface RuntimeDoctorCliOptions {
   profile?: string;
@@ -11,25 +11,13 @@ export interface RuntimeDoctorCliOptions {
   timeoutMs?: number;
 }
 
-export interface RuntimeDoctorScriptInvocation {
-  command: string;
-  args: string[];
-  cwd: string;
-}
+export type RuntimeDoctorScriptInvocation = RuntimeScriptInvocation;
 
 export function buildRuntimeDoctorScriptInvocation(
   options: RuntimeDoctorCliOptions = {},
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeDoctorScriptInvocation {
-  const repoRoot = env.KIRAKIRA_REPO_ROOT ?? findRepoRoot();
-  if (!existsSync(join(repoRoot, "pnpm-workspace.yaml"))) {
-    throw new Error(`Could not locate Kirakira repo root containing pnpm-workspace.yaml: ${repoRoot}`);
-  }
-  const scriptPath = join(repoRoot, "scripts", "runtime-doctor.mjs");
-  if (!existsSync(scriptPath)) {
-    throw new Error(`Runtime doctor script not found: ${scriptPath}`);
-  }
-  const args = [scriptPath];
+  const args = [];
   if (options.profile) args.push(options.profile);
   if (options.json) args.push("--json");
   if (options.noProbe) args.push("--no-probe");
@@ -37,9 +25,8 @@ export function buildRuntimeDoctorScriptInvocation(
   if (options.timeoutMs !== undefined) {
     args.push("--timeout-ms", String(options.timeoutMs));
   }
-  return {
-    command: process.execPath,
+  return buildRuntimeScriptInvocation({
+    scriptName: "runtime-doctor.mjs",
     args,
-    cwd: repoRoot,
-  };
+  }, env);
 }
