@@ -1,10 +1,27 @@
 import type { ModelPlannerClient } from "@kirakira/agent-runtime";
+import type {
+  DeepResearchConfig,
+  ResearchSourceKind,
+} from "@kirakira/deep-research";
 import { ulid } from "ulid";
 import { OrchestratorKernelError } from "../errors.js";
 import { parseStringArray, parseSubagentTaskContract } from "../subagent/contract.js";
-import type { PlanContext, PlanStep, RunPlan, TaskNodeKind } from "../types.js";
+import type {
+  PlanContext,
+  PlanStep,
+  ResearchTaskContract,
+  RunPlan,
+  TaskNodeKind,
+} from "../types.js";
 
 const PLAN_VERSION = "kirakira.runplan.v1";
+const RESEARCH_SOURCE_KINDS = new Set<ResearchSourceKind>(["memory", "file", "web", "mcp"]);
+const RESEARCH_SOURCE_POLICIES = new Set<NonNullable<DeepResearchConfig["source_policy"]>>([
+  "workspace",
+  "web",
+  "hybrid",
+  "verified",
+]);
 
 export class GoalCompiler {
   constructor(private readonly planner: ModelPlannerClient) {}
@@ -20,7 +37,7 @@ export class GoalCompiler {
       `  "steps": Array<{`,
       `    "id": string,`,
       `    "description": string,`,
-      `    "kind": "plan" | "subagent" | "tool" | "skill-load" | "approval" | "merge" | "synthesize",`,
+      `    "kind": "plan" | "subagent" | "research" | "tool" | "skill-load" | "approval" | "merge" | "synthesize",`,
       `    "dependsOn": string[],`,
       `    "canParallelize": boolean,`,
       `    "model"?: string,`,
@@ -36,6 +53,23 @@ export class GoalCompiler {
       `      "modelPreference"?: string,`,
       `      "outputSchema"?: object`,
       `    }`,
+      `    "research"?: {`,
+      `      "question"?: string,`,
+      `      "subquestions"?: string[],`,
+      `      "constraints"?: string[],`,
+      `      "audience"?: string,`,
+      `      "requiredSourceKinds"?: Array<"memory" | "file" | "web" | "mcp">,`,
+      `      "config"?: {`,
+      `        "enabled"?: boolean,`,
+      `        "source_policy"?: "workspace" | "web" | "hybrid" | "verified",`,
+      `        "max_depth"?: number,`,
+      `        "max_breadth"?: number,`,
+      `        "max_tool_calls"?: number,`,
+      `        "require_citations"?: boolean,`,
+      `        "workspace_dir"?: string`,
+      `      },`,
+      `      "metadata"?: object`,
+      `    }`,
       `  }>,`,
       `  "estimatedComplexity": "simple" | "moderate" | "complex",`,
       `  "requiresSubagents": boolean`,
@@ -45,6 +79,8 @@ export class GoalCompiler {
       "- dependsOn must reference earlier step ids only (DAG).",
       '- Use kind "subagent" when work should be delegated.',
       "- For subagent steps, prefer least-privilege toolScope/skillScope/mcpServers or explicit subagent.capabilities.",
+      '- Use kind "research" for source-backed evidence collection, citation-oriented synthesis inputs, or deep research that may run in the background.',
+      "- For research steps, include research.requiredSourceKinds only when a specific source class is required.",
       '- Use kind "approval" when user confirmation is needed.',
       `- Prefer tools/skills from context: tools=[${context.availableTools.join(", ")}], skills=[${context.availableSkills.join(", ")}].`,
       `- Available MCP servers: [${(context.availableMcpServers ?? []).join(", ")}].`,
@@ -125,6 +161,7 @@ export class GoalCompiler {
       const approvalRequired =
         typeof s.approvalRequired === "boolean" ? s.approvalRequired : undefined;
       const subagent = parseSubagentTaskContract(s.subagent);
+      const research = GoalCompiler.parseResearchTaskContract(s.research);
       steps.push({
         id,
         description,
@@ -139,6 +176,7 @@ export class GoalCompiler {
         ...(estimatedTokens !== undefined ? { estimatedTokens } : {}),
         ...(approvalRequired !== undefined ? { approvalRequired } : {}),
         ...(subagent !== undefined ? { subagent } : {}),
+        ...(research !== undefined ? { research } : {}),
       });
     }
     const estimatedComplexity = GoalCompiler.normalizeComplexity(obj.estimatedComplexity);
@@ -166,6 +204,7 @@ export class GoalCompiler {
     const allowed = new Set<TaskNodeKind>([
       "plan",
       "subagent",
+      "research",
       "tool",
       "skill-load",
       "approval",
@@ -175,4 +214,79 @@ export class GoalCompiler {
     if (typeof v === "string" && allowed.has(v as TaskNodeKind)) return v as TaskNodeKind;
     return "plan";
   }
+
+  private static parseResearchTaskContract(value: unknown): ResearchTaskContract | undefined {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    const question = stringField(raw.question);
+    const subquestions = parseStringArray(raw.subquestions);
+    const constraints = parseStringArray(raw.constraints);
+    const audience = stringField(raw.audience);
+    const requiredSourceKinds = GoalCompiler.parseResearchSourceKinds(raw.requiredSourceKinds);
+    const config = GoalCompiler.parseDeepResearchConfig(raw.config);
+    const metadata = plainRecord(raw.metadata);
+    const contract: ResearchTaskContract = {
+      ...(question !== undefined ? { question } : {}),
+      ...(subquestions !== undefined ? { subquestions } : {}),
+      ...(constraints !== undefined ? { constraints } : {}),
+      ...(audience !== undefined ? { audience } : {}),
+      ...(requiredSourceKinds !== undefined ? { requiredSourceKinds } : {}),
+      ...(config !== undefined ? { config } : {}),
+      ...(metadata !== undefined ? { metadata } : {}),
+    };
+    return Object.keys(contract).length > 0 ? contract : {};
+  }
+
+  private static parseResearchSourceKinds(value: unknown): ResearchSourceKind[] | undefined {
+    if (!Array.isArray(value)) return undefined;
+    const out: ResearchSourceKind[] = [];
+    for (const item of value) {
+      if (typeof item !== "string") continue;
+      if (!RESEARCH_SOURCE_KINDS.has(item as ResearchSourceKind)) continue;
+      const kind = item as ResearchSourceKind;
+      if (!out.includes(kind)) out.push(kind);
+    }
+    return out.length > 0 ? out : undefined;
+  }
+
+  private static parseDeepResearchConfig(value: unknown): DeepResearchConfig | undefined {
+    if (!value || typeof value !== "object") return undefined;
+    const raw = value as Record<string, unknown>;
+    const sourcePolicy =
+      typeof raw.source_policy === "string" &&
+      RESEARCH_SOURCE_POLICIES.has(raw.source_policy as NonNullable<DeepResearchConfig["source_policy"]>)
+        ? (raw.source_policy as DeepResearchConfig["source_policy"])
+        : undefined;
+    const config: DeepResearchConfig = {
+      ...(typeof raw.enabled === "boolean" ? { enabled: raw.enabled } : {}),
+      ...(numberField(raw.max_depth) !== undefined ? { max_depth: numberField(raw.max_depth) } : {}),
+      ...(numberField(raw.max_breadth) !== undefined
+        ? { max_breadth: numberField(raw.max_breadth) }
+        : {}),
+      ...(numberField(raw.max_tool_calls) !== undefined
+        ? { max_tool_calls: numberField(raw.max_tool_calls) }
+        : {}),
+      ...(typeof raw.require_citations === "boolean"
+        ? { require_citations: raw.require_citations }
+        : {}),
+      ...(sourcePolicy !== undefined ? { source_policy: sourcePolicy } : {}),
+      ...(stringField(raw.workspace_dir) !== undefined
+        ? { workspace_dir: stringField(raw.workspace_dir) }
+        : {}),
+    };
+    return Object.keys(config).length > 0 ? config : undefined;
+  }
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function numberField(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function plainRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
 }

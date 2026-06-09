@@ -3,6 +3,7 @@ import type {
   CheckpointEnvelope,
   EventWriter,
 } from "../../../packages/event-store/src/index.js";
+import type { ResearchSourceAdapter } from "../../../packages/deep-research/src/index.js";
 import type { RunEvent } from "../../../packages/runtime-contracts/src/index.js";
 import {
   OrchestratorKernel,
@@ -67,6 +68,33 @@ function waitForEvent(
       resolve(event);
     });
   });
+}
+
+function daemonMemoryResearchAdapter(): ResearchSourceAdapter {
+  return {
+    kind: "memory",
+    async search(request) {
+      return [
+        {
+          id: "daemon-evidence-1",
+          sourceKind: "memory",
+          query: request.query,
+          content: "DAEMON RAW EVIDENCE MUST NOT LEAK",
+          summary: "Daemon research tasks run through the kernel executor chain.",
+          citations: [
+            {
+              id: "daemon-citation-1",
+              sourceKind: "memory",
+              title: "Daemon research note",
+              uri: "memory://daemon-research",
+              summary: "The daemon injected adapter emitted cited research evidence.",
+              rawSpan: "DAEMON RAW SPAN MUST NOT LEAK",
+            },
+          ],
+        },
+      ];
+    },
+  };
 }
 
 describe("daemon orchestrator graph execution", () => {
@@ -172,6 +200,87 @@ describe("daemon orchestrator graph execution", () => {
       preview: "child summary",
       artifactRefs: ["artifact-child"],
     });
+  });
+
+  it("runs daemon research nodes through injected deep research adapters", async () => {
+    const { kernel, writer } = createKernel({
+      planner: {
+        async completeText() {
+          return JSON.stringify({
+            goal: "Collect research evidence",
+            steps: [
+              {
+                id: "research-a",
+                description: "Collect runtime evidence",
+                kind: "research",
+                dependsOn: [],
+                canParallelize: false,
+                research: {
+                  question: "Which runtime evidence is available?",
+                  requiredSourceKinds: ["memory"],
+                },
+              },
+            ],
+            estimatedComplexity: "moderate",
+            requiresSubagents: false,
+          });
+        },
+      },
+      deepResearch: {
+        config: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 1,
+          max_tool_calls: 2,
+        },
+        sourceAdapters: [daemonMemoryResearchAdapter()],
+      },
+    });
+    await kernel.start();
+    const completed = waitForEvent(kernel, (event) => event.kind === "run.completed");
+
+    await kernel.submitRun("Collect research evidence", "headless", {
+      workspaceRoot: "C:/workspace",
+    });
+    await completed;
+
+    const kinds = writer.events.map((event) => event.kind);
+    expect(kinds).toEqual(
+      expect.arrayContaining([
+        "research.started",
+        "research.plan.created",
+        "research.citation.added",
+        "research.completed",
+        "task.completed",
+        "run.completed",
+      ]),
+    );
+    const taskStarted = writer.events.find(
+      (event) => event.kind === "task.started" && event.payload.taskId === "research-a",
+    );
+    expect(taskStarted?.payload).toMatchObject({
+      taskId: "research-a",
+      kind: "research",
+      lane: "background",
+    });
+    const taskCompleted = writer.events.find(
+      (event) => event.kind === "task.completed" && event.payload.taskId === "research-a",
+    );
+    expect(taskCompleted?.payload.result).toMatchObject({
+      output: {
+        status: "evidence_collected",
+        evidenceCount: 1,
+        citationCount: 1,
+        toolCalls: 1,
+      },
+    });
+    expect(JSON.stringify(taskCompleted?.payload.result)).not.toContain(
+      "DAEMON RAW EVIDENCE MUST NOT LEAK",
+    );
+    expect(JSON.stringify(taskCompleted?.payload.result)).not.toContain(
+      "DAEMON RAW SPAN MUST NOT LEAK",
+    );
   });
 
   it("restores graph state from durable async checkpoints", async () => {

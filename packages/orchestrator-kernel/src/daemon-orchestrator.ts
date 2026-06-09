@@ -19,6 +19,10 @@ import { ControlInbox } from "./control/control-inbox.js";
 import { DrainController } from "./execution/drain.js";
 import { KernelLoop } from "./execution/kernel-loop.js";
 import { SubagentTaskExecutor } from "./execution/subagent-task-executor.js";
+import {
+  ResearchTaskExecutor,
+  type DeepResearchKernelOptions,
+} from "./research/research-task-executor.js";
 import { SuperstepManager } from "./execution/superstep.js";
 import { BackpressureController } from "./scheduler/backpressure.js";
 import { LaneRouter } from "./scheduler/lane-router.js";
@@ -87,6 +91,7 @@ export interface OrchestratorKernelOptions {
   budgets?: Partial<BudgetConfig>;
   laneCapacities?: Partial<LaneCapacities>;
   routingContext?: Partial<RoutingContext>;
+  deepResearch?: DeepResearchKernelOptions;
   parentWorkerConfig?: (input: {
     runId: string;
     prompt: string;
@@ -327,6 +332,17 @@ export class OrchestratorKernel {
   ): KernelLoop {
     const fallback = this.options.fallbackExecutor ?? new LocalTaskExecutor();
     const bridge = this.options.subagentBridge ?? new LocalSubagentBridge();
+    const researchExecutor = new ResearchTaskExecutor({
+      ...(this.options.deepResearch ?? {}),
+      getContext: () => ({
+        runId,
+        parentWorkerId: parentConfig.id,
+        workspaceRoot,
+        traceId,
+      }),
+      fallback,
+      emit: (kind, payload) => this.emit(runId, kind, payload),
+    });
     const executor = new SubagentTaskExecutor({
       bridge,
       getContext: () => ({
@@ -336,7 +352,7 @@ export class OrchestratorKernel {
         workspaceRoot,
         traceId,
       }),
-      fallback,
+      fallback: researchExecutor,
     });
     return new KernelLoop({
       normalizer: new PlanNormalizer(),

@@ -4,10 +4,15 @@ import type {
   SubagentRuntimePolicy,
   WorkerConfig,
 } from "@kirakira/agent-runtime";
+import type {
+  DeepResearchConfig,
+  ResearchSourceKind,
+} from "@kirakira/deep-research";
 
 export type TaskNodeKind =
   | "plan"
   | "subagent"
+  | "research"
   | "tool"
   | "skill-load"
   | "approval"
@@ -42,6 +47,7 @@ export interface TaskSpec {
   approvalCleared?: boolean;
   estimatedTokens?: number;
   subagent?: SubagentTaskContract;
+  research?: ResearchTaskContract;
   [key: string]: unknown;
 }
 
@@ -112,6 +118,16 @@ export interface SubagentTaskContract {
   outputSchema?: Record<string, unknown>;
 }
 
+export interface ResearchTaskContract {
+  question?: string;
+  subquestions?: string[];
+  constraints?: string[];
+  audience?: string;
+  requiredSourceKinds?: ResearchSourceKind[];
+  config?: DeepResearchConfig;
+  metadata?: Record<string, unknown>;
+}
+
 export interface PlanStep {
   id: string;
   description: string;
@@ -126,6 +142,7 @@ export interface PlanStep {
   estimatedTokens?: number;
   approvalRequired?: boolean;
   subagent?: Partial<SubagentTaskContract>;
+  research?: ResearchTaskContract;
 }
 
 export interface RunPlan {

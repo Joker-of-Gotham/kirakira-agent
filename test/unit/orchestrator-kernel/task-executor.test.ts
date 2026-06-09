@@ -9,10 +9,13 @@ import { DrainController } from "../../../packages/orchestrator-kernel/src/execu
 import { KernelLoop } from "../../../packages/orchestrator-kernel/src/execution/kernel-loop.js";
 import { SubagentTaskExecutor } from "../../../packages/orchestrator-kernel/src/execution/subagent-task-executor.js";
 import { SuperstepManager } from "../../../packages/orchestrator-kernel/src/execution/superstep.js";
+import { ResearchTaskExecutor } from "../../../packages/orchestrator-kernel/src/research/research-task-executor.js";
 import { BackpressureController } from "../../../packages/orchestrator-kernel/src/scheduler/backpressure.js";
 import { LaneRouter } from "../../../packages/orchestrator-kernel/src/scheduler/lane-router.js";
 import { ResourceBudgetManager } from "../../../packages/orchestrator-kernel/src/scheduler/resource-budget.js";
+import type { ResearchSourceAdapter } from "../../../packages/deep-research/src/index.js";
 import type {
+  LaneType,
   PlanContext,
   RuntimeSubagentBridgeRequest,
   RunPlan,
@@ -169,6 +172,69 @@ function parallelSubagentPlan(): RunPlan {
   });
 }
 
+function researchPlan(): RunPlan {
+  return basePlan({
+    requiresSubagents: false,
+    steps: [
+      {
+        id: "research-a",
+        kind: "research",
+        description: "Collect source-backed runtime evidence",
+        dependsOn: [],
+        canParallelize: false,
+        research: {
+          question: "What runtime evidence should be cited?",
+          requiredSourceKinds: ["memory"],
+          config: {
+            enabled: true,
+            source_policy: "workspace",
+            max_depth: 1,
+            max_breadth: 1,
+            max_tool_calls: 2,
+          },
+        },
+      },
+    ],
+  });
+}
+
+function memoryResearchAdapter(): ResearchSourceAdapter {
+  return {
+    kind: "memory",
+    async search(request) {
+      return [
+        {
+          id: "evidence-1",
+          sourceKind: "memory",
+          query: request.query,
+          title: "Runtime evidence",
+          content: "RAW EVIDENCE CONTENT MUST NOT LEAK",
+          summary: "The runtime bridge emits research events from injected adapters.",
+          citations: [
+            {
+              id: "citation-1",
+              sourceKind: "memory",
+              title: "Runtime note",
+              uri: "memory://runtime-note",
+              summary: "Injected adapters keep the kernel decoupled from source implementations.",
+              rawSpan: "RAW CITATION SPAN MUST NOT LEAK",
+              metadata: {
+                stable: "yes",
+                nested: { dropped: true },
+              },
+            },
+          ],
+          confidence: 0.91,
+          metadata: {
+            stable: "yes",
+            nested: { dropped: true },
+          },
+        },
+      ];
+    },
+  };
+}
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -310,6 +376,66 @@ describe("orchestrator task executor", () => {
       output: `${root.kind}:${root.id}`,
     });
     expect(bridgeCalled).toBe(false);
+  });
+
+  it("executes research nodes through deep research adapters with bounded output", async () => {
+    const graph = new PlanNormalizer().normalize(researchPlan(), "run-1");
+    const node = graph.nodes.get("research-a");
+    if (!node) throw new Error("missing node");
+    const emitted: Array<{ kind: string; payload: Record<string, unknown> }> = [];
+    const fallbackCalls: Array<{ nodeId: string; lane: LaneType }> = [];
+    const executor = new ResearchTaskExecutor({
+      getContext: () => ({
+        runId: "run-1",
+        parentWorkerId: "worker-parent",
+        workspaceRoot: "C:/workspace",
+        traceId: "trace-1",
+      }),
+      fallback: {
+        async execute(fallbackNode, lane) {
+          fallbackCalls.push({ nodeId: fallbackNode.id, lane });
+          return { output: "fallback" };
+        },
+      },
+      sourceAdapters: [memoryResearchAdapter()],
+      emit: (kind, payload) => {
+        emitted.push({ kind, payload });
+      },
+    });
+
+    const result = await executor.execute(node, "background");
+    const output = result.output as Record<string, unknown>;
+    const serialized = JSON.stringify(output);
+
+    expect(fallbackCalls).toEqual([]);
+    expect(output).toMatchObject({
+      researchRunId: "run-1:research-a:research",
+      status: "evidence_collected",
+      sourcePolicy: "workspace",
+      requiredSourceKinds: ["memory"],
+      evidenceCount: 1,
+      citationCount: 1,
+      toolCalls: 1,
+    });
+    expect(serialized).not.toContain("RAW EVIDENCE CONTENT MUST NOT LEAK");
+    expect(serialized).not.toContain("RAW CITATION SPAN MUST NOT LEAK");
+    expect(emitted.map((event) => event.kind)).toEqual(
+      expect.arrayContaining([
+        "research.started",
+        "research.plan.created",
+        "research.source.started",
+        "research.evidence.collected",
+        "research.citation.added",
+        "research.completed",
+      ]),
+    );
+    expect(emitted.find((event) => event.kind === "research.citation.added")?.payload).toMatchObject({
+      researchRunId: "run-1:research-a:research",
+      nodeId: "research-a",
+      citationId: "citation-1",
+      sourceKind: "memory",
+      traceId: "trace-1",
+    });
   });
 
   it("rejects subagent nodes missing a normalized contract", async () => {

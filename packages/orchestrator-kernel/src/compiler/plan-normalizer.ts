@@ -51,6 +51,7 @@ export class PlanNormalizer {
           ...(step.estimatedTokens !== undefined ? { estimatedTokens: step.estimatedTokens } : {}),
           ...(step.approvalRequired !== undefined ? { approvalRequired: step.approvalRequired } : {}),
           ...(subagent !== undefined ? { subagent } : {}),
+          ...(step.research !== undefined ? { research: step.research } : {}),
         },
         status: "pending",
       });

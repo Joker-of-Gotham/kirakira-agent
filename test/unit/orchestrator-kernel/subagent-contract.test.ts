@@ -194,6 +194,76 @@ describe("orchestrator subagent contract", () => {
     });
   });
 
+  it("hydrates planner research fields into normalized task specs", async () => {
+    const compiler = new GoalCompiler({
+      async completeText() {
+        return JSON.stringify({
+          goal: "research",
+          steps: [
+            {
+              id: "research-a",
+              description: "Collect evidence",
+              kind: "research",
+              dependsOn: [],
+              canParallelize: false,
+              research: {
+                question: "What evidence should be cited?",
+                subquestions: ["Which runtime path emits events?"],
+                constraints: ["Use only workspace evidence"],
+                audience: "maintainers",
+                requiredSourceKinds: ["memory", "file", "unknown"],
+                config: {
+                  enabled: true,
+                  source_policy: "workspace",
+                  max_depth: 2,
+                  max_breadth: 3,
+                  max_tool_calls: 4,
+                  require_citations: true,
+                },
+                metadata: {
+                  reason: "regression",
+                  nested: { keptForExecutor: true },
+                },
+              },
+            },
+          ],
+          estimatedComplexity: "complex",
+          requiresSubagents: false,
+        });
+      },
+    });
+
+    const plan = await compiler.compile("research", context);
+    const graph = new PlanNormalizer().normalize(plan, "run-1");
+
+    expect(plan.steps[0]).toMatchObject({
+      kind: "research",
+      research: {
+        question: "What evidence should be cited?",
+        subquestions: ["Which runtime path emits events?"],
+        constraints: ["Use only workspace evidence"],
+        audience: "maintainers",
+        requiredSourceKinds: ["memory", "file"],
+        config: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 2,
+          max_breadth: 3,
+          max_tool_calls: 4,
+          require_citations: true,
+        },
+      },
+    });
+    expect(graph.nodes.get("research-a")?.spec.research).toMatchObject({
+      question: "What evidence should be cited?",
+      requiredSourceKinds: ["memory", "file"],
+      config: {
+        enabled: true,
+        source_policy: "workspace",
+      },
+    });
+  });
+
   it("creates a launch spec from a normalized subagent task node", () => {
     const graph = new PlanNormalizer().normalize(basePlan(), "run-1");
     const node = graph.nodes.get("step-a");

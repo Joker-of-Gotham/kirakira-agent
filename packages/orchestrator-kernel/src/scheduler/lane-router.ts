@@ -5,7 +5,9 @@ export class LaneRouter {
     if ((context.interactivePriority ?? 0) > 50) return "foreground";
     if (context.laneHint) return context.laneHint;
     if (node.kind === "approval" && context.interactive) return "foreground";
-    if (context.interactive || node.kind === "plan") return "foreground";
+    if (node.kind === "plan") return "foreground";
+    if (node.kind === "research") return "background";
+    if (context.interactive) return "foreground";
     if (node.kind === "subagent") return "delegated";
     if (node.kind === "tool" || node.kind === "skill-load") return "queued";
     if (node.spec.timeout !== undefined && node.spec.timeout > 120_000) return "background";
