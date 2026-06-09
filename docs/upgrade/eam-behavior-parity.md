@@ -28,12 +28,15 @@ runtime validation before upgrade readiness can treat them as closed?
 After runtime-daemon profile composition and orchestrator kernel bridge closure,
 the highest-leverage remaining mechanism gap is now product-level
 `deep-research-live-source-adapter-validation`: expand live source-adapter
-validation beyond daemon-owned memory source composition.
+validation from generic source-kind fanout into concrete file, web, and MCP
+adapter suites.
 
 Evidence:
 
 - `packages/deep-research/src`
+- `packages/deep-research/src/source-adapters.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
+- `test/unit/deep-research/planner.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 
@@ -75,7 +78,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes and daemon composition; live source-adapter coverage beyond daemon memory composition remains product roadmap work. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, and generic same-kind source adapter fanout; concrete file, web, and MCP live adapter suites remain product roadmap work. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |

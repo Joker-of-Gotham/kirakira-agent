@@ -1,5 +1,6 @@
 import { sha256Hex, type DeepResearchConfig, type ResolvedConfig } from "@kirakira/core";
 import {
+  composeResearchSourceAdapters,
   memoryProviderFromService,
   type MemoryRecallPort,
   type MemorySourceAdapterOptions,
@@ -80,10 +81,11 @@ export function createDaemonDeepResearchKernelOptions(
       : {}),
     ...(adapterSources.length > 0 || memorySources.length > 0
       ? {
-          sourceAdapters: (taskInput) => [
-            ...adapterSources.flatMap((source) => resolveAdapterSource(source, taskInput)),
-            ...memorySourceAdapters(memorySources, taskInput, eventSink),
-          ],
+          sourceAdapters: (taskInput) =>
+            composeResearchSourceAdapters([
+              ...adapterSources.flatMap((source) => resolveAdapterSource(source, taskInput)),
+              ...memorySources.map((source) => memorySourceAdapter(source, taskInput, eventSink)),
+            ]),
         }
       : {}),
     ...(planner !== undefined ? { planner } : {}),
@@ -121,28 +123,6 @@ function resolveAdapterSource(
 ): ResearchSourceAdapter[] {
   const adapters = typeof source === "function" ? source(input) : source;
   return [...(adapters ?? [])];
-}
-
-function memorySourceAdapters(
-  sources: DaemonMemoryResearchSourceOptions[],
-  input: ResearchTaskKernelInput,
-  eventSink?: DaemonRunEventSink,
-): ResearchSourceAdapter[] {
-  if (sources.length === 0) return [];
-  const adapters = sources.map((source) => memorySourceAdapter(source, input, eventSink));
-  if (adapters.length === 1) return adapters;
-  return [
-    {
-      kind: "memory",
-      async search(request) {
-        const evidence: Awaited<ReturnType<ResearchSourceAdapter["search"]>> = [];
-        for (const adapter of adapters) {
-          evidence.push(...await adapter.search(request));
-        }
-        return evidence;
-      },
-    },
-  ];
 }
 
 function mergeDeepResearchConfig(

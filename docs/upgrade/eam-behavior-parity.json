@@ -40,8 +40,8 @@
     "targetName": "deep-research",
     "priority": "high",
     "status": "partial",
-    "gap": "Expand product-level live source-adapter validation beyond daemon-owned memory source composition.",
-    "rationale": "EAM package drift rows are behavior-covered; remaining live source-adapter work now belongs to Kirakira's standalone deep-research product extension rather than an EAM parity gap.",
+    "gap": "Expand product-level live source-adapter validation from generic source-kind fanout into concrete file, web, and MCP adapter suites.",
+    "rationale": "EAM package drift rows are behavior-covered; shared adapter fanout is now centralized in deep-research, so remaining live source-adapter work belongs to Kirakira's standalone adapter suites rather than an EAM parity gap.",
     "evidence": [
       {
         "kind": "source",
@@ -49,7 +49,15 @@
       },
       {
         "kind": "source",
+        "path": "packages/deep-research/src/source-adapters.ts"
+      },
+      {
+        "kind": "source",
         "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
+      },
+      {
+        "kind": "test",
+        "path": "test/unit/deep-research/planner.test.ts"
       },
       {
         "kind": "test",
@@ -62,6 +70,10 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-daemon-memory-source-fanout-and-readiness-closure.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-deep-research-source-adapter-fanout.md"
       }
     ],
     "commands": [
@@ -516,7 +528,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; package-level live source-adapter coverage beyond daemon memory composition remains product roadmap work."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout is covered, while concrete file, web, and MCP live adapter suites remain product roadmap work."
     },
     {
       "targetName": "frontend-app",

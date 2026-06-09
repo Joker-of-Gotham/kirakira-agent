@@ -1,4 +1,5 @@
 import { createDeepResearchPlan } from "./planner.js";
+import { composeResearchSourceAdapters } from "./source-adapters.js";
 import type {
   DeepResearchCitationProgress,
   DeepResearchPlan,
@@ -31,7 +32,10 @@ export class DeepResearchRunner {
   constructor(deps: DeepResearchRunnerDeps) {
     this.options = deps.options;
     this.sourceAdapters = new Map(
-      (deps.sourceAdapters ?? []).map((adapter) => [adapter.kind, adapter]),
+      composeResearchSourceAdapters(deps.sourceAdapters).map((adapter) => [
+        adapter.kind,
+        adapter,
+      ]),
     );
     this.planner = deps.planner;
     this.progressSink = deps.progressSink;

@@ -175,6 +175,52 @@ describe("DeepResearchRunner", () => {
     expect(result.citations[0]?.uri).toBe("https://example.test/source");
   });
 
+  it("fans out duplicate source adapters through one source-kind tool call", async () => {
+    const calls: string[] = [];
+    const adapters: ResearchSourceAdapter[] = ["docs", "issues"].map((name) => ({
+      kind: "web",
+      async search(request) {
+        calls.push(`${name}:${request.sourceKind}:${request.query}`);
+        return [
+          {
+            id: `ev-${name}`,
+            sourceKind: "web",
+            query: request.query,
+            summary: `${name} summary`,
+            citations: [
+              {
+                id: `cite-${name}`,
+                sourceKind: "web",
+                uri: `https://example.test/${name}`,
+              },
+            ],
+          },
+        ];
+      },
+    }));
+    const runner = new DeepResearchRunner({
+      options: resolveDeepResearchOptions(
+        { enabled: true, source_policy: "web", max_tool_calls: 1 },
+        workspaceRoot,
+      ),
+      sourceAdapters: adapters,
+    });
+
+    const result = await runner.run("Collect live web evidence");
+
+    expect(calls).toEqual([
+      "docs:web:Collect live web evidence",
+      "issues:web:Collect live web evidence",
+    ]);
+    expect(result.status).toBe("evidence_collected");
+    expect(result.toolCalls).toBe(1);
+    expect(result.evidence.map((item) => item.id)).toEqual(["ev-docs", "ev-issues"]);
+    expect(result.citations.map((item) => item.uri)).toEqual([
+      "https://example.test/docs",
+      "https://example.test/issues",
+    ]);
+  });
+
   it("emits neutral progress events without raw citation spans", async () => {
     const phases: string[] = [];
     const progressPayloads: Array<Record<string, unknown>> = [];
