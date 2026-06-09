@@ -32,6 +32,42 @@ export interface RegistrySource {
 
 export type HandoffMode = "tool" | "supervisor" | "swarm";
 export type SubagentContextMode = "isolated" | "filtered" | "inherit";
+export type OrchestrationLaneName = "foreground" | "queued" | "background" | "delegated";
+
+export interface OrchestrationLaneConfig {
+  capacity?: number;
+}
+
+export interface OrchestrationRoleConfig {
+  id: string;
+  description?: string;
+  lane?: OrchestrationLaneName;
+  model?: string;
+  max_turns?: number;
+  system_preamble?: string;
+  context?: SubagentContextMode;
+  tool_scope?: string[];
+  skill_scope?: string[];
+  mcp_servers?: string[];
+  permissions?: string[];
+}
+
+export interface OrchestrationHandoffConfig {
+  from: string;
+  to: string;
+  mode?: HandoffMode;
+  input_filter?: string;
+  approval_required?: boolean;
+  conditions?: string[];
+}
+
+export interface OrchestrationTopologyConfig {
+  mode?: HandoffMode;
+  default_role?: string;
+  lanes?: Partial<Record<OrchestrationLaneName, OrchestrationLaneConfig>>;
+  roles?: OrchestrationRoleConfig[];
+  handoffs?: OrchestrationHandoffConfig[];
+}
 
 export interface OrchestrationConfig {
   handoff_mode?: HandoffMode;
@@ -40,6 +76,7 @@ export interface OrchestrationConfig {
   subagent_system_preamble?: string;
   subagent_context?: SubagentContextMode;
   trace_handoffs?: boolean;
+  topology?: OrchestrationTopologyConfig;
 }
 
 export type ResearchSourcePolicy = "workspace" | "web" | "hybrid" | "verified";
@@ -155,6 +192,14 @@ export interface ResolvedRuntimeMemoryState {
   };
 }
 
+export interface ResolvedRuntimeOrchestrationState {
+  handoff_mode?: HandoffMode;
+  default_role?: string;
+  lanes?: Partial<Record<OrchestrationLaneName, OrchestrationLaneConfig>>;
+  roles?: OrchestrationRoleConfig[];
+  handoffs?: OrchestrationHandoffConfig[];
+}
+
 export interface ResolvedRuntimeProfileState {
   name: string;
   mode: "container" | "host" | "hybrid";
@@ -174,6 +219,7 @@ export interface ResolvedRuntimeProfileState {
   presentation?: ResolvedRuntimePresentationState;
   browser_gateway?: ResolvedRuntimeBrowserGatewayState;
   memory?: ResolvedRuntimeMemoryState;
+  orchestration?: ResolvedRuntimeOrchestrationState;
 }
 
 export interface ResolvedRuntimeState {

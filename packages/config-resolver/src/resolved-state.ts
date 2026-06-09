@@ -16,6 +16,7 @@ import type {
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
   ResolvedRuntimeMemoryState,
+  ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 } from "./types.js";
@@ -52,6 +53,35 @@ const DEFAULT_AGENT_TOML: Required<AgentToml> = {
     subagent_system_preamble: "Operate as a bounded specialist subagent. Stay within the delegated scope, use only granted tools and skills, and return concise evidence-backed results.",
     subagent_context: "filtered",
     trace_handoffs: true,
+    topology: {
+      mode: "tool",
+      default_role: "supervisor",
+      lanes: {
+        delegated: { capacity: 4 },
+      },
+      roles: [
+        {
+          id: "supervisor",
+          description: "Plans work, decides handoffs, and synthesizes results.",
+          lane: "foreground",
+          context: "filtered",
+        },
+        {
+          id: "delegate",
+          description: "Executes bounded specialist tasks with explicit capability scope.",
+          lane: "delegated",
+          context: "isolated",
+        },
+      ],
+      handoffs: [
+        {
+          from: "supervisor",
+          to: "delegate",
+          mode: "tool",
+          input_filter: "scoped-task-brief",
+        },
+      ],
+    },
   },
   deep_research: {
     enabled: false,
@@ -353,11 +383,22 @@ function memoryDefaults(config: Record<string, unknown>): Record<string, unknown
   return recordMap(config.memory);
 }
 
+function orchestrationDefaults(config: Record<string, unknown>): Record<string, unknown> {
+  return recordMap(config.orchestration);
+}
+
 function memoryConfig(
   rawProfile: Record<string, unknown>,
   config: Record<string, unknown>,
 ): Record<string, unknown> {
   return deepMerge(memoryDefaults(config), recordMap(rawProfile.memory));
+}
+
+function orchestrationConfig(
+  rawProfile: Record<string, unknown>,
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  return deepMerge(orchestrationDefaults(config), recordMap(rawProfile.orchestration));
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -366,6 +407,14 @@ function optionalBoolean(value: unknown): boolean | undefined {
 
 function optionalNumber(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function optionalNonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function optionalPositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined;
 }
 
 function projectRuntimeMemoryState(
@@ -454,6 +503,123 @@ function projectRuntimeMemoryState(
   };
 }
 
+const ORCHESTRATION_LANES = ["foreground", "queued", "background", "delegated"] as const;
+const HANDOFF_MODES = new Set(["tool", "supervisor", "swarm"]);
+const SUBAGENT_CONTEXT_MODES = new Set(["isolated", "filtered", "inherit"]);
+
+function handoffMode(value: unknown): ResolvedRuntimeOrchestrationState["handoff_mode"] {
+  return typeof value === "string" && HANDOFF_MODES.has(value)
+    ? value as ResolvedRuntimeOrchestrationState["handoff_mode"]
+    : undefined;
+}
+
+function subagentContext(value: unknown) {
+  return typeof value === "string" && SUBAGENT_CONTEXT_MODES.has(value)
+    ? value as "isolated" | "filtered" | "inherit"
+    : undefined;
+}
+
+function roleId(value: unknown): string | undefined {
+  const id = stringValue(value);
+  return id && id.trim().length > 0 ? id.trim() : undefined;
+}
+
+function projectRuntimeOrchestrationState(
+  orchestration: Record<string, unknown>,
+): ResolvedRuntimeOrchestrationState | undefined {
+  const topology = recordMap(orchestration.topology);
+  const rawLanes = recordMap(topology.lanes);
+  const laneEntries: Array<[typeof ORCHESTRATION_LANES[number], { capacity: number }]> = [];
+  for (const lane of ORCHESTRATION_LANES) {
+    const rawLane = recordMap(rawLanes[lane]);
+    const capacity = optionalNonnegativeInteger(rawLane.capacity);
+    if (capacity !== undefined) {
+      laneEntries.push([lane, { capacity }]);
+    }
+  }
+  const lanes = Object.fromEntries(laneEntries) as NonNullable<
+    ResolvedRuntimeOrchestrationState["lanes"]
+  >;
+  const roles = Array.isArray(topology.roles)
+    ? topology.roles
+        .map((value) => {
+          const role = recordMap(value);
+          const id = roleId(role.id);
+          if (!id) return undefined;
+          const lane = ORCHESTRATION_LANES.includes(role.lane as typeof ORCHESTRATION_LANES[number])
+            ? role.lane as typeof ORCHESTRATION_LANES[number]
+            : undefined;
+          return {
+            id,
+            ...(stringValue(role.description) !== undefined
+              ? { description: stringValue(role.description) }
+              : {}),
+            ...(lane !== undefined ? { lane } : {}),
+            ...(stringValue(role.model) !== undefined ? { model: stringValue(role.model) } : {}),
+            ...(optionalPositiveInteger(role.max_turns ?? role.maxTurns) !== undefined
+              ? { max_turns: optionalPositiveInteger(role.max_turns ?? role.maxTurns) }
+              : {}),
+            ...(stringValue(role.system_preamble ?? role.systemPreamble) !== undefined
+              ? { system_preamble: stringValue(role.system_preamble ?? role.systemPreamble) }
+              : {}),
+            ...(subagentContext(role.context) !== undefined ? { context: subagentContext(role.context) } : {}),
+            ...(stringArray(role.tool_scope ?? role.toolScope).length > 0
+              ? { tool_scope: stringArray(role.tool_scope ?? role.toolScope) }
+              : {}),
+            ...(stringArray(role.skill_scope ?? role.skillScope).length > 0
+              ? { skill_scope: stringArray(role.skill_scope ?? role.skillScope) }
+              : {}),
+            ...(stringArray(role.mcp_servers ?? role.mcpServers).length > 0
+              ? { mcp_servers: stringArray(role.mcp_servers ?? role.mcpServers) }
+              : {}),
+            ...(stringArray(role.permissions).length > 0 ? { permissions: stringArray(role.permissions) } : {}),
+          };
+        })
+        .filter((role): role is NonNullable<ResolvedRuntimeOrchestrationState["roles"]>[number] =>
+          role !== undefined,
+        )
+    : undefined;
+  const handoffs = Array.isArray(topology.handoffs)
+    ? topology.handoffs
+        .map((value) => {
+          const handoff = recordMap(value);
+          const from = roleId(handoff.from);
+          const to = roleId(handoff.to);
+          if (!from || !to) return undefined;
+          const approvalRequired = handoff.approval_required ?? handoff.approvalRequired;
+          return {
+            from,
+            to,
+            ...(handoffMode(handoff.mode) !== undefined ? { mode: handoffMode(handoff.mode) } : {}),
+            ...(stringValue(handoff.input_filter ?? handoff.inputFilter) !== undefined
+              ? { input_filter: stringValue(handoff.input_filter ?? handoff.inputFilter) }
+              : {}),
+            ...(typeof approvalRequired === "boolean"
+              ? { approval_required: approvalRequired }
+              : {}),
+            ...(stringArray(handoff.conditions).length > 0
+              ? { conditions: stringArray(handoff.conditions) }
+              : {}),
+          };
+        })
+        .filter((handoff): handoff is NonNullable<ResolvedRuntimeOrchestrationState["handoffs"]>[number] =>
+          handoff !== undefined,
+        )
+    : undefined;
+  const state: ResolvedRuntimeOrchestrationState = {
+    ...(handoffMode(topology.mode ?? orchestration.handoffMode ?? orchestration.handoff_mode) !== undefined
+      ? { handoff_mode: handoffMode(topology.mode ?? orchestration.handoffMode ?? orchestration.handoff_mode) }
+      : {}),
+    ...(roleId(topology.default_role ?? topology.defaultRole) !== undefined
+      ? { default_role: roleId(topology.default_role ?? topology.defaultRole) }
+      : {}),
+    ...(Object.keys(lanes).length > 0 ? { lanes } : {}),
+    ...(roles && roles.length > 0 ? { roles } : {}),
+    ...(handoffs && handoffs.length > 0 ? { handoffs } : {}),
+  };
+  return Object.keys(state).length > 0 ? state : undefined;
+}
+
 function projectRuntimeProfile(
   name: string,
   rawProfile: Record<string, unknown>,
@@ -464,6 +630,7 @@ function projectRuntimeProfile(
   const servicesByName = recordMap(serviceCatalog(config).services);
   const serviceGroupMap = recordMap(serviceCatalog(config).groups);
   const memory = memoryConfig(rawProfile, config);
+  const orchestration = orchestrationConfig(rawProfile, config);
   const endpointNames = expandRefs(
     [
       ...groupRefs(rawProfile.serviceEndpointGroups),
@@ -518,6 +685,7 @@ function projectRuntimeProfile(
     serviceEnv,
     serviceGroupMap,
   );
+  const orchestrationState = projectRuntimeOrchestrationState(orchestration);
 
   return {
     name,
@@ -579,6 +747,7 @@ function projectRuntimeProfile(
       },
     } : {}),
     ...(memoryState ? { memory: memoryState } : {}),
+    ...(orchestrationState ? { orchestration: orchestrationState } : {}),
   };
 }
 

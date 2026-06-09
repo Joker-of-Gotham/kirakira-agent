@@ -246,6 +246,80 @@
       "level": "L3"
     }
   },
+  "orchestration": {
+    "topology": {
+      "mode": "swarm",
+      "defaultRole": "supervisor",
+      "lanes": {
+        "foreground": {
+          "capacity": 2
+        },
+        "queued": {
+          "capacity": 8
+        },
+        "background": {
+          "capacity": 4
+        },
+        "delegated": {
+          "capacity": 4
+        }
+      },
+      "roles": [
+        {
+          "id": "supervisor",
+          "description": "Owns planning, dependency ordering, handoff decisions, and final synthesis.",
+          "lane": "foreground",
+          "context": "filtered",
+          "permissions": ["plan", "delegate", "synthesize"]
+        },
+        {
+          "id": "researcher",
+          "description": "Collects source-backed evidence with citation and memory recall obligations.",
+          "lane": "background",
+          "context": "filtered",
+          "mcpServers": ["memory", "github"],
+          "permissions": ["research", "cite", "recall"]
+        },
+        {
+          "id": "implementer",
+          "description": "Executes bounded code changes with explicit tool and MCP capability scope.",
+          "lane": "delegated",
+          "context": "isolated",
+          "permissions": ["edit", "test", "artifact"]
+        },
+        {
+          "id": "reviewer",
+          "description": "Runs focused verification and reports regressions before merge or release.",
+          "lane": "queued",
+          "context": "filtered",
+          "permissions": ["inspect", "test", "audit"]
+        }
+      ],
+      "handoffs": [
+        {
+          "from": "supervisor",
+          "to": "researcher",
+          "mode": "tool",
+          "inputFilter": "question-and-source-policy",
+          "conditions": ["needs-current-evidence", "needs-citations"]
+        },
+        {
+          "from": "supervisor",
+          "to": "implementer",
+          "mode": "tool",
+          "inputFilter": "scoped-task-brief",
+          "conditions": ["bounded-write-set", "parallelizable"]
+        },
+        {
+          "from": "supervisor",
+          "to": "reviewer",
+          "mode": "tool",
+          "inputFilter": "changed-files-and-validation-plan",
+          "conditions": ["post-change-verification"]
+        }
+      ]
+    }
+  },
   "mcpCatalog": {
     "defaultServerGroups": ["default"],
     "groups": {

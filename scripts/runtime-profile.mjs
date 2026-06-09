@@ -210,6 +210,11 @@ function runtimeMemoryConfig(config, profile) {
   };
 }
 
+function runtimeOrchestrationConfig(config, profile) {
+  const orchestration = mergeSpecRecord(config.orchestration, profile.orchestration);
+  return Object.keys(orchestration).length > 0 ? orchestration : undefined;
+}
+
 function runtimeComposeServiceName(config, serviceName) {
   const entry = runtimeServiceCatalogEntry(config, serviceName);
   return typeof entry?.composeService === "string" && entry.composeService.length > 0
@@ -660,11 +665,13 @@ export function resolveRuntimeProfile(
   const envBindings = mergeEnvBindings(config.envBindings, profile.envBindings);
   const dynamicProfile = resolveDynamicProfile(config, profile, env);
   const memory = runtimeMemoryConfig(config, profile);
+  const orchestration = runtimeOrchestrationConfig(config, profile);
   const resolvedProfile = {
     name,
     ...profile,
     ...dynamicProfile,
     ...(memory ? { memory } : {}),
+    ...(orchestration ? { orchestration } : {}),
     envBindings,
     containerStartup: resolveContainerStartupRefs(profile.containerStartup, config),
     workbench: resolveWorkbenchRefs(profile.workbench, config),

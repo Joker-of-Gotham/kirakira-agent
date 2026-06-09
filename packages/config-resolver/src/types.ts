@@ -7,6 +7,7 @@ import type {
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
   ResolvedRuntimeMemoryState,
+  ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 } from "@kirakira/core";
@@ -20,6 +21,7 @@ export type {
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
   ResolvedRuntimeMemoryState,
+  ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeState,
 };

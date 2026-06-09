@@ -496,6 +496,41 @@ describe("runtime profile rendering", () => {
     expect(env.KIRAKIRA_MEMORY_ENABLED).toBeUndefined();
   });
 
+  it("resolves swarm topology from the declarative profile contract", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+
+    expect(profile.orchestration).toMatchObject({
+      topology: {
+        mode: "swarm",
+        defaultRole: "supervisor",
+        lanes: {
+          foreground: { capacity: 2 },
+          queued: { capacity: 8 },
+          background: { capacity: 4 },
+          delegated: { capacity: 4 },
+        },
+        roles: expect.arrayContaining([
+          expect.objectContaining({
+            id: "supervisor",
+            permissions: ["plan", "delegate", "synthesize"],
+          }),
+          expect.objectContaining({
+            id: "implementer",
+            lane: "delegated",
+            context: "isolated",
+          }),
+        ]),
+        handoffs: expect.arrayContaining([
+          expect.objectContaining({
+            from: "supervisor",
+            to: "implementer",
+            inputFilter: "scoped-task-brief",
+          }),
+        ]),
+      },
+    });
+  });
+
   it("renders service env and aliases from declarative bindings", () => {
     const config = {
       schemaVersion: 1,

@@ -128,6 +128,9 @@ describe("runtime daemon env config", () => {
         ]),
       );
       expect(config.kernel?.kernelOptions?.laneCapacities).toEqual({
+        foreground: 2,
+        queued: 8,
+        background: 4,
         delegated: 3,
       });
       expect(config.kernel?.kernelOptions?.parentWorkerDefaults).toEqual({

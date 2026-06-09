@@ -57,6 +57,35 @@ export function defaultAgentToml(): Required<AgentToml> {
         "Operate as a bounded specialist subagent. Stay within the delegated scope, use only granted tools and skills, and return concise evidence-backed results.",
       subagent_context: "filtered",
       trace_handoffs: true,
+      topology: {
+        mode: "tool",
+        default_role: "supervisor",
+        lanes: {
+          delegated: { capacity: 4 },
+        },
+        roles: [
+          {
+            id: "supervisor",
+            description: "Plans work, decides handoffs, and synthesizes results.",
+            lane: "foreground",
+            context: "filtered",
+          },
+          {
+            id: "delegate",
+            description: "Executes bounded specialist tasks with explicit capability scope.",
+            lane: "delegated",
+            context: "isolated",
+          },
+        ],
+        handoffs: [
+          {
+            from: "supervisor",
+            to: "delegate",
+            mode: "tool",
+            input_filter: "scoped-task-brief",
+          },
+        ],
+      },
     },
     deep_research: {
       enabled: false,

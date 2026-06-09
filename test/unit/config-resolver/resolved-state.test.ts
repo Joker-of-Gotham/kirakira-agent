@@ -63,6 +63,40 @@ describe("resolved runtime state", () => {
     expect(workbench?.presentation?.web?.url).toBe("http://127.0.0.1:5183");
     expect(workbench?.presentation?.desktop?.renderer_url).toBe("http://127.0.0.1:5174");
     expect(workbench?.browser_gateway?.endpoint).toBe("ws://127.0.0.1:17373/runtime");
+    expect(workbench?.orchestration).toMatchObject({
+      handoff_mode: "swarm",
+      default_role: "supervisor",
+      lanes: {
+        foreground: { capacity: 2 },
+        queued: { capacity: 8 },
+        background: { capacity: 4 },
+        delegated: { capacity: 4 },
+      },
+      roles: expect.arrayContaining([
+        expect.objectContaining({
+          id: "supervisor",
+          lane: "foreground",
+          permissions: ["plan", "delegate", "synthesize"],
+        }),
+        expect.objectContaining({
+          id: "implementer",
+          lane: "delegated",
+          context: "isolated",
+        }),
+      ]),
+      handoffs: expect.arrayContaining([
+        expect.objectContaining({
+          from: "supervisor",
+          to: "researcher",
+          input_filter: "question-and-source-policy",
+        }),
+        expect.objectContaining({
+          from: "supervisor",
+          to: "implementer",
+          conditions: ["bounded-write-set", "parallelizable"],
+        }),
+      ]),
+    });
     expect(workbench?.memory).toMatchObject({
       enabled: true,
       services: [

@@ -50,6 +50,14 @@ function positiveInteger(value: unknown): number | undefined {
     : undefined;
 }
 
+function nonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+const KERNEL_LANES = ["foreground", "queued", "background", "delegated"] as const;
+
 function runtimeProfileFromResolvedConfig(
   resolvedConfig: ResolvedConfig,
   env: DaemonEnv,
@@ -67,6 +75,36 @@ function mcpServerNamesFromResolvedConfig(
   return profile?.mcp_servers?.map((server) => server.name) ?? [];
 }
 
+function topologyFromResolvedConfig(
+  resolvedConfig: ResolvedConfig,
+  env: DaemonEnv,
+) {
+  const profile = runtimeProfileFromResolvedConfig(resolvedConfig, env);
+  return profile?.orchestration ?? resolvedConfig.agentToml.orchestration?.topology;
+}
+
+function topologyLaneCapacities(
+  topology: ReturnType<typeof topologyFromResolvedConfig>,
+): OrchestratorKernelOptions["laneCapacities"] {
+  const out: NonNullable<OrchestratorKernelOptions["laneCapacities"]> = {};
+  for (const lane of KERNEL_LANES) {
+    const capacity = topology?.lanes?.[lane]?.capacity;
+    if (nonnegativeInteger(capacity) !== undefined) {
+      out[lane] = capacity;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function topologyDefaultRole(
+  topology: ReturnType<typeof topologyFromResolvedConfig>,
+) {
+  const defaultRoleId = topology?.default_role;
+  return defaultRoleId
+    ? topology?.roles?.find((role) => role.id === defaultRoleId)
+    : undefined;
+}
+
 export function kernelOptionsFromResolvedConfig(
   resolvedConfig: ResolvedConfig,
   env: DaemonEnv,
@@ -77,21 +115,28 @@ export function kernelOptionsFromResolvedConfig(
   const mcpServerNames = mcpServerNamesFromResolvedConfig(resolvedConfig, env);
   const maxConcurrency = positiveInteger(orchestration?.max_concurrency);
   const maxTurns = positiveInteger(orchestration?.default_subagent_turns);
+  const topology = topologyFromResolvedConfig(resolvedConfig, env);
+  const defaultRole = topologyDefaultRole(topology);
+  const laneCapacities = {
+    ...(topologyLaneCapacities(topology) ?? {}),
+    ...(maxConcurrency !== undefined ? { delegated: maxConcurrency } : {}),
+  };
+  const defaultRoleTurns = positiveInteger(defaultRole?.max_turns);
+  const parentSystemPrompt = defaultRole?.system_preamble ?? orchestration?.subagent_system_preamble;
+  const parentMaxTurns = defaultRoleTurns ?? maxTurns;
 
   return {
     planContext: {
       workspace,
       ...(mcpServerNames.length > 0 ? { availableMcpServers: mcpServerNames } : {}),
     },
-    ...(maxConcurrency !== undefined
-      ? { laneCapacities: { delegated: maxConcurrency } }
+    ...(Object.keys(laneCapacities).length > 0
+      ? { laneCapacities }
       : {}),
     parentWorkerDefaults: {
-      model: resolvedConfig.agentToml.model.default,
-      ...(orchestration?.subagent_system_preamble
-        ? { systemPrompt: orchestration.subagent_system_preamble }
-        : {}),
-      ...(maxTurns !== undefined ? { maxTurns } : {}),
+      model: defaultRole?.model ?? resolvedConfig.agentToml.model.default,
+      ...(parentSystemPrompt ? { systemPrompt: parentSystemPrompt } : {}),
+      ...(parentMaxTurns !== undefined ? { maxTurns: parentMaxTurns } : {}),
     },
   };
 }

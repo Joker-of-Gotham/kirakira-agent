@@ -32,6 +32,37 @@ describe("resolved state schema stability", () => {
         subagent_system_preamble: "Stay scoped.",
         subagent_context: "filtered",
         trace_handoffs: true,
+        topology: {
+          mode: "swarm",
+          default_role: "supervisor",
+          lanes: {
+            foreground: { capacity: 2 },
+            delegated: { capacity: 4 },
+          },
+          roles: [
+            {
+              id: "supervisor",
+              lane: "foreground",
+              context: "filtered",
+              permissions: ["plan", "delegate"],
+            },
+            {
+              id: "implementer",
+              lane: "delegated",
+              context: "isolated",
+              mcp_servers: ["filesystem-patch"],
+            },
+          ],
+          handoffs: [
+            {
+              from: "supervisor",
+              to: "implementer",
+              mode: "tool",
+              input_filter: "scoped-task-brief",
+              conditions: ["bounded-write-set"],
+            },
+          ],
+        },
       },
       deep_research: {
         enabled: true,

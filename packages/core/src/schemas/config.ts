@@ -48,6 +48,40 @@ const runtimeProfileDeclSchema = z.object({
   services: z.array(runtimeServiceDeclSchema).optional(),
 });
 
+const orchestrationLaneNameSchema = z.enum(["foreground", "queued", "background", "delegated"]);
+
+const orchestrationTopologySchema = z.object({
+  mode: z.enum(["tool", "supervisor", "swarm"]).optional(),
+  default_role: z.string().min(1).optional(),
+  lanes: z.record(
+    orchestrationLaneNameSchema,
+    z.object({
+      capacity: z.number().int().nonnegative().optional(),
+    }),
+  ).optional(),
+  roles: z.array(z.object({
+    id: z.string().min(1),
+    description: z.string().optional(),
+    lane: orchestrationLaneNameSchema.optional(),
+    model: z.string().optional(),
+    max_turns: z.number().int().positive().optional(),
+    system_preamble: z.string().optional(),
+    context: z.enum(["isolated", "filtered", "inherit"]).optional(),
+    tool_scope: z.array(z.string()).optional(),
+    skill_scope: z.array(z.string()).optional(),
+    mcp_servers: z.array(z.string()).optional(),
+    permissions: z.array(z.string()).optional(),
+  })).optional(),
+  handoffs: z.array(z.object({
+    from: z.string().min(1),
+    to: z.string().min(1),
+    mode: z.enum(["tool", "supervisor", "swarm"]).optional(),
+    input_filter: z.string().optional(),
+    approval_required: z.boolean().optional(),
+    conditions: z.array(z.string()).optional(),
+  })).optional(),
+});
+
 export const agentTomlSchema = z.object({
   schema_version: z.number().int().positive(),
   workspace_name: z.string().optional(),
@@ -131,6 +165,7 @@ export const agentTomlSchema = z.object({
       subagent_system_preamble: z.string().optional(),
       subagent_context: z.enum(["isolated", "filtered", "inherit"]).optional(),
       trace_handoffs: z.boolean().optional(),
+      topology: orchestrationTopologySchema.optional(),
     })
     .optional(),
 
