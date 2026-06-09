@@ -12,11 +12,14 @@ import {
   ListTree,
   Play,
   PlugZap,
+  RefreshCw,
   ShieldCheck,
   Square,
   TerminalSquare,
+  Wrench,
 } from "lucide-react";
 import {
+  createMcpDirectoryView,
   createEmptyRunDashboard,
   createRunInspector,
   createSubagentTopologyView,
@@ -24,6 +27,9 @@ import {
   runtimeTransportOrchestration,
   runtimeTransportSupportsArtifactContent,
   type RuntimeArtifactContent,
+  type RuntimeMcpDirectoryTool,
+  type RuntimeMcpDirectoryView,
+  type RuntimeMcpListResult,
   type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
@@ -37,7 +43,7 @@ import {
   type SubagentTopologyView,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RunEvent, RuntimeRunMode } from "@kirakira/runtime-contracts";
 import { createMockRuntimeTransport } from "./mock-transport.js";
 
@@ -60,6 +66,12 @@ interface ArtifactPreviewState {
   artifactId: string;
   status: "loading" | "ready" | "error";
   content?: RuntimeArtifactContent;
+  message?: string;
+}
+
+interface McpDirectoryState {
+  status: "idle" | "loading" | "ready" | "error";
+  result?: RuntimeMcpListResult;
   message?: string;
 }
 
@@ -117,6 +129,8 @@ export function KirakiraWorkbench({
   const [mode, setMode] = useState<RuntimeRunMode>("interactive");
   const [error, setError] = useState<string | undefined>();
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeTransportStatus | undefined>();
+  const [mcpDirectory, setMcpDirectory] = useState<McpDirectoryState>({ status: "idle" });
+  const [selectedMcpToolId, setSelectedMcpToolId] = useState<string | undefined>();
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
@@ -146,6 +160,25 @@ export function KirakiraWorkbench({
               detail: "No status provider",
             };
         if (!disposed) setRuntimeStatus(status);
+        if (!disposed) {
+          setMcpDirectory({ status: "loading" });
+          runtime
+            .listMcpTools({
+              includeTools: true,
+              startServers: false,
+            })
+            .then((result) => {
+              if (!disposed) setMcpDirectory({ status: "ready", result });
+            })
+            .catch((err: unknown) => {
+              if (!disposed) {
+                setMcpDirectory({
+                  status: "error",
+                  message: err instanceof Error ? err.message : String(err),
+                });
+              }
+            });
+        }
       })
       .catch((err: unknown) => {
         if (!disposed) {
@@ -160,6 +193,33 @@ export function KirakiraWorkbench({
       unsubscribeRef.current = null;
       runtime.disconnect();
     };
+  }, [runtime]);
+
+  const refreshMcpDirectory = useCallback(
+    async (startServers = false) => {
+      setMcpDirectory((state) => ({
+        status: "loading",
+        ...(state.result ? { result: state.result } : {}),
+      }));
+      try {
+        const result = await runtime.listMcpTools({
+          includeTools: true,
+          startServers,
+        });
+        setMcpDirectory({ status: "ready", result });
+      } catch (err) {
+        setMcpDirectory({
+          status: "error",
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    },
+    [runtime],
+  );
+
+  useEffect(() => {
+    setMcpDirectory({ status: "idle" });
+    setSelectedMcpToolId(undefined);
   }, [runtime]);
 
   const projection = useMemo(
@@ -242,6 +302,16 @@ export function KirakiraWorkbench({
   const topology = useMemo(
     () => createSubagentTopologyView(projection, topologyManifest),
     [projection, topologyManifest],
+  );
+  const mcpDirectoryView = useMemo(
+    () => createMcpDirectoryView(mcpDirectory.result),
+    [mcpDirectory.result],
+  );
+  const selectedMcpTool = useMemo(
+    () =>
+      mcpDirectoryView.tools.find((tool) => tool.id === selectedMcpToolId) ??
+      mcpDirectoryView.tools[0],
+    [mcpDirectoryView.tools, selectedMcpToolId],
   );
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
@@ -565,6 +635,16 @@ export function KirakiraWorkbench({
           )}
         </section>
 
+        <McpDirectoryPanel
+          state={mcpDirectory}
+          view={mcpDirectoryView}
+          selectedTool={selectedMcpTool}
+          selectedToolId={selectedMcpTool?.id}
+          onSelectTool={setSelectedMcpToolId}
+          onRefresh={() => void refreshMcpDirectory(false)}
+          onStartAndRefresh={() => void refreshMcpDirectory(true)}
+        />
+
         <section className="kk-rail-section">
           <div className="kk-pane-header">
             <div>
@@ -632,6 +712,145 @@ export function KirakiraWorkbench({
         </section>
       </aside>
     </main>
+  );
+}
+
+function McpDirectoryPanel({
+  state,
+  view,
+  selectedTool,
+  selectedToolId,
+  onSelectTool,
+  onRefresh,
+  onStartAndRefresh,
+}: {
+  state: McpDirectoryState;
+  view: RuntimeMcpDirectoryView;
+  selectedTool?: RuntimeMcpDirectoryTool;
+  selectedToolId?: string;
+  onSelectTool: (id: string) => void;
+  onRefresh: () => void;
+  onStartAndRefresh: () => void;
+}) {
+  const loading = state.status === "loading";
+  return (
+    <section className="kk-rail-section kk-mcp-panel" aria-label="MCP directory">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">MCP</p>
+          <h2>Tools</h2>
+        </div>
+        <div className="kk-mcp-actions">
+          <button type="button" className="kk-icon-button" onClick={onRefresh} disabled={loading}>
+            <RefreshCw size={15} />
+            <span>Refresh</span>
+          </button>
+          <button
+            type="button"
+            className="kk-icon-button"
+            onClick={onStartAndRefresh}
+            disabled={loading}
+          >
+            <PlugZap size={15} />
+            <span>Scan</span>
+          </button>
+        </div>
+      </div>
+
+      <dl className="kk-mcp-summary">
+        <div>
+          <dt>Servers</dt>
+          <dd>{view.summary.serverCount}</dd>
+        </div>
+        <div>
+          <dt>Ready</dt>
+          <dd>{view.summary.readyServerCount}</dd>
+        </div>
+        <div>
+          <dt>Tools</dt>
+          <dd>{view.summary.toolCount}</dd>
+        </div>
+      </dl>
+
+      {state.status === "error" ? (
+        <div className="kk-empty kk-mcp-error">{state.message ?? "MCP discovery failed"}</div>
+      ) : null}
+
+      {view.servers.length === 0 && state.status !== "error" ? (
+        <div className="kk-empty">{loading ? "Loading MCP directory" : "No MCP servers"}</div>
+      ) : (
+        <div className="kk-mcp-directory">
+          <div className="kk-mcp-server-list">
+            {view.servers.map((server) => (
+              <article key={server.name} className={`kk-mcp-server kk-mcp-server-${server.tone}`}>
+                <header>
+                  <span className={`kk-dot kk-dot-${server.tone}`} />
+                  <div>
+                    <strong>{server.name}</strong>
+                    <small>{server.health}</small>
+                  </div>
+                  <span>{server.toolCount}</span>
+                </header>
+                {server.error ? <p>{server.error}</p> : null}
+                {server.tools.length > 0 ? (
+                  <div className="kk-mcp-tool-list">
+                    {server.tools.slice(0, 5).map((tool) => (
+                      <button
+                        key={tool.id}
+                        type="button"
+                        className={
+                          tool.id === selectedToolId
+                            ? "kk-mcp-tool kk-mcp-tool-active"
+                            : "kk-mcp-tool"
+                        }
+                        aria-pressed={tool.id === selectedToolId}
+                        onClick={() => onSelectTool(tool.id)}
+                      >
+                        <Wrench size={14} />
+                        <span>
+                          <strong>{tool.title}</strong>
+                          <small>
+                            {tool.inputPropertyCount} fields / {tool.requiredInputCount} required
+                          </small>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+
+          <McpToolDetail tool={selectedTool} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+function McpToolDetail({ tool }: { tool?: RuntimeMcpDirectoryTool }) {
+  if (!tool) return <div className="kk-empty">No tools discovered</div>;
+  return (
+    <article className="kk-mcp-tool-detail">
+      <header>
+        <span>{tool.server}</span>
+        <h3>{tool.title}</h3>
+        <p>{tool.description ?? tool.name}</p>
+      </header>
+      <dl>
+        <div>
+          <dt>Tool</dt>
+          <dd>{tool.name}</dd>
+        </div>
+        <div>
+          <dt>Inputs</dt>
+          <dd>
+            {tool.inputPropertyCount} fields, {tool.requiredInputCount} required
+          </dd>
+        </div>
+      </dl>
+      <pre>{JSON.stringify(tool.inputSchema ?? { type: "object" }, null, 2)}</pre>
+    </article>
   );
 }
 

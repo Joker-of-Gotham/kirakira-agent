@@ -203,6 +203,23 @@ a:focus-visible {
   background: var(--kk-amber);
 }
 
+.kk-dot-ready {
+  background: var(--kk-green);
+}
+
+.kk-dot-warning,
+.kk-dot-pending {
+  background: var(--kk-amber);
+}
+
+.kk-dot-failed {
+  background: var(--kk-red);
+}
+
+.kk-dot-stopped {
+  background: var(--kk-border-strong);
+}
+
 .kk-workspace {
   min-width: 0;
   padding: 20px 22px 18px;
@@ -1186,6 +1203,253 @@ a:focus-visible {
 .kk-approval-actions button:last-child {
   color: #fff;
   background: var(--kk-green);
+}
+
+.kk-mcp-panel {
+  gap: 10px;
+}
+
+.kk-mcp-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.kk-mcp-actions .kk-icon-button {
+  min-height: 32px;
+  padding: 6px 8px;
+  font-size: 0.76rem;
+}
+
+.kk-mcp-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.kk-mcp-summary div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-mcp-summary dt,
+.kk-mcp-summary dd {
+  margin: 0;
+}
+
+.kk-mcp-summary dt {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.kk-mcp-summary dd {
+  color: var(--kk-ink);
+  font-weight: 750;
+}
+
+.kk-mcp-directory,
+.kk-mcp-server-list,
+.kk-mcp-tool-list,
+.kk-mcp-tool-detail,
+.kk-mcp-tool-detail dl {
+  display: grid;
+}
+
+.kk-mcp-directory {
+  gap: 10px;
+}
+
+.kk-mcp-server-list,
+.kk-mcp-tool-list {
+  gap: 7px;
+}
+
+.kk-mcp-server {
+  display: grid;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-mcp-server-failed,
+.kk-mcp-error {
+  border-color: rgb(183 53 53 / 40%);
+}
+
+.kk-mcp-server-warning {
+  border-color: rgb(163 95 0 / 42%);
+}
+
+.kk-mcp-server header,
+.kk-mcp-tool {
+  display: flex;
+  align-items: center;
+}
+
+.kk-mcp-server header {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kk-mcp-server header > div {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.kk-mcp-server strong,
+.kk-mcp-server small,
+.kk-mcp-tool strong,
+.kk-mcp-tool small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-mcp-server strong,
+.kk-mcp-tool strong {
+  color: var(--kk-ink);
+  font-size: 0.84rem;
+}
+
+.kk-mcp-server small,
+.kk-mcp-tool small,
+.kk-mcp-server p {
+  color: var(--kk-text-muted);
+  font-size: 0.74rem;
+}
+
+.kk-mcp-server p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.kk-mcp-server header > span:last-child {
+  color: var(--kk-text-muted);
+  font-size: 0.76rem;
+}
+
+.kk-mcp-tool {
+  width: 100%;
+  min-width: 0;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: #fbfcfc;
+  text-align: left;
+  cursor: pointer;
+}
+
+.kk-mcp-tool:hover,
+.kk-mcp-tool-active {
+  border-color: var(--kk-border-strong);
+  background: var(--kk-surface-muted);
+}
+
+.kk-mcp-tool svg {
+  color: var(--kk-cyan);
+  flex: 0 0 auto;
+}
+
+.kk-mcp-tool span {
+  min-width: 0;
+}
+
+.kk-mcp-tool-detail {
+  gap: 9px;
+  padding-top: 10px;
+  border-top: 1px solid var(--kk-border);
+}
+
+.kk-mcp-tool-detail header {
+  display: grid;
+  gap: 4px;
+}
+
+.kk-mcp-tool-detail header span {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--kk-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--kk-blue);
+  background: var(--kk-surface);
+  font-size: 0.72rem;
+}
+
+.kk-mcp-tool-detail h3,
+.kk-mcp-tool-detail p,
+.kk-mcp-tool-detail dl,
+.kk-mcp-tool-detail dt,
+.kk-mcp-tool-detail dd {
+  margin: 0;
+}
+
+.kk-mcp-tool-detail h3 {
+  color: var(--kk-ink);
+  font-size: 0.95rem;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.kk-mcp-tool-detail p {
+  color: var(--kk-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.kk-mcp-tool-detail dl {
+  gap: 6px;
+}
+
+.kk-mcp-tool-detail dl div {
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.kk-mcp-tool-detail dt {
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.kk-mcp-tool-detail dd {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
+.kk-mcp-tool-detail pre {
+  max-height: 180px;
+  overflow: auto;
+  margin: 0;
+  padding: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: #fbfcfc;
+  color: var(--kk-text);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.42;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .kk-runtime-list {

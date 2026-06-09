@@ -38,6 +38,16 @@ export {
   runtimeTransportSupportsArtifactContent,
 } from "./runtime-capabilities.js";
 
+export { createMcpDirectoryView } from "./mcp-directory.js";
+
+export type {
+  RuntimeMcpDirectoryServer,
+  RuntimeMcpDirectorySummary,
+  RuntimeMcpDirectoryTool,
+  RuntimeMcpDirectoryView,
+  RuntimeMcpHealthTone,
+} from "./mcp-directory.js";
+
 export { createSubagentTopologyView } from "./topology.js";
 
 export type {

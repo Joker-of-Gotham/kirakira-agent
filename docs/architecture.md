@@ -182,6 +182,11 @@ gateway rather than duplicating CLI-only chat state. A Vite server on `5173` is
 not a Kirakira validation target; use the Kirakira web shell on `5183`, desktop
 renderer on `5174`, and browser gateway on `17373/runtime`.
 
+The shared workbench MCP directory is rendered from runtime transport calls
+(`mcp_list`) and browser-safe view models in `@kirakira/frontend-core`. Web and
+Electron do not read local MCP config files directly; live server health and
+tool schemas come through the daemon/gateway contract.
+
 ## Policy transport
 
 The policy layer supports remote PDP transport through `kirakirad`, with local fallback behavior where necessary.

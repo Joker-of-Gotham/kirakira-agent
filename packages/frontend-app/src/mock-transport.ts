@@ -434,6 +434,33 @@ export function createMockRuntimeTransport(): RuntimeTransport {
               },
             ],
           },
+          {
+            name: "memory",
+            health: "degraded",
+            toolCount: 1,
+            error: "Embedding provider not configured in mock preview",
+            tools: [
+              {
+                name: "recall",
+                title: "Recall memory",
+                description: "Retrieve scoped memory snippets for a run",
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    query: { type: "string" },
+                    limit: { type: "number" },
+                    level: { type: "string" },
+                  },
+                  required: ["query"],
+                },
+              },
+            ],
+          },
+          {
+            name: "github",
+            health: "stopped",
+            toolCount: 0,
+          },
         ],
       };
     },
