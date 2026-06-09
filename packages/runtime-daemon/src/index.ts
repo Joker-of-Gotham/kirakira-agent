@@ -73,3 +73,10 @@ export type { DaemonConfig, HealthStatus } from "./lifecycle/daemon-lifecycle.js
 export { DaemonLifecycle } from "./lifecycle/daemon-lifecycle.js";
 
 export { registerShutdownHandlers } from "./lifecycle/graceful-shutdown.js";
+
+export type { DaemonEnv } from "./bin/daemon-config.js";
+export {
+  browserGatewayConfigFromEnv,
+  daemonConfigFromEnv,
+  truthyDaemonEnv,
+} from "./bin/daemon-config.js";
