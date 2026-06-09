@@ -41,6 +41,7 @@ describe("deep research live adapter gate", () => {
       "deep-research:web-source",
       "deep-research:mcp-runtime-source",
       "deep-research:mcp-live-transports",
+      "deep-research:mcp-kernel-research-events",
     ]);
     expect(smoke.unitContract.tests).toEqual([
       "test/unit/deep-research/file.test.ts",
@@ -50,6 +51,7 @@ describe("deep research live adapter gate", () => {
     ]);
     expect(smoke.liveGate.tests).toEqual([
       "test/smoke/deep-research/live-adapters-smoke.test.ts",
+      "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
     ]);
     expect(smoke.liveGate.status).toBe("skipped");
     expect(JSON.stringify(smoke)).not.toContain("5173");
@@ -92,6 +94,7 @@ describe("deep research live adapter gate", () => {
             "deep-research:web-source",
             "deep-research:mcp-runtime-source",
             "deep-research:mcp-live-transports",
+            "deep-research:mcp-kernel-research-events",
           ],
           unitTests: [
             "test/unit/deep-research/file.test.ts",
@@ -99,7 +102,10 @@ describe("deep research live adapter gate", () => {
             "test/unit/deep-research/mcp.test.ts",
             "test/unit/runtime-daemon/deep-research-mcp-source.test.ts",
           ],
-          liveTests: ["test/smoke/deep-research/live-adapters-smoke.test.ts"],
+          liveTests: [
+            "test/smoke/deep-research/live-adapters-smoke.test.ts",
+            "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
+          ],
         }),
       );
 

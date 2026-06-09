@@ -3,7 +3,7 @@
   "gate": "deep-research:live-adapters",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-09T22:50:24.060Z",
+  "passedAt": "2026-06-09T23:09:47.776Z",
   "requiredSuites": [
     "file",
     "web",
@@ -13,7 +13,8 @@
     "deep-research:file-source",
     "deep-research:web-source",
     "deep-research:mcp-runtime-source",
-    "deep-research:mcp-live-transports"
+    "deep-research:mcp-live-transports",
+    "deep-research:mcp-kernel-research-events"
   ],
   "unitTests": [
     "test/unit/deep-research/file.test.ts",
@@ -22,7 +23,8 @@
     "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
   ],
   "liveTests": [
-    "test/smoke/deep-research/live-adapters-smoke.test.ts"
+    "test/smoke/deep-research/live-adapters-smoke.test.ts",
+    "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
   ],
   "command": "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
   "references": [

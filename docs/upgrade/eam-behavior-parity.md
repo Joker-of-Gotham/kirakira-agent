@@ -25,11 +25,12 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the local live stdio/http MCP adapter gate, the highest-leverage remaining
-mechanism gap is now product-level
-`deep-research-kernel-mcp-live-research-events`: expand the adapter-level live
-evidence through `KernelBridge`, `ResearchTaskExecutor`, research event
-emission, citation events, and task completion.
+After the local live stdio/http MCP adapter and KernelBridge event gate, the
+highest-leverage remaining mechanism gap is now product-level
+`deep-research-mcp-profile-discovery-and-failure-semantics`: move MCP research
+target discovery from explicit smoke targets into profile-projected MCP research
+configuration, and add live failure-semantics coverage for transport errors and
+tool-originated `isError` results.
 
 Evidence:
 
@@ -47,6 +48,7 @@ Evidence:
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 - `test/smoke/deep-research/live-adapters-smoke.test.ts`
+- `test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts`
 - `scripts/deep-research-live-adapters.mjs`
 - `docs/upgrade/gates/deep-research-live-adapters.json`
 
@@ -93,7 +95,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, and local live stdio/http MCP adapter execution; the remaining product gap is the full KernelBridge and ResearchTaskExecutor live MCP research event path. |
+| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission; remaining product gaps are profile-driven MCP research target discovery and live failure-semantics coverage. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |
@@ -113,11 +115,12 @@ against `KIRAKIRA_WEB_URL` and `KIRAKIRA_DESKTOP_RENDERER_URL` from the runtime
 profile env fragment. This keeps presentation readiness tied to the profile
 projection instead of duplicating port-specific constants in the readiness gate.
 
-`gates.deepResearchLiveAdapters` now keeps adapter-level live research evidence
-machine-visible. It requires unit-evidenced file, web, and MCP source adapter
-suites, then reads `docs/upgrade/gates/deep-research-live-adapters.json` and
-passes only when the profile, required suites, unit tests, live tests, and MCP
-checks match the current gate contract.
+`gates.deepResearchLiveAdapters` now keeps adapter-level and KernelBridge-level
+live research evidence machine-visible. It requires unit-evidenced file, web,
+and MCP source adapter suites, then reads
+`docs/upgrade/gates/deep-research-live-adapters.json` and passes only when the
+profile, required suites, unit tests, adapter smoke, KernelBridge event smoke,
+and MCP checks match the current gate contract.
 
 ## Readiness Interpretation
 

@@ -65,16 +65,16 @@
         "mcp"
       ],
       "liveResultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
-      "expectation": "Provider-neutral file, web, and MCP adapter suites are unit-evidenced, and the local live stdio/http MCP adapter result must match the current profile, required suites, unit tests, live tests, and MCP checks before readiness can pass."
+      "expectation": "Provider-neutral file, web, and MCP adapter suites are unit-evidenced, and the local live stdio/http MCP adapter plus KernelBridge research event result must match the current profile, required suites, unit tests, live tests, and MCP checks before readiness can pass."
     }
   },
   "nextMechanismGap": {
-    "id": "deep-research-kernel-mcp-live-research-events",
+    "id": "deep-research-mcp-profile-discovery-and-failure-semantics",
     "targetName": "deep-research",
     "priority": "high",
     "status": "partial",
-    "gap": "Expand the local live MCP adapter gate through KernelBridge, ResearchTaskExecutor, research event emission, citation events, and task completion.",
-    "rationale": "The adapter-level live gate now proves DeepResearchRunner can collect citation-ready file/web/MCP evidence and can call local stdio/http MCP transports through the daemon-governed runtime. The next product-level gap is the full orchestrator research path, not the adapter contract itself.",
+    "gap": "Move MCP research target discovery from explicit smoke targets into profile-projected MCP research configuration, and add live failure-semantics coverage for transport errors and tool-originated isError results.",
+    "rationale": "The live gate now proves DeepResearchRunner can collect citation-ready file/web/MCP evidence, call local stdio/http MCP transports through the daemon-governed runtime, and emit KernelBridge/ResearchTaskExecutor research source, citation, task, and run completion events. The remaining product-level MCP research gaps are profile-driven target discovery and failure semantics, not the successful live research event path.",
     "evidence": [
       {
         "kind": "source",
@@ -130,6 +130,10 @@
       },
       {
         "kind": "test",
+        "path": "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
+      },
+      {
+        "kind": "test",
         "path": "test/unit/orchestrator-kernel/research-event-bridge.test.ts"
       },
       {
@@ -163,6 +167,10 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-deep-research-live-adapter-gate.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-deep-research-kernel-mcp-live-event-gate.md"
       }
     ],
     "commands": [
@@ -619,7 +627,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, and local live stdio/http MCP adapter execution are covered. The remaining product gap is the full KernelBridge and ResearchTaskExecutor live MCP research event path, including citation events and task completion."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered. Remaining product gaps are profile-driven MCP research target discovery and live failure-semantics coverage for transport errors and tool-originated isError results."
     },
     {
       "targetName": "frontend-app",

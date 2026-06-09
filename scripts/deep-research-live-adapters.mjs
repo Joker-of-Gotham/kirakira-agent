@@ -31,12 +31,14 @@ const UNIT_TESTS = Object.freeze([
 ]);
 const LIVE_TESTS = Object.freeze([
   "test/smoke/deep-research/live-adapters-smoke.test.ts",
+  "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
 ]);
 const CHECKS = Object.freeze([
   "deep-research:file-source",
   "deep-research:web-source",
   "deep-research:mcp-runtime-source",
   "deep-research:mcp-live-transports",
+  "deep-research:mcp-kernel-research-events",
 ]);
 
 function readValue(args, index, name) {
