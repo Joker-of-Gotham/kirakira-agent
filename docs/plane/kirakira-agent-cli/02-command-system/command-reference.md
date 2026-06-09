@@ -1,6 +1,8 @@
 # Command reference
 
-Commands are implemented as oclif `Command` subclasses under `packages/cli/src/commands/`. Below is a concise map; run `kirakira-agent <topic> --help` for the exact flags in your build.
+Commands are implemented as oclif `Command` subclasses under
+`packages/cli/src/commands/`. Below is a concise map; run
+`kirakira-agent <topic> --help` for the exact flags in your build.
 
 ## Workspace and health
 
@@ -8,6 +10,7 @@ Commands are implemented as oclif `Command` subclasses under `packages/cli/src/c
 |---------|--------|---------|
 | `init` | `commands/init.ts` | Scaffold workspace agent config |
 | `doctor` | `commands/doctor.ts` | Environment / dependency health |
+| `runtime doctor` | `commands/runtime/doctor.ts` | Runtime profile readiness via the shared repo doctor |
 | `self-update` | `commands/self-update.ts` | Update CLI binary |
 
 ## Auth
@@ -77,7 +80,8 @@ Persistence format: JSONL via `packages/cli/src/session/store.ts`.
 | `plugin disable` | `commands/plugin/disable.ts` |
 | `plugin update` | `commands/plugin/update.ts` |
 
-Loader/registry: `packages/cli/src/plugin/loader.ts`, `registry.ts`, `sandbox.ts`, `types.ts`.
+Loader/registry: `packages/cli/src/plugin/loader.ts`, `registry.ts`,
+`sandbox.ts`, `types.ts`.
 
 ## Registry (remote)
 
@@ -106,12 +110,13 @@ HTTP client: `packages/cli/src/registry/client.ts`.
 
 | Command | Source |
 |---------|--------|
-| `completion` | `commands/completion.ts` — arg `bash` \| `zsh` \| `fish` \| `powershell` |
+| `completion` | `commands/completion.ts` - arg `bash` \| `zsh` \| `fish` \| `powershell` |
 
 ## Examples
 
 ```bash
 kirakira-agent exec -p "Summarize README.md" --json
+kirakira-agent runtime doctor workbench-host --json --no-probe
 kirakira-agent skill list
 kirakira-agent mcp test <server>
 kirakira-agent completion zsh > ~/.zsh/completions/_kirakira-agent

@@ -30,19 +30,19 @@ export default class Completion extends Command {
   }
 }
 
-function generateBashCompletion(): string {
+export function generateBashCompletion(): string {
   return `# kirakira-agent bash completion
 _kirakira_agent() {
   local cur prev commands
   cur="\${COMP_WORDS[COMP_CWORD]}"
   prev="\${COMP_WORDS[COMP_CWORD-1]}"
-  commands="init exec login logout config session skill mcp plugin registry trace eval doctor completion self-update"
+  commands="init exec login logout config session skill mcp plugin registry trace eval runtime doctor completion self-update"
   COMPREPLY=( $(compgen -W "$commands" -- "$cur") )
 }
 complete -F _kirakira_agent kirakira-agent`;
 }
 
-function generateZshCompletion(): string {
+export function generateZshCompletion(): string {
   return `#compdef kirakira-agent
 _kirakira_agent() {
   local -a commands
@@ -59,6 +59,7 @@ _kirakira_agent() {
     'registry:Registry interaction'
     'trace:Trace and audit'
     'eval:Run evaluations'
+    'runtime:Runtime profile and readiness'
     'doctor:Environment health check'
     'completion:Generate shell completion'
     'self-update:Update CLI'
@@ -68,16 +69,16 @@ _kirakira_agent() {
 _kirakira_agent`;
 }
 
-function generateFishCompletion(): string {
+export function generateFishCompletion(): string {
   return `# kirakira-agent fish completion
-complete -c kirakira-agent -n '__fish_use_subcommand' -a 'init exec login logout config session skill mcp plugin registry trace eval doctor completion self-update'`;
+complete -c kirakira-agent -n '__fish_use_subcommand' -a 'init exec login logout config session skill mcp plugin registry trace eval runtime doctor completion self-update'`;
 }
 
-function generatePowershellCompletion(): string {
+export function generatePowershellCompletion(): string {
   return `# kirakira-agent PowerShell completion
 Register-ArgumentCompleter -CommandName kirakira-agent -ScriptBlock {
   param($wordToComplete, $commandAst, $cursorPosition)
-  $commands = @('init','exec','login','logout','config','session','skill','mcp','plugin','registry','trace','eval','doctor','completion','self-update')
+  $commands = @('init','exec','login','logout','config','session','skill','mcp','plugin','registry','trace','eval','runtime','doctor','completion','self-update')
   $commands | Where-Object { $_ -like "$wordToComplete*" } | ForEach-Object { [System.Management.Automation.CompletionResult]::new($_, $_, 'ParameterValue', $_) }
 }`;
 }

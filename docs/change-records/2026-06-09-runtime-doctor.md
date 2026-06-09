@@ -19,6 +19,9 @@ gateway `ws://127.0.0.1:17373/runtime`.
 
 - Added `scripts/runtime-doctor.mjs`.
 - Added root script `pnpm runtime:doctor`.
+- Added `kirakira-agent runtime doctor` as the CLI-facing wrapper around the
+  same shared runtime doctor script.
+- Added `runtime` to generated CLI shell completion lists.
 - Added JSON and text report modes.
 - Added `--no-probe` / `--plan-only` for read-only plan reports.
 - Added generic HTTP, TCP, and socket probes with bounded timeouts.
@@ -38,8 +41,13 @@ Authoritative references used:
   https://nodejs.org/api/globals.html
 - Node.js `net.Socket#setTimeout()` for bounded TCP/socket probes:
   https://nodejs.org/api/net.html
+- Node.js `child_process.spawn()` close behavior for the CLI wrapper:
+  https://nodejs.org/api/child_process.html
 - Docker Compose `up --wait` behavior:
   https://docs.docker.com/reference/cli/docker/compose/up/
+- oclif topic separators and pattern command discovery:
+  https://oclif.io/docs/topic_separator/
+  https://oclif.io/docs/command_discovery_strategies/
 
 ## Verification
 
@@ -48,6 +56,8 @@ Planned commands:
 ```powershell
 pnpm.cmd exec vitest run test/unit/runtime/runtime-doctor.test.ts test/unit/runtime/startup-contract.test.ts
 pnpm.cmd exec vitest run test/unit/runtime/memory-test-host-env.test.ts test/contract/runtime/runtime-profile-compose-contract.test.ts
+pnpm.cmd --filter @kirakira/cli build
+pnpm.cmd exec vitest run test/unit/cli/runtime-doctor-command.test.ts test/unit/cli/completion.test.ts test/contract/cli/runtime-doctor-command.test.ts
 pnpm.cmd typecheck
 pnpm.cmd test
 git diff --check

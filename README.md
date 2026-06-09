@@ -107,6 +107,7 @@ That is the intended operating model: one command, one runtime path, one place t
 | `pnpm start:desktop` | Host daemon plus desktop renderer at `http://127.0.0.1:5174` | `workbench-host` |
 | `pnpm runtime:profile env workbench-host` | Print the workbench env contract, including gateway `ws://127.0.0.1:17373/runtime` | `workbench-host` |
 | `pnpm runtime:doctor workbench-host -- --json` | Probe the selected profile's current runtime readiness without starting services | selected profile |
+| `kirakira-agent runtime doctor workbench-host --json --no-probe` | CLI-facing runtime doctor for the same profile readiness checks | selected profile |
 | `pnpm dev:web` | UI-only Vite shortcut; does not start infra or daemon | none |
 | `pnpm dev:desktop` | Desktop renderer-only shortcut; does not start infra or daemon | none |
 
