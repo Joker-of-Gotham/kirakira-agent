@@ -23,6 +23,7 @@
     "e2e:deep-research:live": "node scripts/deep-research-live-adapters.mjs --live",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
+    "runtime:ready": "node scripts/runtime-ready.mjs",
     "runtime:doctor": "node scripts/runtime-doctor.mjs",
     "parity:eam": "node scripts/eam-parity-audit.mjs",
     "upgrade:readiness": "node scripts/upgrade-readiness.mjs",

@@ -24,6 +24,7 @@ describe("startup contract", () => {
     );
     expect(pkg.scripts["e2e:workbench"]).toBe("node scripts/kirakira-workbench-smoke.mjs");
     expect(pkg.scripts["runtime:profile"]).toBe("node scripts/runtime-profile.mjs");
+    expect(pkg.scripts["runtime:ready"]).toBe("node scripts/runtime-ready.mjs");
     expect(pkg.scripts["runtime:doctor"]).toBe("node scripts/runtime-doctor.mjs");
 
     const desktopPkg = JSON.parse(

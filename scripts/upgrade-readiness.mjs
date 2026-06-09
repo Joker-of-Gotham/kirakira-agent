@@ -527,9 +527,9 @@ function harnessApiTrack({ packageJson, projection, harnessHardcoding }) {
     title: "Harness / SDK / API Contracts",
     checks: [
       passFail(
-        "Runtime profile and doctor scripts are exposed",
-        hasScripts(packageJson, ["runtime:profile", "runtime:doctor"]),
-        "package.json scripts runtime:profile/runtime:doctor",
+        "Runtime profile, ready, and doctor scripts are exposed",
+        hasScripts(packageJson, ["runtime:profile", "runtime:ready", "runtime:doctor"]),
+        "package.json scripts runtime:profile/runtime:ready/runtime:doctor",
       ),
       passFail(
         "Profile projection includes readiness, MCP, and memory fragments",

@@ -3,6 +3,10 @@ export const runtimeScriptRegistry = {
     scriptName: "runtime-profile.mjs",
     description: "Render resolved Kirakira runtime profiles for local, Docker, web, and desktop callers.",
   },
+  ready: {
+    scriptName: "runtime-ready.mjs",
+    description: "Render profile-owned readiness, MCP, and startup plans without live probes.",
+  },
   doctor: {
     scriptName: "runtime-doctor.mjs",
     description: "Validate runtime profile readiness and startup dependencies.",

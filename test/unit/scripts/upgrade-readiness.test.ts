@@ -136,6 +136,11 @@ describe("upgrade readiness gate", () => {
         id: "harness-api-contracts",
         checks: expect.arrayContaining([
           expect.objectContaining({
+            label: "Runtime profile, ready, and doctor scripts are exposed",
+            status: "pass",
+            evidence: "package.json scripts runtime:profile/runtime:ready/runtime:doctor",
+          }),
+          expect.objectContaining({
             label: "Runtime profile projection/startup avoids unrelated dev-server port",
             status: "pass",
             evidence: expect.stringContaining("forbiddenPort=5173"),

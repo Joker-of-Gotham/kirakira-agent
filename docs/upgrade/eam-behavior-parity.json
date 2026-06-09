@@ -3,9 +3,9 @@
   "updatedAt": "2026-06-10",
   "auditCommand": "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100",
   "auditBaseline": {
-    "exact": 15,
+    "exact": 14,
     "equivalent": 8,
-    "drift": 8,
+    "drift": 9,
     "missing": 0,
     "extra": 4
   },
@@ -228,15 +228,17 @@
       "targetName": "cli",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira adds runtime profile and doctor command bridges plus provider setup and TUI presentation surfaces while retaining the EAM CLI file set.",
+      "behavior": "Kirakira adds runtime profile, ready, and doctor command bridges plus provider setup and TUI presentation surfaces while retaining the EAM CLI file set.",
       "extensionFiles": [
         "packages/cli/src/runtime/runtime-mcp-config.ts",
         "packages/cli/src/commands/runtime/doctor.ts",
         "packages/cli/src/commands/runtime/index.ts",
         "packages/cli/src/commands/runtime/profile.ts",
+        "packages/cli/src/commands/runtime/ready.ts",
         "packages/cli/src/gateway/provider-catalog.ts",
         "packages/cli/src/runtime/runtime-doctor-command.ts",
         "packages/cli/src/runtime/runtime-profile-command.ts",
+        "packages/cli/src/runtime/runtime-ready-command.ts",
         "packages/cli/src/runtime/runtime-script-registry.ts",
         "packages/cli/src/runtime/runtime-script-command.ts",
         "packages/cli/src/tui/HomeScreen.tsx",
@@ -249,7 +251,7 @@
         {
           "kind": "test",
           "path": "test/unit/cli/runtime-script-command.test.ts",
-          "command": "pnpm exec vitest run test/unit/cli/runtime-script-command.test.ts test/unit/cli/runtime-doctor-command.test.ts test/unit/cli/runtime-profile-command.test.ts test/contract/cli/runtime-doctor-command.test.ts test/contract/cli/runtime-profile-command.test.ts"
+          "command": "pnpm exec vitest run test/unit/cli/runtime-script-command.test.ts test/unit/cli/runtime-ready-command.test.ts test/unit/cli/runtime-doctor-command.test.ts test/unit/cli/runtime-profile-command.test.ts test/contract/cli/runtime-doctor-command.test.ts test/contract/cli/runtime-profile-command.test.ts"
         },
         {
           "kind": "test",
@@ -276,6 +278,42 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-cli-provider-home-screen-coverage.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-ready-plan-only.md"
+        }
+      ],
+      "remainingGaps": []
+    },
+    {
+      "kind": "package",
+      "sourceName": "core",
+      "targetName": "core",
+      "classification": "intentional-kirakira-extension",
+      "status": "covered",
+      "behavior": "Kirakira centralizes the OpenAI-compatible model provider catalog and URL/key resolution in core so CLI, config resolver, agent runtime, and bootstrap scripts share one provider source of truth.",
+      "extensionFiles": [
+        "packages/core/src/model-providers.catalog.json",
+        "packages/core/src/model-providers.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "packages/core/src/model-providers.catalog.json"
+        },
+        {
+          "kind": "source",
+          "path": "packages/core/src/model-providers.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/core/model-providers.test.ts",
+          "command": "pnpm exec vitest run test/unit/core/model-providers.test.ts test/unit/scripts/llm-providers.test.ts test/unit/config-resolver/model-config.test.ts test/unit/agent-runtime/model-client-provider-env.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-core-model-provider-catalog.md"
         }
       ],
       "remainingGaps": []

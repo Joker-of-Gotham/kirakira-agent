@@ -15,10 +15,10 @@ Command:
 node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100
 ```
 
-Current file inventory result: `exact=15`, `equivalent=8`, `drift=8`,
+Current file inventory result: `exact=14`, `equivalent=8`, `drift=9`,
 `missing=0`, `extra=4`.
 
-The eight drift rows are not missing EAM behavior. Each row has all source files
+The nine drift rows are not missing EAM behavior. Each row has all source files
 matched and only Kirakira-side extra files. The behavior question is therefore:
 which extras are intentional Kirakira extension surfaces, and which still need
 runtime validation before upgrade readiness can treat them as closed?
@@ -80,7 +80,8 @@ node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
 | Drift row | Classification | Behavior status | Behavior evidence | Remaining gap |
 | --- | --- | --- | --- | --- |
 | `agent-runtime` | Intentional Kirakira extension | Covered | Runtime capability scoping, delegated execution, and concrete scoped child runtime dependency forks are covered by `test/unit/agent-runtime/capability-scope.test.ts`, `react-loop-delegate.test.ts`, and `tool-executor-scope.test.ts`. | None. |
-| `cli` | Intentional Kirakira extension | Covered | Runtime profile/doctor command bridge is covered by unit and contract CLI tests; runtime script names now sit behind a typed registry; read-only MCP commands and the TUI now resolve profile-projected MCP config with local custom-server overlay; provider setup and home-screen states now have focused Ink render/input coverage. | None. |
+| `cli` | Intentional Kirakira extension | Covered | Runtime profile/ready/doctor command bridges are covered by unit and contract CLI tests; runtime script names now sit behind a typed registry; read-only MCP commands and the TUI now resolve profile-projected MCP config with local custom-server overlay; provider setup and home-screen states now have focused Ink render/input coverage. | None. |
+| `core` | Intentional Kirakira extension | Covered | The OpenAI-compatible model provider catalog, alias normalization, API-key env resolution, and endpoint construction are centralized under `packages/core/src/model-providers.*` and covered by core, config-resolver, agent-runtime, and bootstrap-script tests. | None. |
 | `config-resolver` | Intentional Kirakira extension | Covered | `runtime-projection.ts` is covered by resolved-state, schema, and runtime-profile tests. | Caller migration remains sequencing work, not a parity gap in the projection behavior. |
 | `eamd -> kirakirad` | Intentional Kirakira extension | Covered | The rename rule maps EAM daemon files to `kirakirad`; only `go.sum` is extra. | None. |
 | `mcp-adapter` | Intentional Kirakira extension | Covered | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, profile/env-selected recorder plans, SDK/OTLP factory selection, daemon-hosted SDK export injection, tool-result errors with `isError`, and live stdio/HTTP daemon-owned propagation smoke coverage. | None. |
@@ -124,7 +125,7 @@ and MCP checks match the current gate contract.
 
 ## Readiness Interpretation
 
-File-level parity no longer blocks on unknown drift: all eight drift rows are
+File-level parity no longer blocks on unknown drift: all nine drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
 treat the EAM file-drift rows as closed when all classified package rows are
 `covered`; remaining product-level extension work belongs in targeted roadmap

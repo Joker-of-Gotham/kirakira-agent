@@ -16,6 +16,7 @@ import {
 describe("runtime script command bridge", () => {
   it("keeps shared runtime scripts behind a typed registry", () => {
     expect(getRuntimeScriptDefinition("profile").scriptName).toBe("runtime-profile.mjs");
+    expect(getRuntimeScriptDefinition("ready").scriptName).toBe("runtime-ready.mjs");
     expect(getRuntimeScriptDefinition("doctor").scriptName).toBe("runtime-doctor.mjs");
     expect(JSON.stringify(runtimeScriptRegistry)).not.toContain("5173");
   });
