@@ -17,10 +17,13 @@ class VectorMaterializer:
 
     async def connect(self) -> None:
         if self._client is None:
-            self._client = AsyncQdrantClient(
-                host=self.config.qdrant_host,
-                port=self.config.qdrant_port,
-            )
+            if self.config.qdrant_url:
+                self._client = AsyncQdrantClient(url=self.config.qdrant_url)
+            else:
+                self._client = AsyncQdrantClient(
+                    host=self.config.qdrant_host,
+                    port=self.config.qdrant_port,
+                )
 
     async def close(self) -> None:
         if self._client is not None:

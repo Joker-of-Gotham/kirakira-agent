@@ -2,20 +2,41 @@
 
 from __future__ import annotations
 
-from pydantic import AliasChoices, Field
+from urllib.parse import urlsplit
+
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class MemoryPipelineConfig(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="KIRAKIRA_MEMORY_", extra="ignore", populate_by_name=True)
 
-    postgres_dsn: str = "postgresql://localhost:5432/kirakira"
-    redis_url: str = "redis://localhost:6379/0"
+    postgres_dsn: str = Field(
+        "postgresql://localhost:5432/kirakira",
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_POSTGRES_DSN", "DATABASE_URL"),
+    )
+    redis_url: str = Field(
+        "redis://localhost:6379/0",
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_REDIS_URL", "REDIS_URL"),
+    )
+    qdrant_url: str | None = Field(
+        None,
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_QDRANT_URL", "QDRANT_URL"),
+    )
     qdrant_host: str = "localhost"
     qdrant_port: int = 6333
-    neo4j_uri: str = "bolt://localhost:7687"
-    neo4j_user: str = "neo4j"
-    neo4j_password: str = "password"
+    neo4j_uri: str = Field(
+        "bolt://localhost:7687",
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_NEO4J_URI", "NEO4J_URI"),
+    )
+    neo4j_user: str = Field(
+        "neo4j",
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_NEO4J_USER", "KIRAKIRA_NEO4J_USER"),
+    )
+    neo4j_password: str = Field(
+        "password",
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_NEO4J_PASSWORD", "KIRAKIRA_NEO4J_PASSWORD"),
+    )
 
     embedding_model: str = "text-embedding-3-small"
     embedding_api_key: str = ""
@@ -62,11 +83,39 @@ class MemoryPipelineConfig(BaseSettings):
     )
 
     qdrant_collection: str = "kirakira_memory"
-    s3_endpoint_url: str | None = None
+    s3_endpoint_url: str | None = Field(
+        None,
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_S3_ENDPOINT_URL", "S3_ENDPOINT", "S3_ENDPOINT_URL"),
+    )
     s3_bucket: str = "kirakira-memory"
     s3_region: str = "us-east-1"
-    aws_access_key_id: str | None = None
-    aws_secret_access_key: str | None = None
+    aws_access_key_id: str | None = Field(
+        None,
+        validation_alias=AliasChoices("KIRAKIRA_MEMORY_AWS_ACCESS_KEY_ID", "S3_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID"),
+    )
+    aws_secret_access_key: str | None = Field(
+        None,
+        validation_alias=AliasChoices(
+            "KIRAKIRA_MEMORY_AWS_SECRET_ACCESS_KEY",
+            "S3_SECRET_ACCESS_KEY",
+            "AWS_SECRET_ACCESS_KEY",
+        ),
+    )
 
     llm_model: str = "gpt-4o-mini"
     llm_api_key: str | None = None
+
+    @model_validator(mode="after")
+    def apply_qdrant_url(self) -> "MemoryPipelineConfig":
+        if not self.qdrant_url:
+            return self
+
+        parsed = urlsplit(self.qdrant_url)
+        if not parsed.scheme or not parsed.hostname:
+            raise ValueError("QDRANT_URL must include a scheme and host")
+
+        if "qdrant_host" not in self.model_fields_set:
+            self.qdrant_host = parsed.hostname
+        if "qdrant_port" not in self.model_fields_set and parsed.port is not None:
+            self.qdrant_port = parsed.port
+        return self
