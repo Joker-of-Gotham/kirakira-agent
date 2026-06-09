@@ -24,6 +24,7 @@ export type {
 
 export interface LoaderOptions {
   workspaceRoot: string;
+  repoConfigPath?: string;
   systemConfigPath?: string;
   userHomePath?: string;
   skipSystemLayer?: boolean;

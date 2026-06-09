@@ -524,7 +524,10 @@ export function resolveConfig(
     : { ...DEFAULT_POLICY_YAML };
 
   const agentTomlPath = layers.find((l) => l.name === "repo")?.path;
-  const policyYamlPath = options?.policyYamlPath ?? layers.find((l) => l.name === "repo" && l.path)?.path?.replace(/agent\.toml$/, "policy.yaml");
+  const policyYamlPath = options?.policyYamlPath
+    ?? (policyYaml
+      ? layers.find((l) => l.name === "repo" && l.path)?.path?.replace(/agent\.toml$/, "policy.yaml")
+      : undefined);
   const localConfigPath = layers.find((l) => l.name === "workspace")?.path;
   const runtimeProfiles = loadRuntimeProfilesConfig(options, layers);
   const runtimeState = projectRuntimeState(

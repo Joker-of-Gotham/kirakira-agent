@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@kirakira/audit-ledger": "workspace:*",
+    "@kirakira/config-resolver": "workspace:*",
     "@kirakira/core": "workspace:*",
     "@kirakira/mcp-adapter": "workspace:*",
     "@kirakira/policy-engine": "workspace:*",

@@ -222,6 +222,9 @@ importers:
       '@kirakira/audit-ledger':
         specifier: workspace:*
         version: link:../audit-ledger
+      '@kirakira/config-resolver':
+        specifier: workspace:*
+        version: link:../config-resolver
       '@kirakira/core':
         specifier: workspace:*
         version: link:../core
@@ -705,12 +708,12 @@ importers:
       '@kirakira/agent-runtime':
         specifier: workspace:*
         version: link:../agent-runtime
-      '@kirakira/core':
-        specifier: workspace:*
-        version: link:../core
       '@kirakira/config-resolver':
         specifier: workspace:*
         version: link:../config-resolver
+      '@kirakira/core':
+        specifier: workspace:*
+        version: link:../core
       '@kirakira/deep-research':
         specifier: workspace:*
         version: link:../deep-research

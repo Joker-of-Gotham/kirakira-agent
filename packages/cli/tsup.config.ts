@@ -24,6 +24,7 @@ export default defineConfig({
   target: "node20",
   external: [
     "@kirakira/core",
+    "@kirakira/config-resolver",
     "@kirakira/skill-runtime",
     "@kirakira/mcp-adapter",
     "@kirakira/policy-engine",

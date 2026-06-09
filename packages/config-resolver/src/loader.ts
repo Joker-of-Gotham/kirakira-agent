@@ -78,7 +78,10 @@ export function loadConfigLayers(options: LoaderOptions): ConfigLayer[] {
     }
   }
 
-  const repoPath = join(options.workspaceRoot, PATHS.workspaceConfig);
+  const repoPath = options.repoConfigPath ?? join(options.workspaceRoot, PATHS.workspaceConfig);
+  if (options.repoConfigPath && !existsSync(repoPath)) {
+    throw new ConfigError(`Config file not found: ${repoPath}`);
+  }
   const repoData = tryReadToml(repoPath);
   if (repoData) {
     layers.push({
