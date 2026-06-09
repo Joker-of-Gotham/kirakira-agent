@@ -17,6 +17,7 @@ import type {
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
+import { RUNTIME_IPC_CHANNELS } from "./preload-contract.js";
 
 export interface RuntimeIpcControllerOptions {
   client: Pick<
@@ -469,19 +470,19 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
       removeMessageHandler();
     },
     register(ipcMain: Pick<IpcMain, "handle">) {
-      ipcMain.handle("runtime:connect", async (event) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.connect, async (event) => {
         assertTrustedSender(event, options.isTrustedSender);
         await ensureConnected();
       });
 
-      ipcMain.handle("runtime:disconnect", (event) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.disconnect, (event) => {
         assertTrustedSender(event, options.isTrustedSender);
         disposeAll();
         options.client.disconnect();
         connected = false;
       });
 
-      ipcMain.handle("runtime:getStatus", async (event, ...args: unknown[]) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.getStatus, async (event, ...args: unknown[]) => {
         assertTrustedSender(event, options.isTrustedSender);
         if (args.length > 0) {
           throw new Error("runtime:getStatus does not accept arguments");
@@ -489,7 +490,7 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         return getRuntimeStatus(connected, options.getHealth);
       });
 
-      ipcMain.handle("runtime:submitPrompt", async (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.submitPrompt, async (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const request = parseSubmitPromptRequest(rawRequest);
         await ensureConnected();
@@ -501,7 +502,7 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         return { runId };
       });
 
-      ipcMain.handle("runtime:getState", async (event, rawRunId: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.getState, async (event, rawRunId: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const runId = parseRunId(rawRunId, "getState");
         validateRuntimeClientMessage({
@@ -513,28 +514,31 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         return { runId, state: await options.client.getState(runId) };
       });
 
-      ipcMain.handle("runtime:getArtifactContent", async (event, rawRequest: unknown) => {
-        assertTrustedSender(event, options.isTrustedSender);
-        const request = parseArtifactContentRequest(rawRequest);
-        await ensureConnected();
-        return options.client.getArtifactContent(request);
-      });
+      ipcMain.handle(
+        RUNTIME_IPC_CHANNELS.getArtifactContent,
+        async (event, rawRequest: unknown) => {
+          assertTrustedSender(event, options.isTrustedSender);
+          const request = parseArtifactContentRequest(rawRequest);
+          await ensureConnected();
+          return options.client.getArtifactContent(request);
+        },
+      );
 
-      ipcMain.handle("runtime:listMcpTools", async (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.listMcpTools, async (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const request = parseMcpListRequest(rawRequest);
         await ensureConnected();
         return options.client.listMcpTools(request);
       });
 
-      ipcMain.handle("runtime:callMcpTool", async (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.callMcpTool, async (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const request = parseMcpToolCallRequest(rawRequest);
         await ensureConnected();
         return options.client.callMcpTool(request);
       });
 
-      ipcMain.handle("runtime:subscribeRun", async (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.subscribeRun, async (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const request = parseSubscribeRequest(rawRequest);
         await ensureConnected();
@@ -552,12 +556,12 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         });
       });
 
-      ipcMain.handle("runtime:unsubscribeRun", (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.unsubscribeRun, (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         disposeSubscription(parseSubscriptionId(rawRequest), event.sender.id);
       });
 
-      ipcMain.handle("runtime:approve", async (event, rawDecision: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.approve, async (event, rawDecision: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const decision = parseApprovalDecision(rawDecision);
         await ensureConnected();
@@ -569,14 +573,14 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         );
       });
 
-      ipcMain.handle("runtime:cancel", async (event, rawRequest: unknown) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.cancel, async (event, rawRequest: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const request = parseCancelRequest(rawRequest);
         await ensureConnected();
         await options.client.cancel(request.runId, request.reason);
       });
 
-      ipcMain.handle("runtime:drain", async (event) => {
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.drain, async (event) => {
         assertTrustedSender(event, options.isTrustedSender);
         validateControlMessage({ type: "control", message: { type: "drain" } });
         await ensureConnected();

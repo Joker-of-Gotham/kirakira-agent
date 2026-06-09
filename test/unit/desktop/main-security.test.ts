@@ -4,10 +4,12 @@ import { describe, expect, it } from "vitest";
 
 const mainSource = () =>
   readFileSync(resolve("apps/desktop/src/main/main.ts"), "utf8");
+const startupManifestSource = () =>
+  readFileSync(resolve("apps/desktop/src/main/startup-manifest.ts"), "utf8");
 
 describe("desktop main process security contract", () => {
   it("keeps the Electron renderer isolated and sandboxed", () => {
-    const source = mainSource();
+    const source = `${mainSource()}\n${startupManifestSource()}`;
 
     expect(source).toContain("contextIsolation: true");
     expect(source).toContain("nodeIntegration: false");
@@ -19,9 +21,9 @@ describe("desktop main process security contract", () => {
   it("loads only the configured local renderer URL or packaged renderer file", () => {
     const source = mainSource();
 
-    expect(source).toContain("desktopRendererUrl()");
-    expect(source).toContain("window.loadURL(devUrl)");
-    expect(source).toContain("window.loadFile(packagedRendererPath)");
+    expect(source).toContain("resolveDesktopStartupManifest({ mainDir: __dirname })");
+    expect(source).toContain("window.loadURL(startupManifest.renderer.url)");
+    expect(source).toContain("window.loadFile(startupManifest.renderer.filePath)");
     expect(source).not.toContain("http://127.0.0.1:5173");
   });
 
@@ -34,15 +36,24 @@ describe("desktop main process security contract", () => {
   });
 
   it("supports a hidden bounded Electron smoke mode without weakening renderer security", () => {
-    const source = mainSource();
+    const source = `${mainSource()}\n${startupManifestSource()}`;
 
     expect(source).toContain("KIRAKIRA_WORKBENCH_ELECTRON_SMOKE");
-    expect(source).toContain("show: !smoke");
+    expect(source).toContain("show: !smokeEnabled");
     expect(source).toContain("did-finish-load");
     expect(source).toContain("did-fail-load");
     expect(source).toContain("Electron smoke timed out");
     expect(source).toContain("contextIsolation: true");
     expect(source).toContain("nodeIntegration: false");
     expect(source).toContain("sandbox: true");
+  });
+
+  it("routes new windows and external navigations through an explicit policy", () => {
+    const source = mainSource();
+
+    expect(source).toContain("setWindowOpenHandler");
+    expect(source).toContain("will-navigate");
+    expect(source).toContain("shell.openExternal");
+    expect(source).toContain("canOpenExternalDesktopUrl");
   });
 });

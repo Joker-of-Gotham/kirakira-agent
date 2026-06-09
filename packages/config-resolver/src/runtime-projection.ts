@@ -37,6 +37,22 @@ export interface RuntimeProjectionMcpPlan {
   config: RuntimeProjectionMcpConfigPlan["config"];
 }
 
+export interface RuntimeProjectionEnvVariable {
+  name: string;
+  generated: boolean;
+  value?: string;
+}
+
+export interface RuntimeProjectionEnvPlan {
+  schemaVersion: 1;
+  profile: string;
+  mode: ResolvedRuntimeProfileState["mode"];
+  source: "resolved-runtime-state.env";
+  envFiles: string[];
+  variables: RuntimeProjectionEnvVariable[];
+  values: Record<string, string>;
+}
+
 export interface RuntimeProjectionReadinessCheck {
   name: string;
   type: string;
@@ -94,6 +110,50 @@ export interface RuntimeProjectionMemoryStackPlan {
   }>;
 }
 
+export interface RuntimeProjectionStartupStep {
+  name: string;
+  kind: "compose" | "daemon" | "presentation";
+  mode: "run" | "background" | "foreground";
+  surface?: string;
+  command?: string;
+  args?: string[];
+  waitFor?: string[];
+  readiness?: string[];
+}
+
+export interface RuntimeProjectionSurfaceStartupPlan {
+  schemaVersion: 1;
+  profile: string;
+  mode: ResolvedRuntimeProfileState["mode"];
+  source: "resolved-runtime-state.startup.surface";
+  surface: string;
+  readiness: RuntimeProjectionReadinessPlan;
+  steps: RuntimeProjectionStartupStep[];
+}
+
+export interface RuntimeProjectionStartupPlan {
+  schemaVersion: 1;
+  profile: string;
+  mode: ResolvedRuntimeProfileState["mode"];
+  source: "resolved-runtime-state.startup";
+  env: RuntimeProjectionEnvPlan;
+  compose?: RuntimeProjectionReadinessPlan["compose"];
+  readiness: {
+    checks: string[];
+  };
+  mcp: {
+    roots: RuntimeProjectionMcpConfigPlan["roots"];
+    servers: string[];
+  };
+  memory: {
+    enabled: boolean;
+    services: string[];
+    compose?: RuntimeProjectionMemoryStackPlan["compose"];
+    env: string[];
+  };
+  surfaces?: Record<string, RuntimeProjectionSurfaceStartupPlan>;
+}
+
 export interface RuntimeProjectionServicePlan {
   name: string;
   composeService?: string;
@@ -122,9 +182,11 @@ export interface RuntimeProfileProjection {
   services: RuntimeProjectionServicePlan[];
   mcp: RuntimeProjectionMcpPlan;
   fragments: {
+    env: RuntimeProjectionEnvPlan;
     readiness: RuntimeProjectionReadinessPlan;
     mcpConfig: RuntimeProjectionMcpConfigPlan;
     memoryStack: RuntimeProjectionMemoryStackPlan;
+    startup: RuntimeProjectionStartupPlan;
   };
 }
 
@@ -165,6 +227,32 @@ function memoryEnvNames(services: ResolvedRuntimeServiceState[]): Array<{ name: 
   return uniqueStrings(services.map((service) => service.url_env))
     .sort()
     .map((name) => ({ name, generated: false }));
+}
+
+function mergeEnvVariables(variables: RuntimeProjectionEnvVariable[]): RuntimeProjectionEnvVariable[] {
+  const byName = new Map<string, RuntimeProjectionEnvVariable>();
+  for (const variable of variables) {
+    const existing = byName.get(variable.name);
+    if (!existing) {
+      byName.set(variable.name, variable);
+      continue;
+    }
+    byName.set(variable.name, {
+      ...existing,
+      generated: existing.generated || variable.generated,
+      ...(existing.value !== undefined ? { value: existing.value } : variable.value !== undefined ? { value: variable.value } : {}),
+    });
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function envVariable(name: string | undefined, value?: string): RuntimeProjectionEnvVariable | undefined {
+  if (!name) return undefined;
+  return {
+    name,
+    generated: value !== undefined,
+    ...(value !== undefined ? { value } : {}),
+  };
 }
 
 function sanitizedUrl(value: string | undefined): string | undefined {
@@ -276,6 +364,39 @@ export function buildResolvedMcpConfigPlan(
         (profile.mcp_servers ?? []).map((server) => [server.name, mcpConfigServer(server)]),
       ),
     },
+  };
+}
+
+export function buildResolvedRuntimeEnvPlan(
+  profile: ResolvedRuntimeProfileState,
+): RuntimeProjectionEnvPlan {
+  const variables = mergeEnvVariables([
+    envVariable("KIRAKIRA_RUNTIME_PROFILE", profile.name),
+    envVariable("KIRAKIRA_WORKSPACE_ROOT", profile.workspace_root),
+    envVariable("KIRAKIRA_APP_ROOT", profile.app_root),
+    envVariable("KIRAKIRA_MCP_WORKSPACE_ROOT", profile.mcp_workspace_root ?? profile.workspace_root),
+    envVariable("KIRAKIRA_MCP_APP_ROOT", profile.mcp_app_root ?? profile.app_root),
+    ...(profile.services ?? []).map((service) => envVariable(service.url_env)),
+    ...memoryEnvNames(memoryServices(profile)).map((entry) => ({
+      name: entry.name,
+      generated: entry.generated,
+    })),
+  ].filter((variable): variable is RuntimeProjectionEnvVariable => Boolean(variable)));
+  const values = Object.fromEntries(
+    variables
+      .filter((variable): variable is RuntimeProjectionEnvVariable & { value: string } =>
+        variable.value !== undefined,
+      )
+      .map((variable) => [variable.name, variable.value]),
+  );
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "resolved-runtime-state.env",
+    envFiles: profile.env_files ?? [],
+    variables,
+    values,
   };
 }
 
@@ -501,14 +622,158 @@ export function buildResolvedRuntimeServiceProjection(
   });
 }
 
+function readinessHasCheck(readiness: RuntimeProjectionReadinessPlan, checkName: string): boolean {
+  return readiness.checks.some((check) => check.name === checkName);
+}
+
+function surfaceReadinessChecks(
+  readiness: RuntimeProjectionReadinessPlan,
+  surface: "web" | "desktop",
+): string[] {
+  const daemonChecks = (surface === "desktop"
+    ? ["daemon:socket", "daemon:browser-gateway"]
+    : ["daemon:browser-gateway"])
+    .filter((check) => readinessHasCheck(readiness, check));
+  const presentationCheck = `presentation:${surface}`;
+  return [
+    ...daemonChecks,
+    ...(readinessHasCheck(readiness, presentationCheck) ? [presentationCheck] : []),
+  ];
+}
+
+function resolvedSurfaceStartupStep(
+  name: string,
+  kind: RuntimeProjectionStartupStep["kind"],
+  mode: RuntimeProjectionStartupStep["mode"],
+  options: {
+    surface?: string;
+    waitFor?: string[];
+    readiness?: string[];
+  } = {},
+): RuntimeProjectionStartupStep {
+  return {
+    name,
+    kind,
+    mode,
+    ...(options.surface ? { surface: options.surface } : {}),
+    ...(options.waitFor && options.waitFor.length > 0 ? { waitFor: options.waitFor } : {}),
+    ...(options.readiness && options.readiness.length > 0 ? { readiness: options.readiness } : {}),
+  };
+}
+
+function buildResolvedSurfaceStartupPlans(
+  profile: ResolvedRuntimeProfileState,
+  readiness: RuntimeProjectionReadinessPlan,
+): Record<string, RuntimeProjectionSurfaceStartupPlan> {
+  const surfaces: Record<string, RuntimeProjectionSurfaceStartupPlan> = {};
+  if (profile.presentation?.web?.url) {
+    const webChecks = surfaceReadinessChecks(readiness, "web");
+    const waits = webChecks.filter((check) => check !== "presentation:web");
+    surfaces.web = {
+      schemaVersion: 1,
+      profile: profile.name,
+      mode: profile.mode,
+      source: "resolved-runtime-state.startup.surface",
+      surface: "web",
+      readiness,
+      steps: [
+        ...(readinessHasCheck(readiness, "daemon:browser-gateway")
+          ? [resolvedSurfaceStartupStep("daemon", "daemon", "background", {
+              readiness: ["daemon:browser-gateway"],
+            })]
+          : []),
+        resolvedSurfaceStartupStep("web", "presentation", "foreground", {
+          surface: "web",
+          waitFor: waits,
+          readiness: ["presentation:web"],
+        }),
+      ],
+    };
+  }
+  if (profile.presentation?.desktop?.renderer_url) {
+    const desktopChecks = surfaceReadinessChecks(readiness, "desktop");
+    const waits = desktopChecks.filter((check) => check !== "presentation:desktop");
+    surfaces.desktop = {
+      schemaVersion: 1,
+      profile: profile.name,
+      mode: profile.mode,
+      source: "resolved-runtime-state.startup.surface",
+      surface: "desktop",
+      readiness,
+      steps: [
+        ...(readinessHasCheck(readiness, "daemon:browser-gateway")
+          ? [resolvedSurfaceStartupStep("daemon", "daemon", "background", {
+              readiness: ["daemon:browser-gateway"],
+            })]
+          : []),
+        resolvedSurfaceStartupStep("desktop-renderer", "presentation", "background", {
+          surface: "desktop",
+          readiness: ["presentation:desktop"],
+        }),
+        resolvedSurfaceStartupStep("desktop-shell", "presentation", "foreground", {
+          surface: "desktop",
+          waitFor: waits,
+          readiness: ["presentation:desktop"],
+        }),
+      ],
+    };
+  }
+  return surfaces;
+}
+
+export function buildResolvedRuntimeStartupPlan(
+  profile: ResolvedRuntimeProfileState,
+  options: {
+    envPlan?: RuntimeProjectionEnvPlan;
+    readinessPlan?: RuntimeProjectionReadinessPlan;
+    mcpConfigPlan?: RuntimeProjectionMcpConfigPlan;
+    memoryStackPlan?: RuntimeProjectionMemoryStackPlan;
+  } = {},
+): RuntimeProjectionStartupPlan {
+  const env = options.envPlan ?? buildResolvedRuntimeEnvPlan(profile);
+  const readiness = options.readinessPlan ?? buildResolvedRuntimeReadinessPlan(profile);
+  const mcpConfig = options.mcpConfigPlan ?? buildResolvedMcpConfigPlan(profile);
+  const memoryStack = options.memoryStackPlan ?? buildResolvedMemoryStackPlan(profile);
+  const surfaces = buildResolvedSurfaceStartupPlans(profile, readiness);
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "resolved-runtime-state.startup",
+    env,
+    compose: readiness.compose,
+    readiness: {
+      checks: readiness.checks.map((check) => check.name),
+    },
+    mcp: {
+      roots: mcpConfig.roots,
+      servers: mcpConfig.servers,
+    },
+    memory: {
+      enabled: memoryStack.enabled,
+      services: memoryStack.services.map((service) => service.name),
+      compose: memoryStack.compose,
+      env: memoryStack.env.map((entry) => entry.name),
+    },
+    ...(Object.keys(surfaces).length > 0 ? { surfaces } : {}),
+  };
+}
+
 export function buildResolvedRuntimeProfileProjection(
   runtimeState: ResolvedRuntimeState,
   profileName?: string,
 ): RuntimeProfileProjection {
   const profile = selectResolvedRuntimeProfile(runtimeState, profileName);
+  const env = buildResolvedRuntimeEnvPlan(profile);
   const readiness = buildResolvedRuntimeReadinessPlan(profile);
   const mcpConfig = buildResolvedMcpConfigPlan(profile);
   const memoryStack = buildResolvedMemoryStackPlan(profile);
+  const startup = buildResolvedRuntimeStartupPlan(profile, {
+    envPlan: env,
+    readinessPlan: readiness,
+    mcpConfigPlan: mcpConfig,
+    memoryStackPlan: memoryStack,
+  });
   return {
     schemaVersion: 1,
     profile: profile.name,
@@ -523,9 +788,11 @@ export function buildResolvedRuntimeProfileProjection(
       config: mcpConfig.config,
     },
     fragments: {
+      env,
       readiness,
       mcpConfig,
       memoryStack,
+      startup,
     },
   };
 }

@@ -1,0 +1,36 @@
+export const KIRAKIRA_PRELOAD_API_KEY = "kirakiraRuntime" as const;
+
+export const RUNTIME_IPC_CHANNELS = {
+  connect: "runtime:connect",
+  disconnect: "runtime:disconnect",
+  getStatus: "runtime:getStatus",
+  submitPrompt: "runtime:submitPrompt",
+  getState: "runtime:getState",
+  getArtifactContent: "runtime:getArtifactContent",
+  listMcpTools: "runtime:listMcpTools",
+  callMcpTool: "runtime:callMcpTool",
+  subscribeRun: "runtime:subscribeRun",
+  unsubscribeRun: "runtime:unsubscribeRun",
+  approve: "runtime:approve",
+  cancel: "runtime:cancel",
+  drain: "runtime:drain",
+} as const;
+
+export const KIRAKIRA_PRELOAD_API_METHODS = [
+  "connect",
+  "disconnect",
+  "getStatus",
+  "submitPrompt",
+  "getState",
+  "getArtifactContent",
+  "listMcpTools",
+  "callMcpTool",
+  "subscribeRun",
+  "approve",
+  "cancel",
+  "drain",
+] as const;
+
+export type RuntimeIpcChannelName = keyof typeof RUNTIME_IPC_CHANNELS;
+export type RuntimeIpcChannel = (typeof RUNTIME_IPC_CHANNELS)[RuntimeIpcChannelName];
+export type KirakiraPreloadApiMethod = (typeof KIRAKIRA_PRELOAD_API_METHODS)[number];

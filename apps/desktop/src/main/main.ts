@@ -1,28 +1,33 @@
-import { app, BrowserWindow, ipcMain, webContents, type IpcMainInvokeEvent } from "electron";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { DaemonClient } from "@kirakira/runtime-daemon";
 import {
-  desktopRendererUrl,
-  isTrustedDesktopRuntimeSenderUrl,
-} from "./renderer-endpoint.js";
+  app,
+  BrowserWindow,
+  ipcMain,
+  shell,
+  webContents,
+  type IpcMainInvokeEvent,
+} from "electron";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { DaemonClient } from "@kirakira/runtime-daemon";
+import { isTrustedDesktopRuntimeSenderUrl } from "./renderer-endpoint.js";
 import { createRuntimeIpcController } from "./runtime-ipc.js";
+import {
+  canOpenExternalDesktopUrl,
+  desktopWindowOptionsFromManifest,
+  resolveDesktopStartupManifest,
+} from "./startup-manifest.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const packagedRendererPath = join(__dirname, "..", "renderer", "index.html");
-const packagedRendererUrl = pathToFileURL(packagedRendererPath).toString();
+const startupManifest = resolveDesktopStartupManifest({ mainDir: __dirname });
 const client = new DaemonClient();
-const WORKBENCH_ELECTRON_SMOKE_ENV = "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE";
-const DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS = 30_000;
 let electronSmokeFinished = false;
 
 function isWorkbenchElectronSmoke(): boolean {
-  return process.env[WORKBENCH_ELECTRON_SMOKE_ENV] === "1";
+  return startupManifest.smoke.enabled;
 }
 
 function electronSmokeTimeoutMs(): number {
-  const value = Number(process.env.KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TIMEOUT_MS);
-  return Number.isInteger(value) && value > 0 ? value : DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS;
+  return startupManifest.smoke.timeoutMs;
 }
 
 function finishElectronSmoke(error?: unknown): void {
@@ -39,7 +44,7 @@ function finishElectronSmoke(error?: unknown): void {
 
 const isTrustedRuntimeSender = (event: IpcMainInvokeEvent): boolean => {
   return isTrustedDesktopRuntimeSenderUrl(event.senderFrame?.url, process.env, {
-    packagedRendererUrl,
+    packagedRendererUrl: startupManifest.renderer.fileUrl,
   });
 };
 
@@ -52,23 +57,33 @@ createRuntimeIpcController({
   },
 }).register(ipcMain);
 
+function isTrustedRendererUrl(url: string): boolean {
+  return isTrustedDesktopRuntimeSenderUrl(url, process.env, {
+    packagedRendererUrl: startupManifest.renderer.fileUrl,
+  });
+}
+
+function applyNavigationPolicy(window: BrowserWindow): void {
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    if (!isTrustedRendererUrl(url) && canOpenExternalDesktopUrl(url)) {
+      void shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
+
+  window.webContents.on("will-navigate", (event, url) => {
+    if (isTrustedRendererUrl(url)) return;
+    event.preventDefault();
+    if (canOpenExternalDesktopUrl(url)) {
+      void shell.openExternal(url);
+    }
+  });
+}
+
 const createWindow = async () => {
   const smoke = isWorkbenchElectronSmoke();
-  const window = new BrowserWindow({
-    show: !smoke,
-    width: 1380,
-    height: 920,
-    minWidth: 940,
-    minHeight: 680,
-    title: "Kirakira Agent",
-    backgroundColor: "#f5f7f8",
-    webPreferences: {
-      preload: join(__dirname, "preload.js"),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-    },
-  });
+  const window = new BrowserWindow(desktopWindowOptionsFromManifest(startupManifest));
+  applyNavigationPolicy(window);
 
   if (smoke) {
     const timeoutMs = electronSmokeTimeoutMs();
@@ -92,11 +107,10 @@ const createWindow = async () => {
     });
   }
 
-  const devUrl = desktopRendererUrl();
-  if (devUrl) {
-    await window.loadURL(devUrl);
+  if (startupManifest.renderer.url) {
+    await window.loadURL(startupManifest.renderer.url);
   } else {
-    await window.loadFile(packagedRendererPath);
+    await window.loadFile(startupManifest.renderer.filePath);
   }
 };
 

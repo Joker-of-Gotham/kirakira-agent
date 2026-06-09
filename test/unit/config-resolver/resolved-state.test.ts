@@ -209,6 +209,46 @@ describe("resolved runtime state", () => {
     ]);
     expect(projection.fragments.memoryStack.services.map((service) => service.name))
       .toEqual(memoryServices);
+    expect(projection.fragments.env).toMatchObject({
+      profile: "container",
+      source: "resolved-runtime-state.env",
+      values: {
+        KIRAKIRA_RUNTIME_PROFILE: "container",
+        KIRAKIRA_WORKSPACE_ROOT: "/workspace",
+        KIRAKIRA_APP_ROOT: "/app",
+        KIRAKIRA_MCP_WORKSPACE_ROOT: "/workspace",
+        KIRAKIRA_MCP_APP_ROOT: "/app",
+      },
+    });
+    expect(projection.fragments.env.variables).toContainEqual({
+      name: "DATABASE_URL",
+      generated: false,
+    });
+    expect(projection.fragments.startup).toMatchObject({
+      profile: "container",
+      source: "resolved-runtime-state.startup",
+      compose: projection.fragments.readiness.compose,
+      mcp: {
+        roots: {
+          workspaceRoot: "/workspace",
+          appRoot: "/app",
+        },
+        servers: [
+          "filesystem-core",
+          "filesystem-search",
+          "filesystem-git",
+          "filesystem-patch",
+          "filesystem-artifact",
+          "memory",
+          "github",
+        ],
+      },
+      memory: {
+        enabled: true,
+        services: memoryServices,
+        env: expect.arrayContaining(["DATABASE_URL", "QDRANT_URL", "S3_ENDPOINT"]),
+      },
+    });
     expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
       composeService: "postgres",
       sources: ["services", "readiness", "memory-stack"],
@@ -280,6 +320,61 @@ describe("resolved runtime state", () => {
     expect(projection.fragments.memoryStack.env).toContainEqual({
       name: "DATABASE_URL",
       generated: false,
+    });
+    expect(projection.fragments.startup.memory).toMatchObject({
+      enabled: true,
+      services: expect.arrayContaining(["postgres", "redis", "qdrant", "neo4j", "minio"]),
+    });
+  });
+
+  it("projects resolved workbench startup surfaces and memory-disabled profiles", () => {
+    const disabledRuntime = runtimeProfilesConfig();
+    const profiles = disabledRuntime.profiles as Record<string, Record<string, unknown>>;
+    profiles.host = {
+      ...profiles.host,
+      memory: {
+        enabled: false,
+      },
+    };
+
+    const resolved = resolveConfig([repoLayer()], undefined, undefined, {
+      runtimeProfilesConfig: disabledRuntime,
+      runtimeProfilesPath,
+      runtimeEnv: {},
+    });
+    const workbench = buildResolvedRuntimeProfileProjection(resolved.runtimeState, "workbench-host");
+    const host = buildResolvedRuntimeProfileProjection(resolved.runtimeState, "host");
+
+    expect(workbench.fragments.startup.surfaces?.web.steps.map((step) => step.name)).toEqual([
+      "daemon",
+      "web",
+    ]);
+    expect(workbench.fragments.startup.surfaces?.web.steps.at(-1)).toMatchObject({
+      name: "web",
+      kind: "presentation",
+      waitFor: ["daemon:browser-gateway"],
+      readiness: ["presentation:web"],
+    });
+    expect(workbench.fragments.startup.surfaces?.desktop.steps.map((step) => step.name)).toEqual([
+      "daemon",
+      "desktop-renderer",
+      "desktop-shell",
+    ]);
+    expect(workbench.fragments.startup.surfaces?.desktop.steps.at(-1)).toMatchObject({
+      name: "desktop-shell",
+      waitFor: ["daemon:browser-gateway"],
+      readiness: ["presentation:desktop"],
+    });
+    expect(host.fragments.memoryStack).toMatchObject({
+      enabled: false,
+      services: [],
+      env: [],
+    });
+    expect(host.fragments.startup.memory).toEqual({
+      enabled: false,
+      services: [],
+      compose: undefined,
+      env: [],
     });
   });
 

@@ -644,7 +644,7 @@ function runtimeComposeReadiness(composeArgs, composeServiceNames) {
   };
 }
 
-const SENSITIVE_ENV_NAME = /(?:PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE|CREDENTIAL|(?:^|_)TOKEN(?:_|$))/iu;
+const SENSITIVE_ENV_NAME = /(?:PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE|CREDENTIAL|ROOT_USER|(?:^|_)TOKEN(?:_|$))/iu;
 
 function sanitizedPlanEnvValue(name, value) {
   if (typeof value !== "string" || value.length === 0) return undefined;
@@ -704,6 +704,7 @@ function memoryStackServicePlan(config, profile, serviceName) {
 
 export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const enabled = isRecord(profile.memory) && profile.memory.enabled !== false;
   const serviceNames = memoryStackServiceNames(profile);
   const composeArgs = renderComposeArgs(profile);
   const composeServiceNames = uniqueStrings(
@@ -716,13 +717,13 @@ export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options 
     profile: profile.name,
     mode: profile.mode,
     source: "runtime-profile.memory",
-    enabled: isRecord(profile.memory) && profile.memory.enabled !== false,
+    enabled,
     services: serviceNames.map((serviceName) => memoryStackServicePlan(config, profile, serviceName)),
     compose,
     checks: serviceNames.map((serviceName) =>
       serviceReadinessCheck(config, profile, serviceName, composeEnabled),
     ),
-    env: memoryStackEnvBindings(profile, serviceNames),
+    env: enabled ? memoryStackEnvBindings(profile, serviceNames) : [],
   };
 }
 
@@ -742,6 +743,244 @@ export function buildMcpConfigPlan(profile = resolveRuntimeProfile(), options = 
     serverRefs,
     servers,
     config: renderMcpConfig(profile, options),
+  };
+}
+
+export function buildRuntimeEnvPlan(profile = resolveRuntimeProfile()) {
+  const env = renderRuntimeEnv(profile);
+  const values = {};
+  const variables = Object.keys(env).sort().map((name) => {
+    const value = sanitizedPlanEnvValue(name, env[name]);
+    if (value !== undefined) values[name] = value;
+    return {
+      name,
+      generated: true,
+      ...(value !== undefined ? { value } : {}),
+    };
+  });
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.env",
+    envFiles: Array.isArray(profile.envFiles) ? profile.envFiles : [],
+    variables,
+    values,
+  };
+}
+
+function pnpmCommand() {
+  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+}
+
+function pnpmStartupStep(name, packageName, script, env, mode = "foreground", includeExecutionEnv = false) {
+  return {
+    name,
+    mode,
+    command: pnpmCommand(),
+    args: ["--filter", packageName, script],
+    ...(includeExecutionEnv ? { env } : {}),
+  };
+}
+
+function runtimeWorkbenchSurfaces(profile) {
+  return profile.workbench?.surfaces ?? {};
+}
+
+function resolveRuntimeSurface(profile, requestedSurface) {
+  const surfaces = runtimeWorkbenchSurfaces(profile);
+  const surface = requestedSurface ?? profile.workbench?.defaultSurface;
+  if (!surface) {
+    const available = Object.keys(surfaces).sort().join(", ");
+    throw new Error(`Workbench profile "${profile.name}" has no default surface. Available: ${available}`);
+  }
+  if (!Array.isArray(surfaces[surface])) {
+    const available = Object.keys(surfaces).sort().join(", ");
+    throw new Error(`Unknown workbench surface "${surface}". Available surfaces: ${available}`);
+  }
+  return { name: surface, steps: surfaces[surface] };
+}
+
+export function normalizeRuntimeWaitFor(waitFor, stepName, options = {}) {
+  if (waitFor === undefined) return [];
+  if (!Array.isArray(waitFor)) {
+    throw new Error(`Workbench step "${stepName}" waitFor must be an array`);
+  }
+  const checks = [];
+  for (const item of waitFor) {
+    if (typeof item === "string") {
+      if (item.length > 0) checks.push(item);
+      continue;
+    }
+    if (isRecord(item)) {
+      if (item.skipWhen && options[item.skipWhen]) continue;
+      if (typeof item.check !== "string" || item.check.length === 0) {
+        throw new Error(`Workbench step "${stepName}" waitFor entry requires a check name`);
+      }
+      checks.push(item.check);
+      continue;
+    }
+    throw new Error(`Workbench step "${stepName}" waitFor entries must be strings or check records`);
+  }
+  return uniqueRuntimeReadinessCheckNames(checks);
+}
+
+function resolveRuntimePackageStep(profile, step, env, options) {
+  const packageKey = step.package;
+  const spec = profile.workbench?.packages?.[packageKey];
+  if (!spec?.package || !spec?.script) {
+    throw new Error(`Workbench package step "${packageKey}" is not defined in profile "${profile.name}"`);
+  }
+  const rendered = pnpmStartupStep(
+    step.name ?? packageKey,
+    spec.package,
+    spec.script,
+    env,
+    step.mode ?? "foreground",
+    options.includeExecutionEnv === true,
+  );
+  const waitFor = normalizeRuntimeWaitFor(step.waitFor, step.name ?? packageKey, options);
+  return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
+}
+
+function renderRuntimeStartupStep(profile, step, env, options) {
+  if (step.skipWhen && options[step.skipWhen]) return undefined;
+  if (step.package) return resolveRuntimePackageStep(profile, step, env, options);
+  if (step.command) {
+    const stepEnv = isRecord(step.env) ? step.env : {};
+    const rendered = {
+      name: step.name ?? step.command,
+      mode: step.mode ?? "foreground",
+      command: step.command,
+      args: Array.isArray(step.args) ? step.args : [],
+      ...(options.includeExecutionEnv === true
+        ? { env: { ...env, ...stepEnv } }
+        : Object.keys(stepEnv).length > 0
+          ? {
+              env: Object.fromEntries(
+                Object.entries(stepEnv).map(([name, value]) => [
+                  name,
+                  sanitizedPlanEnvValue(name, String(value)) ?? String(value),
+                ]),
+              ),
+            }
+          : {}),
+    };
+    const waitFor = normalizeRuntimeWaitFor(step.waitFor, step.name ?? step.command, options);
+    return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
+  }
+  throw new Error(`Invalid workbench step in profile "${profile.name}"`);
+}
+
+export function buildRuntimeSurfaceStartupPlan(profile = resolveRuntimeProfile(), surface, options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const env = renderRuntimeEnv(profile);
+  const composeArgs = renderComposeArgs(profile);
+  const infraServices = Array.isArray(profile.workbench?.infraServices)
+    ? profile.workbench.infraServices
+    : [];
+  const selectedSurface = resolveRuntimeSurface(profile, surface);
+  const readiness = buildRuntimeReadinessPlan(profile, {
+    ...options,
+    config,
+    services: options.skipInfra ? [] : infraServices,
+  });
+  const steps = [];
+
+  if (!options.skipInfra && composeArgs.length > 0 && infraServices.length > 0) {
+    steps.push({
+      name: "infra",
+      mode: "run",
+      command: "docker",
+      args: ["compose", ...composeArgs, "up", "-d", "--wait", ...infraServices],
+      ...(options.includeExecutionEnv === true ? { env } : {}),
+    });
+  }
+
+  for (const step of selectedSurface.steps) {
+    const rendered = renderRuntimeStartupStep(profile, step, env, options);
+    if (rendered) steps.push(rendered);
+  }
+
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.startup.surface",
+    surface: selectedSurface.name,
+    ...(options.includeExecutionEnv === true ? { env } : {}),
+    readiness,
+    steps,
+  };
+}
+
+function buildRuntimeSurfaceStartupPlans(profile, options = {}) {
+  const surfaces = runtimeWorkbenchSurfaces(profile);
+  return Object.fromEntries(
+    Object.keys(surfaces).sort().map((surface) => [
+      surface,
+      buildRuntimeSurfaceStartupPlan(profile, surface, {
+        ...options,
+        includeExecutionEnv: false,
+      }),
+    ]),
+  );
+}
+
+function buildContainerStartupPlan(profile, options = {}) {
+  const startup = profile.containerStartup;
+  if (!isRecord(startup)) return undefined;
+  const config = runtimeConfigForProfile(profile, options);
+  const runtimeServices = Array.isArray(startup.runtimeServices)
+    ? uniqueStrings(startup.runtimeServices)
+    : [];
+  const composeServiceNames = uniqueStrings(
+    runtimeServices.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
+  );
+  return {
+    kind: "container",
+    runtimeImage: startup.runtimeImage,
+    buildService: startup.buildService,
+    runService: startup.runService,
+    runtimeServices,
+    defaultCommand: Array.isArray(startup.defaultCommand) ? startup.defaultCommand : [],
+    interactiveCommands: Array.isArray(startup.interactiveCommands) ? startup.interactiveCommands : [],
+    runOptions: Array.isArray(startup.runOptions) ? startup.runOptions : [],
+    compose: runtimeComposeReadiness(renderComposeArgs(profile), composeServiceNames),
+  };
+}
+
+export function buildRuntimeStartupPlan(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const env = options.envPlan ?? buildRuntimeEnvPlan(profile);
+  const readiness = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config });
+  const mcpConfig = options.mcpConfigPlan ?? buildMcpConfigPlan(profile, { ...options, config });
+  const memoryStack = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config });
+  const container = buildContainerStartupPlan(profile, { ...options, config });
+  const surfaces = buildRuntimeSurfaceStartupPlans(profile, { ...options, config });
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "runtime-profile.startup",
+    env,
+    compose: readiness.compose,
+    readiness: {
+      checks: (readiness.checks ?? []).map((check) => check.name),
+    },
+    mcp: {
+      roots: mcpConfig.roots,
+      serverRefs: mcpConfig.serverRefs,
+      servers: mcpConfig.servers,
+    },
+    memory: {
+      enabled: memoryStack.enabled !== false,
+      services: (memoryStack.services ?? []).map((service) => service.name),
+      compose: memoryStack.compose,
+      env: (memoryStack.env ?? []).map((entry) => entry.name),
+    },
+    ...(container ? { container } : {}),
+    ...(Object.keys(surfaces).length > 0 ? { surfaces } : {}),
   };
 }
 
@@ -857,9 +1096,18 @@ export function buildRuntimeMcpProjection(mcpConfigPlan) {
 
 export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
+  const env = buildRuntimeEnvPlan(profile);
   const readiness = buildRuntimeReadinessPlan(profile, { ...options, config });
   const mcpConfig = buildMcpConfigPlan(profile, { ...options, config });
   const memoryStack = buildMemoryStackPlan(profile, { ...options, config });
+  const startup = buildRuntimeStartupPlan(profile, {
+    ...options,
+    config,
+    envPlan: env,
+    readinessPlan: readiness,
+    mcpConfigPlan: mcpConfig,
+    memoryStackPlan: memoryStack,
+  });
   return {
     schemaVersion: 1,
     profile: profile.name,
@@ -872,9 +1120,11 @@ export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(),
     }),
     mcp: buildRuntimeMcpProjection(mcpConfig),
     fragments: {
+      env,
       readiness,
       mcpConfig,
       memoryStack,
+      startup,
     },
   };
 }

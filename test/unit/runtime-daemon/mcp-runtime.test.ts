@@ -58,6 +58,9 @@ function fakeManager(
     transport?: McpTransport;
     auth?: McpAuth;
     trust?: McpServerConfig["trust"];
+    tools?: Array<Record<string, unknown>>;
+    listError?: Error;
+    callError?: Error;
   } = {},
 ): {
   manager: McpClientManager;
@@ -76,7 +79,30 @@ function fakeManager(
     auth: options.auth ?? { mode: "none" },
     trust: options.trust ?? "untrusted",
   };
-  const request = vi.fn(async () => rawResult);
+  const defaultTools = [
+    {
+      name: "read_file",
+      description: "Read file content",
+      inputSchema: { type: "object", properties: { path: { type: "string" } } },
+    },
+  ];
+  const listResult =
+    typeof rawResult === "object" &&
+    rawResult !== null &&
+    Array.isArray((rawResult as { tools?: unknown }).tools)
+      ? rawResult
+      : { tools: options.tools ?? defaultTools };
+  const request = vi.fn(async (_name: string, method: string) => {
+    if (method === "tools/list") {
+      if (options.listError) throw options.listError;
+      return listResult;
+    }
+    if (method === "tools/call") {
+      if (options.callError) throw options.callError;
+      return rawResult;
+    }
+    return rawResult;
+  });
   const getConfig = vi.fn((name: string) => (name === serverName ? config : undefined));
   const registerServer = vi.fn();
   const registerMany = vi.fn();
@@ -226,6 +252,229 @@ describe("DaemonMcpRuntime", () => {
           reasonCodes: ["baseline_read_workspace"],
           approvalRequired: false,
           traceId: "trace-1",
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes unknown MCP servers without starting dependencies", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-unknown-server-"));
+    const manager = fakeManager({ content: [] });
+    const pep = fakePep(decision("allow"));
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: pep,
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "missing-server",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        traceId: "trace-unknown-server",
+      });
+
+      expect(pep.enforce).not.toHaveBeenCalled();
+      expect(manager.startServer).not.toHaveBeenCalled();
+      expect(manager.request).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        server: "missing-server",
+        tool: "read_file",
+        success: false,
+        isError: true,
+        error: "Unknown MCP server: missing-server",
+        structuredContent: {
+          error: {
+            type: "server_not_found",
+            jsonrpc: {
+              code: -32602,
+              message: "Unknown MCP server: missing-server",
+              data: { server: "missing-server" },
+            },
+          },
+        },
+        policy: {
+          effect: "deny",
+          reasonCodes: ["mcp_server_not_found"],
+          approvalRequired: false,
+          traceId: "trace-unknown-server",
+        },
+        otel: {
+          status: "ERROR",
+          attributes: {
+            "error.type": "server_not_found",
+            "rpc.response.status_code": "-32602",
+          },
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves tools before execution and returns JSON-RPC-style errors for unknown tools", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-unknown-tool-"));
+    const manager = fakeManager({ content: [] }, {
+      tools: [
+        {
+          name: "read_file",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+        },
+      ],
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "write_file",
+        arguments: { path: "README.md", content: "x" },
+      });
+
+      expect(manager.startServer).toHaveBeenCalledWith("filesystem-core");
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {});
+      expect(manager.request.mock.calls.some(([, method]) => method === "tools/call")).toBe(false);
+      expect(result).toMatchObject({
+        server: "filesystem-core",
+        tool: "write_file",
+        success: false,
+        isError: true,
+        error: "Unknown MCP tool: filesystem-core:write_file",
+        structuredContent: {
+          error: {
+            type: "tool_not_found",
+            jsonrpc: {
+              code: -32602,
+              message: "Unknown MCP tool: filesystem-core:write_file",
+              data: { server: "filesystem-core", tool: "write_file" },
+            },
+          },
+        },
+        policy: {
+          effect: "allow",
+          reasonCodes: ["baseline_read_workspace"],
+        },
+        otel: {
+          status: "ERROR",
+          attributes: {
+            "error.type": "tool_not_found",
+            "rpc.response.status_code": "-32602",
+          },
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("normalizes MCP adapter execution errors after tool resolution", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-adapter-error-"));
+    const manager = fakeManager({ content: [] }, {
+      callError: new Error("adapter exploded"),
+      tools: [{ name: "read_file", inputSchema: { type: "object" } }],
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+      });
+
+      expect(manager.request.mock.calls.map(([, method]) => method)).toEqual([
+        "tools/list",
+        "tools/call",
+      ]);
+      expect(result).toMatchObject({
+        server: "filesystem-core",
+        tool: "read_file",
+        success: false,
+        isError: true,
+        error: "adapter exploded",
+        structuredContent: {
+          error: {
+            type: "adapter_error",
+            jsonrpc: {
+              code: -32603,
+              message: "adapter exploded",
+            },
+          },
+        },
+        otel: {
+          status: "ERROR",
+          attributes: {
+            "error.type": "adapter_error",
+            "rpc.response.status_code": "-32603",
+          },
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("rejects non-object tools/call arguments at the runtime bridge boundary", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-bad-args-"));
+    const manager = fakeManager({ content: [] });
+    const pep = fakePep(decision("allow"));
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: pep,
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: ["README.md"] as unknown as Record<string, unknown>,
+      });
+
+      expect(pep.enforce).not.toHaveBeenCalled();
+      expect(manager.startServer).not.toHaveBeenCalled();
+      expect(manager.request).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        server: "filesystem-core",
+        tool: "read_file",
+        success: false,
+        isError: true,
+        error: "MCP tools/call arguments must be a JSON object",
+        structuredContent: {
+          error: {
+            type: "invalid_params",
+            jsonrpc: {
+              code: -32602,
+              message: "MCP tools/call arguments must be a JSON object",
+              data: { server: "filesystem-core", tool: "read_file" },
+            },
+          },
+        },
+        policy: {
+          effect: "deny",
+          reasonCodes: ["mcp_invalid_params"],
+        },
+        otel: {
+          status: "ERROR",
+          attributes: {
+            "error.type": "invalid_params",
+            "rpc.response.status_code": "-32602",
+          },
         },
       });
     } finally {
@@ -544,6 +793,7 @@ describe("DaemonMcpRuntime", () => {
         transport: { kind: "http", url: "https://mcp.example.test" },
         auth: { mode: "bearer", clientSecretEnv: "DOCS_MCP_TOKEN" },
         trust: "user-approved",
+        tools: [{ name: "search", inputSchema: { type: "object" } }],
       },
     );
     const pep = fakePep(decision("allow"));

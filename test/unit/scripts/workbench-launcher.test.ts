@@ -16,6 +16,7 @@ import {
   WorkbenchProcessSupervisor,
 } from "../../../scripts/kirakira-workbench.mjs";
 import {
+  buildRuntimeSurfaceStartupPlan,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderRuntimeEnv,
@@ -27,9 +28,14 @@ describe("workbench launcher plan", () => {
     const config = loadRuntimeProfiles();
     const profile = resolveRuntimeProfile("workbench-host", config, {});
     const plan = buildWorkbenchPlan(profile, "web");
+    const sharedPlan = buildRuntimeSurfaceStartupPlan(profile, "web", {
+      includeExecutionEnv: true,
+    });
     const expectedInfraServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
 
+    expect(plan).toEqual(sharedPlan);
     expect(plan.profile).toBe("workbench-host");
+    expect(plan.source).toBe("runtime-profile.startup.surface");
     expect(plan.steps.map((step) => step.name)).toEqual(["infra", "daemon", "web"]);
     expect(plan.steps[0]).toMatchObject({
       command: "docker",

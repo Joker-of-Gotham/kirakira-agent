@@ -12,26 +12,43 @@ import type {
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
+import {
+  KIRAKIRA_PRELOAD_API_KEY,
+  RUNTIME_IPC_CHANNELS,
+} from "./preload-contract.js";
 
 type EventCallback = (event: RuntimeTransportEvent) => void;
 
 const nextSubscriptionId = () =>
   globalThis.crypto?.randomUUID?.() ?? `subscription-${Date.now()}-${Math.random()}`;
 
-contextBridge.exposeInMainWorld("kirakiraRuntime", {
-  connect: () => ipcRenderer.invoke("runtime:connect") as Promise<void>,
-  disconnect: () => ipcRenderer.invoke("runtime:disconnect") as Promise<void>,
-  getStatus: () => ipcRenderer.invoke("runtime:getStatus") as Promise<RuntimeTransportStatus>,
+contextBridge.exposeInMainWorld(KIRAKIRA_PRELOAD_API_KEY, {
+  connect: () => ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.connect) as Promise<void>,
+  disconnect: () => ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.disconnect) as Promise<void>,
+  getStatus: () =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.getStatus) as Promise<RuntimeTransportStatus>,
   submitPrompt: (request: SubmitPromptRequest) =>
-    ipcRenderer.invoke("runtime:submitPrompt", request) as Promise<{ runId: string }>,
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.submitPrompt, request) as Promise<{ runId: string }>,
   getState: (runId: string) =>
-    ipcRenderer.invoke("runtime:getState", runId) as Promise<{ runId: string; state: unknown }>,
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.getState, runId) as Promise<{
+      runId: string;
+      state: unknown;
+    }>,
   getArtifactContent: (request: RuntimeArtifactContentRequest) =>
-    ipcRenderer.invoke("runtime:getArtifactContent", request) as Promise<RuntimeArtifactContent>,
+    ipcRenderer.invoke(
+      RUNTIME_IPC_CHANNELS.getArtifactContent,
+      request,
+    ) as Promise<RuntimeArtifactContent>,
   listMcpTools: (request?: RuntimeMcpListRequest) =>
-    ipcRenderer.invoke("runtime:listMcpTools", request ?? {}) as Promise<RuntimeMcpListResult>,
+    ipcRenderer.invoke(
+      RUNTIME_IPC_CHANNELS.listMcpTools,
+      request ?? {},
+    ) as Promise<RuntimeMcpListResult>,
   callMcpTool: (request: RuntimeMcpToolCallRequest) =>
-    ipcRenderer.invoke("runtime:callMcpTool", request) as Promise<RuntimeMcpToolCallResult>,
+    ipcRenderer.invoke(
+      RUNTIME_IPC_CHANNELS.callMcpTool,
+      request,
+    ) as Promise<RuntimeMcpToolCallResult>,
   subscribeRun: (
     runId: string,
     options: SubscribeRunOptions | undefined,
@@ -43,15 +60,19 @@ contextBridge.exposeInMainWorld("kirakiraRuntime", {
       callback(payload);
     };
     ipcRenderer.on(channel, listener);
-    void ipcRenderer.invoke("runtime:subscribeRun", { runId, options, subscriptionId });
+    void ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.subscribeRun, {
+      runId,
+      options,
+      subscriptionId,
+    });
     return () => {
       ipcRenderer.removeListener(channel, listener);
-      void ipcRenderer.invoke("runtime:unsubscribeRun", { subscriptionId });
+      void ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.unsubscribeRun, { subscriptionId });
     };
   },
   approve: (decision: ApprovalDecision) =>
-    ipcRenderer.invoke("runtime:approve", decision) as Promise<void>,
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.approve, decision) as Promise<void>,
   cancel: (runId: string, reason?: string) =>
-    ipcRenderer.invoke("runtime:cancel", { runId, reason }) as Promise<void>,
-  drain: () => ipcRenderer.invoke("runtime:drain") as Promise<void>,
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.cancel, { runId, reason }) as Promise<void>,
+  drain: () => ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.drain) as Promise<void>,
 });

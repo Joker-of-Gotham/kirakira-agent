@@ -2,11 +2,13 @@ import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  buildRuntimeEnvPlan,
   buildMcpConfigPlan,
   buildMemoryStackPlan,
   buildRuntimeProfileProjection,
   buildRuntimeReadinessPlan,
   buildRuntimeServiceProjection,
+  buildRuntimeStartupPlan,
   expandMcpServerRefs,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
@@ -141,6 +143,14 @@ describe("runtime profile rendering", () => {
     expect(projection.fragments.mcpConfig.config).toEqual(renderMcpConfig(profile));
     expect(projection.fragments.memoryStack).toEqual(buildMemoryStackPlan(profile, { config }));
     expect(projection.fragments.readiness).toEqual(buildRuntimeReadinessPlan(profile, { config }));
+    expect(projection.fragments.env).toEqual(buildRuntimeEnvPlan(profile));
+    expect(projection.fragments.startup).toEqual(buildRuntimeStartupPlan(profile, {
+      config,
+      envPlan: projection.fragments.env,
+      readinessPlan: projection.fragments.readiness,
+      mcpConfigPlan: projection.fragments.mcpConfig,
+      memoryStackPlan: projection.fragments.memoryStack,
+    }));
     expect(projection.services).toEqual(buildRuntimeServiceProjection(profile, { config }));
     expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
       composeService: "postgres",
@@ -194,10 +204,59 @@ describe("runtime profile rendering", () => {
       .toEqual(memoryServices);
     expect(projection.fragments.memoryStack.checks.map((check) => check.service))
       .toEqual(memoryServices);
+    expect(projection.fragments.startup.container).toMatchObject({
+      kind: "container",
+      runtimeServices: expandRuntimeServiceRefs(["@runtime-stack"], config),
+      compose: {
+        args: [
+          "compose",
+          "-f",
+          "docker-compose.yml",
+          "--profile",
+          "cli",
+          "up",
+          "-d",
+          "--wait",
+          ...expandRuntimeServiceRefs(["@runtime-stack"], config),
+        ],
+      },
+    });
+    expect(projection.fragments.startup.memory).toMatchObject({
+      enabled: true,
+      services: memoryServices,
+      env: expect.arrayContaining(["DATABASE_URL", "QDRANT_URL", "S3_ENDPOINT"]),
+    });
+    expect(projection.fragments.env.values.DATABASE_URL).toBe("postgres://postgres:5432/kirakira");
     expect(JSON.stringify(projection)).not.toContain(".mcp.json");
     expect(JSON.stringify(projection)).not.toContain("kirakira:kirakira");
     expect(JSON.stringify(projection)).not.toContain("testpassword");
     expect(JSON.stringify(projection)).not.toContain("minioadmin");
+  });
+
+  it("keeps memory-disabled profiles out of memory startup services", () => {
+    const config = JSON.parse(JSON.stringify(loadRuntimeProfiles()));
+    config.profiles.host = {
+      ...config.profiles.host,
+      memory: {
+        enabled: false,
+      },
+    };
+    const profile = resolveRuntimeProfile("host", config, {});
+    const projection = buildRuntimeProfileProjection(profile, { config });
+
+    expect(projection.fragments.memoryStack).toMatchObject({
+      enabled: false,
+      services: [],
+      checks: [],
+      compose: undefined,
+      env: [],
+    });
+    expect(projection.fragments.startup.memory).toEqual({
+      enabled: false,
+      services: [],
+      compose: undefined,
+      env: [],
+    });
   });
 
   it("renders host memory-stack projection as external checks without compose ownership", () => {
@@ -516,6 +575,27 @@ describe("runtime profile rendering", () => {
         }),
       }),
     );
+    const projection = buildRuntimeProfileProjection(profile, { config });
+    expect(projection.fragments.startup.surfaces.web.steps.map((step) => step.name)).toEqual([
+      "infra",
+      "daemon",
+      "web",
+    ]);
+    expect(projection.fragments.startup.surfaces.web.steps.at(-1)).toMatchObject({
+      name: "web",
+      waitFor: ["daemon:browser-gateway"],
+    });
+    expect(projection.fragments.startup.surfaces.desktop.steps.map((step) => step.name)).toEqual([
+      "infra",
+      "daemon",
+      "desktop-renderer",
+      "desktop-shell",
+    ]);
+    expect(projection.fragments.startup.surfaces.desktop.steps.at(-1)).toMatchObject({
+      name: "desktop-shell",
+      waitFor: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+    });
+    expect(projection.fragments.startup.surfaces.web.steps[0].env).toBeUndefined();
     expect(JSON.stringify(readiness)).not.toContain("5173");
     expect(JSON.stringify(readiness)).not.toContain("system_preamble");
   });

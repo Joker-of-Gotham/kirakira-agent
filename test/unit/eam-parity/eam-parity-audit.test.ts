@@ -1,5 +1,5 @@
 import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtempSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -136,6 +136,128 @@ describe("EAM parity audit", () => {
     expect(markdown).toContain("1 missing");
     expect(markdown).toContain("src/retain.ts");
   });
+
+  it("normalizes package-specific Python namespaces and docs-plane filenames", () => {
+    const root = mkdtempSync(join(tmpdir(), "kirakira-parity-"));
+    const reference = join(root, "reference");
+    const workspace = join(root, "workspace");
+
+    createPackage(reference, "memory-pipeline");
+    createPackage(workspace, "memory-pipeline");
+    writeFile(
+      reference,
+      "packages/memory-pipeline/src/eam_memory_pipeline/config.py",
+      "MEMORY = True\n",
+    );
+    writeFile(
+      workspace,
+      "packages/memory-pipeline/src/kirakira_memory_pipeline/config.py",
+      "MEMORY = True\n",
+    );
+    writeFile(
+      workspace,
+      "packages/memory-pipeline/src/kirakira_memory_pipeline/__pycache__/config.cpython-314.pyc",
+      "cache",
+    );
+
+    createPackage(reference, "model-gateway");
+    createPackage(workspace, "model-gateway");
+    writeFile(
+      reference,
+      "packages/model-gateway/src/eam_model_gateway/client.py",
+      "MODEL = True\n",
+    );
+    writeFile(
+      workspace,
+      "packages/model-gateway/src/kirakira_model_gateway/client.py",
+      "MODEL = True\n",
+    );
+
+    createDocsPlane(reference, "eam-agent-tracing");
+    createDocsPlane(workspace, "kirakira-agent-tracing");
+    writeFile(
+      reference,
+      "docs/plane/eam-agent-tracing/02-span-taxonomy/eam-custom-attributes.md",
+      "# EAM attributes\n",
+    );
+    writeFile(
+      workspace,
+      "docs/plane/kirakira-agent-tracing/02-span-taxonomy/kirakira-custom-attributes.md",
+      "# Kirakira attributes\n",
+    );
+
+    const normalizedAudit = buildEamParityAudit({
+      referenceRoot: reference,
+      workspaceRoot: workspace,
+      depth: "files",
+    });
+    const rawPathAudit = buildEamParityAudit({
+      referenceRoot: reference,
+      workspaceRoot: workspace,
+      depth: "files",
+      filePathRenameRules: [],
+    });
+
+    expect(rawPathAudit.summary.drift).toBe(3);
+    expect(normalizedAudit.summary.drift).toBe(0);
+    expect(normalizedAudit.summary).toMatchObject({
+      exact: 2,
+      equivalent: 1,
+      missing: 0,
+    });
+    expect(
+      normalizedAudit.sections[0].rows.find(
+        (row) => row.sourceName === "memory-pipeline",
+      ),
+    ).toMatchObject({
+      status: "exact",
+      fileAudit: {
+        missing: 0,
+        extra: 0,
+        renamed: 1,
+      },
+    });
+  });
+
+  it("keeps truly missing normalized files as drift", () => {
+    const root = mkdtempSync(join(tmpdir(), "kirakira-parity-"));
+    const reference = join(root, "reference");
+    const workspace = join(root, "workspace");
+
+    createPackage(reference, "memory-pipeline");
+    createPackage(workspace, "memory-pipeline");
+    writeFile(
+      reference,
+      "packages/memory-pipeline/src/eam_memory_pipeline/config.py",
+      "MEMORY = True\n",
+    );
+    mkdirSync(
+      join(workspace, "packages", "memory-pipeline", "src", "kirakira_memory_pipeline"),
+      { recursive: true },
+    );
+    mkdirSync(join(reference, "docs", "plane"), { recursive: true });
+    mkdirSync(join(workspace, "docs", "plane"), { recursive: true });
+
+    const audit = buildEamParityAudit({
+      referenceRoot: reference,
+      workspaceRoot: workspace,
+      depth: "files",
+    });
+    const packageRow = audit.sections[0].rows.find(
+      (row) => row.sourceName === "memory-pipeline",
+    );
+
+    expect(audit.summary.drift).toBe(1);
+    expect(packageRow).toMatchObject({
+      status: "drift",
+      fileAudit: {
+        missing: 1,
+        missingSamples: [
+          "src/eam_memory_pipeline/config.py -> src/kirakira_memory_pipeline/config.py",
+        ],
+      },
+    });
+  });
 });
 
 function createPackage(root: string, name: string): void {
@@ -148,4 +270,10 @@ function createDocsPlane(root: string, name: string): void {
   const docsRoot = join(root, "docs", "plane", name);
   mkdirSync(docsRoot, { recursive: true });
   writeFileSync(join(docsRoot, "README.md"), `# ${name}\n`, "utf8");
+}
+
+function writeFile(root: string, relativePath: string, content: string): void {
+  const fullPath = join(root, relativePath);
+  mkdirSync(dirname(fullPath), { recursive: true });
+  writeFileSync(fullPath, content, "utf8");
 }

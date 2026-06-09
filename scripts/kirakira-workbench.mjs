@@ -7,10 +7,9 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
 import { evaluateRuntimeReadinessPlan } from "./runtime-doctor.mjs";
 import {
-  buildRuntimeReadinessPlan,
+  buildRuntimeSurfaceStartupPlan,
   loadRuntimeProfiles,
-  renderComposeArgs,
-  renderRuntimeEnv,
+  normalizeRuntimeWaitFor,
   runtimeSurfaceReadinessCheckNames,
   selectRuntimeReadinessPlan,
   runtimeProfileEnv,
@@ -37,10 +36,6 @@ const DEFAULT_SMOKE_STEP_OVERRIDES = [
 ];
 
 export const readinessPlanForCheckNames = selectRuntimeReadinessPlan;
-
-function pnpmCommand() {
-  return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-}
 
 function normalizeArgs(argv) {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
@@ -142,118 +137,15 @@ export function profileFromOptions(options, env = process.env) {
   }));
 }
 
-function pnpmStep(name, packageName, script, env, mode = "foreground") {
-  return {
-    name,
-    mode,
-    command: pnpmCommand(),
-    args: ["--filter", packageName, script],
-    env,
-  };
-}
-
-function workbenchSurfaces(profile) {
-  return profile.workbench?.surfaces ?? {};
-}
-
-function resolveSurface(profile, requestedSurface) {
-  const surfaces = workbenchSurfaces(profile);
-  const surface = requestedSurface ?? profile.workbench?.defaultSurface;
-  if (!surface) {
-    const available = Object.keys(surfaces).sort().join(", ");
-    throw new Error(`Workbench profile "${profile.name}" has no default surface. Available: ${available}`);
-  }
-  if (!Array.isArray(surfaces[surface])) {
-    const available = Object.keys(surfaces).sort().join(", ");
-    throw new Error(`Unknown workbench surface "${surface}". Available surfaces: ${available}`);
-  }
-  return { name: surface, steps: surfaces[surface] };
-}
-
-function resolvePackageStep(profile, step, env, options) {
-  const packageKey = step.package;
-  const spec = profile.workbench?.packages?.[packageKey];
-  if (!spec?.package || !spec?.script) {
-    throw new Error(`Workbench package step "${packageKey}" is not defined in profile "${profile.name}"`);
-  }
-  const rendered = pnpmStep(step.name ?? packageKey, spec.package, spec.script, env, step.mode ?? "foreground");
-  const waitFor = normalizeWaitFor(step.waitFor, step.name ?? packageKey, options);
-  return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
-}
-
-function renderWorkbenchStep(profile, step, env, options) {
-  if (step.skipWhen && options[step.skipWhen]) return undefined;
-  if (step.package) return resolvePackageStep(profile, step, env, options);
-  if (step.command) {
-    const rendered = {
-      name: step.name ?? step.command,
-      mode: step.mode ?? "foreground",
-      command: step.command,
-      args: Array.isArray(step.args) ? step.args : [],
-      env: { ...env, ...(step.env ?? {}) },
-    };
-    const waitFor = normalizeWaitFor(step.waitFor, step.name ?? step.command, options);
-    return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
-  }
-  throw new Error(`Invalid workbench step in profile "${profile.name}"`);
-}
-
 function normalizeWaitFor(waitFor, stepName, options = {}) {
-  if (waitFor === undefined) return [];
-  if (!Array.isArray(waitFor)) {
-    throw new Error(`Workbench step "${stepName}" waitFor must be an array`);
-  }
-  const checks = [];
-  for (const item of waitFor) {
-    if (typeof item === "string") {
-      if (item.length > 0) checks.push(item);
-      continue;
-    }
-    if (item && typeof item === "object" && !Array.isArray(item)) {
-      if (item.skipWhen && options[item.skipWhen]) continue;
-      if (typeof item.check !== "string" || item.check.length === 0) {
-        throw new Error(`Workbench step "${stepName}" waitFor entry requires a check name`);
-      }
-      checks.push(item.check);
-      continue;
-    }
-    throw new Error(`Workbench step "${stepName}" waitFor entries must be strings or check records`);
-  }
-  return [...new Set(checks)];
+  return normalizeRuntimeWaitFor(waitFor, stepName, options);
 }
 
 export function buildWorkbenchPlan(profile, surface, options = {}) {
-  const env = renderRuntimeEnv(profile);
-  const steps = [];
-  const composeArgs = renderComposeArgs(profile);
-  const infraServices = profile.workbench?.infraServices ?? [];
-  const selectedSurface = resolveSurface(profile, surface);
-  const readiness = buildRuntimeReadinessPlan(profile, {
-    services: options.skipInfra ? [] : infraServices,
+  return buildRuntimeSurfaceStartupPlan(profile, surface, {
+    ...options,
+    includeExecutionEnv: true,
   });
-
-  if (!options.skipInfra && composeArgs.length > 0 && infraServices.length > 0) {
-    steps.push({
-      name: "infra",
-      mode: "run",
-      command: "docker",
-      args: ["compose", ...composeArgs, "up", "-d", "--wait", ...infraServices],
-      env,
-    });
-  }
-
-  for (const step of selectedSurface.steps) {
-    const rendered = renderWorkbenchStep(profile, step, env, options);
-    if (rendered) steps.push(rendered);
-  }
-
-  return {
-    profile: profile.name,
-    surface: selectedSurface.name,
-    env,
-    readiness,
-    steps,
-  };
 }
 
 function derivedSmokeChecks(plan) {

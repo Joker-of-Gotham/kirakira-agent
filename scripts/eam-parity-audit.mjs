@@ -13,15 +13,56 @@ const DEFAULT_PREFIX_ALIASES = {
   "eam-agent": "kirakira-agent",
 };
 
+const DEFAULT_FILE_PATH_RENAME_RULES = [
+  {
+    kind: "package",
+    sourceName: "eamd",
+    description: "daemon command package follows the eamd to kirakirad rename",
+    replacements: [{ match: "segment", from: "eamd", to: "kirakirad" }],
+  },
+  {
+    kind: "package",
+    sourceName: "memory-pipeline",
+    description: "Python import root follows the EAM to Kirakira package rename",
+    replacements: [
+      {
+        match: "segment",
+        from: "eam_memory_pipeline",
+        to: "kirakira_memory_pipeline",
+      },
+    ],
+  },
+  {
+    kind: "package",
+    sourceName: "model-gateway",
+    description: "Python import root follows the EAM to Kirakira package rename",
+    replacements: [
+      {
+        match: "segment",
+        from: "eam_model_gateway",
+        to: "kirakira_model_gateway",
+      },
+    ],
+  },
+  {
+    kind: "docs-plane",
+    sourceName: "eam-agent-tracing",
+    description: "tracing docs filenames may carry the product namespace token",
+    replacements: [{ match: "basename-prefix", from: "eam-", to: "kirakira-" }],
+  },
+];
+
 const PACKAGE_SENTINELS = ["package.json", "tsconfig.json", "src"];
 const DOC_SENTINELS = ["README.md"];
 const DEFAULT_FILE_EXCLUDES = new Set([
   ".git",
   ".turbo",
+  "__pycache__",
   "coverage",
   "dist",
   "node_modules",
 ]);
+const DEFAULT_FILE_SUFFIX_EXCLUDES = [".pyc", ".pyo"];
 
 export function normalizeAuditArgs(argv = []) {
   const options = {
@@ -34,6 +75,7 @@ export function normalizeAuditArgs(argv = []) {
     failOnMissing: false,
     nameAliases: { ...DEFAULT_NAME_ALIASES },
     prefixAliases: { ...DEFAULT_PREFIX_ALIASES },
+    filePathRenameRules: DEFAULT_FILE_PATH_RENAME_RULES,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -99,6 +141,8 @@ export function buildEamParityAudit(options = {}) {
   );
   const nameAliases = { ...DEFAULT_NAME_ALIASES, ...(options.nameAliases ?? {}) };
   const prefixAliases = { ...DEFAULT_PREFIX_ALIASES, ...(options.prefixAliases ?? {}) };
+  const filePathRenameRules =
+    options.filePathRenameRules ?? DEFAULT_FILE_PATH_RENAME_RULES;
   const depth = options.depth ?? "entries";
   const sampleSize = options.sampleSize ?? 8;
 
@@ -110,6 +154,7 @@ export function buildEamParityAudit(options = {}) {
     sentinels: PACKAGE_SENTINELS,
     depth,
     sampleSize,
+    filePathRenameRules,
   });
   const docs = compareNamedChildren({
     kind: "docs-plane",
@@ -119,6 +164,7 @@ export function buildEamParityAudit(options = {}) {
     sentinels: DOC_SENTINELS,
     depth,
     sampleSize,
+    filePathRenameRules,
   });
 
   return {
@@ -183,6 +229,7 @@ function compareNamedChildren({
   sentinels,
   depth,
   sampleSize,
+  filePathRenameRules,
 }) {
   const sourceEntries = listChildDirectories(sourceRoot);
   const targetEntries = listChildDirectories(targetRoot);
@@ -197,7 +244,17 @@ function compareNamedChildren({
       usedTargets.add(target.name);
       const fileAudit =
         depth === "files"
-          ? compareFileInventory(source.path, target.path, sampleSize)
+          ? compareFileInventory(
+              source.path,
+              target.path,
+              sampleSize,
+              selectFilePathRenameRules({
+                kind,
+                sourceName: source.name,
+                targetName: target.name,
+                rules: filePathRenameRules,
+              }),
+            )
           : undefined;
       const hasFileDrift = fileAudit && (fileAudit.missing > 0 || fileAudit.extra > 0);
       const status = hasFileDrift
@@ -252,22 +309,90 @@ function summarize(sections) {
   return summary;
 }
 
-function compareFileInventory(sourceRoot, targetRoot, sampleSize) {
+function compareFileInventory(sourceRoot, targetRoot, sampleSize, renameRules = []) {
   const sourceFiles = listRelativeFiles(sourceRoot);
   const targetFiles = listRelativeFiles(targetRoot);
+  const sourceRecords = sourceFiles.map((file) => ({
+    file,
+    normalized: normalizeFilePath(file, renameRules),
+  }));
   const targetSet = new Set(targetFiles);
-  const sourceSet = new Set(sourceFiles);
-  const missing = sourceFiles.filter((file) => !targetSet.has(file));
-  const extra = targetFiles.filter((file) => !sourceSet.has(file));
+  const normalizedSourceSet = new Set(
+    sourceRecords.map((record) => record.normalized),
+  );
+  const missing = sourceRecords.filter((record) => !targetSet.has(record.normalized));
+  const extra = targetFiles.filter((file) => !normalizedSourceSet.has(file));
+  const renamed = sourceRecords.filter((record) => record.file !== record.normalized);
   return {
     source: sourceFiles.length,
     target: targetFiles.length,
-    matched: sourceFiles.length - missing.length,
+    matched: sourceRecords.length - missing.length,
     missing: missing.length,
     extra: extra.length,
-    missingSamples: missing.slice(0, sampleSize),
+    renamed: renamed.length,
+    pathRules: renameRules.map((rule) => rule.description ?? summarizeRenameRule(rule)),
+    missingSamples: missing.slice(0, sampleSize).map(formatFileRecord),
     extraSamples: extra.slice(0, sampleSize),
   };
+}
+
+function selectFilePathRenameRules({ kind, sourceName, targetName, rules }) {
+  return rules.filter((rule) => {
+    if (rule.kind && rule.kind !== kind) return false;
+    if (rule.sourceName && !matchesRuleValue(rule.sourceName, sourceName)) return false;
+    if (rule.targetName && !matchesRuleValue(rule.targetName, targetName)) return false;
+    return true;
+  });
+}
+
+function matchesRuleValue(ruleValue, value) {
+  if (Array.isArray(ruleValue)) return ruleValue.includes(value);
+  return ruleValue === value;
+}
+
+function normalizeFilePath(file, rules) {
+  return rules.reduce((current, rule) => {
+    return (rule.replacements ?? []).reduce(applyPathReplacement, current);
+  }, file);
+}
+
+function applyPathReplacement(file, replacement) {
+  if (!replacement?.from || replacement.to === undefined) return file;
+  if (replacement.match === "segment") {
+    return file
+      .split("/")
+      .map((segment) => (segment === replacement.from ? replacement.to : segment))
+      .join("/");
+  }
+  if (replacement.match === "prefix") {
+    return file.startsWith(replacement.from)
+      ? `${replacement.to}${file.slice(replacement.from.length)}`
+      : file;
+  }
+  if (replacement.match === "basename-prefix") {
+    const segments = file.split("/");
+    const basename = segments.at(-1);
+    if (!basename?.startsWith(replacement.from)) return file;
+    segments[segments.length - 1] =
+      `${replacement.to}${basename.slice(replacement.from.length)}`;
+    return segments.join("/");
+  }
+  if (replacement.match === "substring") {
+    return file.replaceAll(replacement.from, replacement.to);
+  }
+  throw new Error(`Unsupported file path replacement match: ${replacement.match}`);
+}
+
+function summarizeRenameRule(rule) {
+  return (rule.replacements ?? [])
+    .map((replacement) => `${replacement.match}:${replacement.from}->${replacement.to}`)
+    .join(", ");
+}
+
+function formatFileRecord(record) {
+  return record.file === record.normalized
+    ? record.file
+    : `${record.file} -> ${record.normalized}`;
 }
 
 function listRelativeFiles(root) {
@@ -283,10 +408,14 @@ function visitFiles(root, current, files) {
     const fullPath = join(current, entry.name);
     if (entry.isDirectory()) {
       visitFiles(root, fullPath, files);
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !shouldExcludeFile(entry.name)) {
       files.push(toPosixPath(relative(root, fullPath)));
     }
   }
+}
+
+function shouldExcludeFile(name) {
+  return DEFAULT_FILE_SUFFIX_EXCLUDES.some((suffix) => name.endsWith(suffix));
 }
 
 function listChildDirectories(root) {
@@ -351,6 +480,9 @@ function fileEvidence(fileAudit) {
   }
   if (fileAudit.extraSamples.length > 0) {
     parts.push(`extra: ${fileAudit.extraSamples.join(", ")}`);
+  }
+  if (fileAudit.renamed > 0) {
+    parts.push(`${fileAudit.renamed} source paths normalized`);
   }
   return parts.join("; ");
 }

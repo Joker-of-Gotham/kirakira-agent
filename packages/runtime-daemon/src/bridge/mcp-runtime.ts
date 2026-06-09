@@ -62,9 +62,167 @@ export type DaemonMcpListInput = RuntimeMcpListRequest;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
 
+type RuntimeMcpCallFailureType =
+  | "invalid_params"
+  | "server_not_found"
+  | "tool_not_found"
+  | "adapter_error";
+
+interface RuntimeMcpCallFailure {
+  type: RuntimeMcpCallFailureType;
+  message: string;
+  jsonRpcCode: number;
+  data?: Record<string, unknown>;
+}
+
+interface ValidatedMcpCallRequest {
+  input: RuntimeMcpToolCallRequest;
+  args: Record<string, unknown>;
+}
+
+const JSON_RPC_INVALID_PARAMS = -32602;
+const JSON_RPC_INTERNAL_ERROR = -32603;
+
 function errorTypeFrom(error: unknown): string {
   if (error instanceof Error) return error.name || "Error";
   return "error";
+}
+
+function safeRequestedInput(input: RuntimeMcpToolCallRequest): RuntimeMcpToolCallRequest {
+  const raw = input as unknown;
+  if (!isRecord(raw)) {
+    return {
+      server: "unknown",
+      tool: "unknown",
+    };
+  }
+  const traceContext = isRecord(raw.traceContext)
+    ? {
+        ...(typeof raw.traceContext.traceparent === "string"
+          ? { traceparent: raw.traceContext.traceparent }
+          : {}),
+        ...(typeof raw.traceContext.tracestate === "string"
+          ? { tracestate: raw.traceContext.tracestate }
+          : {}),
+        ...(typeof raw.traceContext.baggage === "string" ? { baggage: raw.traceContext.baggage } : {}),
+      }
+    : undefined;
+  return {
+    server: typeof raw.server === "string" && raw.server.length > 0 ? raw.server : "unknown",
+    tool: typeof raw.tool === "string" && raw.tool.length > 0 ? raw.tool : "unknown",
+    ...(isRecord(raw.arguments) ? { arguments: raw.arguments } : {}),
+    ...(typeof raw.runId === "string" ? { runId: raw.runId } : {}),
+    ...(typeof raw.traceId === "string" ? { traceId: raw.traceId } : {}),
+    ...(traceContext !== undefined ? { traceContext } : {}),
+    ...(typeof raw.subagentId === "string" ? { subagentId: raw.subagentId } : {}),
+    ...(typeof raw.role === "string" ? { role: raw.role } : {}),
+    ...(typeof raw.requestedLane === "string" ? { requestedLane: raw.requestedLane } : {}),
+  };
+}
+
+function validateMcpCallInput(input: RuntimeMcpToolCallRequest): ValidatedMcpCallRequest | RuntimeMcpCallFailure {
+  const raw = input as unknown;
+  if (!isRecord(raw)) {
+    return {
+      type: "invalid_params",
+      message: "MCP tools/call request must be a JSON object",
+      jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+    };
+  }
+  if (typeof raw.server !== "string" || raw.server.length === 0) {
+    return {
+      type: "invalid_params",
+      message: "MCP tools/call request requires a server name",
+      jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+    };
+  }
+  if (typeof raw.tool !== "string" || raw.tool.length === 0) {
+    return {
+      type: "invalid_params",
+      message: "MCP tools/call request requires a tool name",
+      jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+    };
+  }
+  if (raw.arguments !== undefined && !isRecord(raw.arguments)) {
+    return {
+      type: "invalid_params",
+      message: "MCP tools/call arguments must be a JSON object",
+      jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+      data: { server: raw.server, tool: raw.tool },
+    };
+  }
+  return {
+    input: safeRequestedInput(input),
+    args: isRecord(raw.arguments) ? raw.arguments : {},
+  };
+}
+
+function serverNotFoundFailure(server: string): RuntimeMcpCallFailure {
+  return {
+    type: "server_not_found",
+    message: `Unknown MCP server: ${server}`,
+    jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+    data: { server },
+  };
+}
+
+function toolNotFoundFailure(server: string, tool: string): RuntimeMcpCallFailure {
+  return {
+    type: "tool_not_found",
+    message: `Unknown MCP tool: ${server}:${tool}`,
+    jsonRpcCode: JSON_RPC_INVALID_PARAMS,
+    data: { server, tool },
+  };
+}
+
+function adapterFailure(error: unknown): RuntimeMcpCallFailure {
+  return {
+    type: "adapter_error",
+    message: error instanceof Error ? error.message : String(error),
+    jsonRpcCode: JSON_RPC_INTERNAL_ERROR,
+  };
+}
+
+function failureAttributes(failure: RuntimeMcpCallFailure): McpSpanAttributes {
+  return {
+    "error.type": failure.type,
+    "rpc.response.status_code": String(failure.jsonRpcCode),
+  };
+}
+
+function failureStructuredContent(failure: RuntimeMcpCallFailure): Record<string, unknown> {
+  return {
+    error: {
+      type: failure.type,
+      jsonrpc: {
+        code: failure.jsonRpcCode,
+        message: failure.message,
+        ...(failure.data !== undefined ? { data: failure.data } : {}),
+      },
+    },
+  };
+}
+
+function policyResultForFailure(
+  input: RuntimeMcpToolCallRequest,
+  failure: RuntimeMcpCallFailure,
+): RuntimeMcpToolPolicyResult {
+  return {
+    effect: "deny",
+    reasonCodes: [`mcp_${failure.type}`],
+    approvalRequired: false,
+    traceId: input.traceId ?? ulid(),
+  };
+}
+
+function textFromContent(content: unknown): string | undefined {
+  if (!Array.isArray(content)) return undefined;
+  const text = content
+    .map((block) => isRecord(block) && typeof block.text === "string" ? block.text : undefined)
+    .filter((item): item is string => item !== undefined)
+    .join("\n")
+    .trim();
+  return text.length > 0 ? text : undefined;
 }
 
 function policyResultFromEnforcement(
@@ -87,6 +245,7 @@ interface RuntimeMcpSpanProjection {
   traceContext?: RuntimeMcpTraceContextCarrier;
   status?: RuntimeMcpOtelSpanStatus;
   durationMs?: number;
+  attributes?: McpSpanAttributes;
 }
 
 function resultFrom(
@@ -117,7 +276,7 @@ function resultFrom(
 
 function projectMcpResult(raw: unknown): Pick<
   RuntimeMcpToolCallResult,
-  "success" | "content" | "structuredContent" | "isError"
+  "success" | "content" | "structuredContent" | "isError" | "error"
 > {
   if (!isRecord(raw)) {
     return {
@@ -126,6 +285,9 @@ function projectMcpResult(raw: unknown): Pick<
     };
   }
   const isError = typeof raw.isError === "boolean" ? raw.isError : undefined;
+  const error = isError === true
+    ? textFromContent(raw.content) ?? "MCP tool returned isError=true"
+    : undefined;
   return {
     success: isError !== true,
     ...(raw.content !== undefined ? { content: raw.content } : {}),
@@ -133,6 +295,7 @@ function projectMcpResult(raw: unknown): Pick<
       ? { structuredContent: raw.structuredContent }
       : {}),
     ...(isError !== undefined ? { isError } : {}),
+    ...(error !== undefined ? { error } : {}),
   };
 }
 
@@ -200,7 +363,10 @@ function projectOtel(
 ): RuntimeMcpOtelMetadata {
   return {
     spanName: context.spanName,
-    attributes: context.attributes,
+    attributes: {
+      ...context.attributes,
+      ...(span?.attributes ?? {}),
+    },
     ...(span?.traceId !== undefined ? { traceId: span.traceId } : {}),
     ...(span?.spanId !== undefined ? { spanId: span.spanId } : {}),
     ...(span?.parentSpanId !== undefined ? { parentSpanId: span.parentSpanId } : {}),
@@ -326,6 +492,7 @@ export class DaemonMcpRuntime {
       ...(traceContext !== undefined ? { traceContext } : {}),
       status,
       durationMs: Math.max(0, endTimeUnixMs - span.startedAt),
+      ...(options.attributes !== undefined ? { attributes: options.attributes } : {}),
     };
   }
 
@@ -403,6 +570,70 @@ export class DaemonMcpRuntime {
     }
   }
 
+  private async resolveToolForCall(
+    input: RuntimeMcpToolCallRequest,
+    span: ActiveRuntimeMcpSpan,
+  ): Promise<DiscoveredMcpTool | RuntimeMcpCallFailure> {
+    try {
+      const raw = await this.manager.request(
+        input.server,
+        "tools/list",
+        this.withMcpTraceMeta({}, span),
+      );
+      const tools = filterTools(
+        extractToolsFromResult(raw),
+        this.manager.getConfig(input.server)?.tools,
+      ) as DiscoveredMcpTool[];
+      const tool = tools.find((candidate) => candidate.name === input.tool);
+      return tool ?? toolNotFoundFailure(input.server, input.tool);
+    } catch (error) {
+      return adapterFailure(error);
+    }
+  }
+
+  private async finishFailureResult(params: {
+    input: RuntimeMcpToolCallRequest;
+    startedAt: number;
+    policy: RuntimeMcpToolPolicyResult;
+    context: McpGatewayToolContext;
+    span: ActiveRuntimeMcpSpan;
+    failure: RuntimeMcpCallFailure;
+    audit?: boolean;
+  }): Promise<RuntimeMcpToolCallResult> {
+    if (params.audit ?? true) {
+      await this.recordToolAudit({
+        input: params.input,
+        context: params.context,
+        policy: params.policy,
+        status: "error",
+        errorMessage: params.failure.message,
+      });
+    }
+    const spanProjection = await this.finishMcpSpan(params.span, "ERROR", {
+      message: params.failure.message,
+      attributes: {
+        ...failureAttributes(params.failure),
+        "kirakira.policy.trace_id": params.policy.traceId,
+        ...(params.policy.decisionId !== undefined
+          ? { "kirakira.policy.decision_id": params.policy.decisionId }
+          : {}),
+      },
+    });
+    return resultFrom(
+      params.input,
+      params.startedAt,
+      params.policy,
+      params.context,
+      {
+        success: false,
+        isError: true,
+        error: params.failure.message,
+        structuredContent: failureStructuredContent(params.failure),
+      },
+      spanProjection,
+    );
+  }
+
   private async recordToolAudit(params: {
     input: RuntimeMcpToolCallRequest;
     context: McpGatewayToolContext;
@@ -418,7 +649,7 @@ export class DaemonMcpRuntime {
       ...(params.context.trust.authMode !== undefined
         ? { authMode: params.context.trust.authMode }
         : {}),
-      args: params.input.arguments ?? {},
+      args: isRecord(params.input.arguments) ? params.input.arguments : {},
       ...(params.result !== undefined ? { result: params.result } : {}),
       userId: this.userId,
       sessionId: params.input.runId ?? "daemon",
@@ -514,28 +745,56 @@ export class DaemonMcpRuntime {
   }
 
   async callTool(input: DaemonMcpToolCallInput): Promise<RuntimeMcpToolCallResult> {
-    const args = input.arguments ?? {};
     const startedAt = Date.now();
-    const callContext = this.contextFactory.toolContext(input.server, input.tool, "tools/call");
+    const validated = validateMcpCallInput(input);
+    const requestedInput = "input" in validated ? validated.input : safeRequestedInput(input);
+    const callContext = this.contextFactory.toolContext(
+      requestedInput.server,
+      requestedInput.tool,
+      "tools/call",
+    );
     const span = this.startMcpSpan(callContext.otel, {
-      ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
-      ...(input.traceContext !== undefined ? { traceContext: input.traceContext } : {}),
+      ...(requestedInput.traceId !== undefined ? { traceId: requestedInput.traceId } : {}),
+      ...(requestedInput.traceContext !== undefined ? { traceContext: requestedInput.traceContext } : {}),
       attributes: {
         "kirakira.runtime.message.type": "mcp_call",
-        ...(input.runId !== undefined ? { "kirakira.run.id": input.runId } : {}),
+        ...(requestedInput.runId !== undefined ? { "kirakira.run.id": requestedInput.runId } : {}),
       },
     });
-    const pepContext = this.pepContext(input);
+    if (!("input" in validated)) {
+      return this.finishFailureResult({
+        input: requestedInput,
+        startedAt,
+        policy: policyResultForFailure(requestedInput, validated),
+        context: callContext,
+        span,
+        failure: validated,
+        audit: false,
+      });
+    }
+    if (!this.manager.listServers().includes(requestedInput.server)) {
+      const failure = serverNotFoundFailure(requestedInput.server);
+      return this.finishFailureResult({
+        input: requestedInput,
+        startedAt,
+        policy: policyResultForFailure(requestedInput, failure),
+        context: callContext,
+        span,
+        failure,
+      });
+    }
+    const args = validated.args;
+    const pepContext = this.pepContext(requestedInput);
     let policy: EnforcementResult;
     try {
       policy = await this.mcpPep.enforce(
         {
-          mcpServer: input.server,
-          server: input.server,
-          serverId: input.server,
+          mcpServer: requestedInput.server,
+          server: requestedInput.server,
+          serverId: requestedInput.server,
           ...(callContext.trust.issuer !== undefined ? { issuer: callContext.trust.issuer } : {}),
-          toolName: input.tool,
-          tool: input.tool,
+          toolName: requestedInput.tool,
+          tool: requestedInput.tool,
           args: Object.values(args),
           env: {
             MCP_TRUST: callContext.trust.tier,
@@ -556,7 +815,7 @@ export class DaemonMcpRuntime {
     if (!policy.allowed) {
       const errorCode = policy.decision.effect === "escalate" ? "approval_required" : "policy_denied";
       await this.recordToolAudit({
-        input,
+        input: requestedInput,
         context: callContext,
         policy: policyResult,
         status: "error",
@@ -572,7 +831,7 @@ export class DaemonMcpRuntime {
             : {}),
         },
       });
-      return resultFrom(input, startedAt, policyResult, callContext, {
+      return resultFrom(requestedInput, startedAt, policyResult, callContext, {
         success: false,
         isError: true,
         error: errorCode,
@@ -581,21 +840,32 @@ export class DaemonMcpRuntime {
 
     try {
       await this.ensureServerStarted(
-        input.server,
-        this.contextFactory.serverContext(input.server, "server/start"),
+        requestedInput.server,
+        this.contextFactory.serverContext(requestedInput.server, "server/start"),
         pepContext.sessionId,
         pepContext.traceId,
       );
+      const resolvedTool = await this.resolveToolForCall(requestedInput, span);
+      if ("type" in resolvedTool) {
+        return this.finishFailureResult({
+          input: requestedInput,
+          startedAt,
+          policy: policyResult,
+          context: callContext,
+          span,
+          failure: resolvedTool,
+        });
+      }
       const raw = await this.manager.request(
-        input.server,
+        requestedInput.server,
         "tools/call",
         this.withMcpTraceMeta({
-          name: input.tool,
+          name: resolvedTool.name,
           arguments: args,
         }, span),
       );
       await this.recordToolAudit({
-        input,
+        input: requestedInput,
         context: callContext,
         policy: policyResult,
         status: "success",
@@ -615,30 +885,31 @@ export class DaemonMcpRuntime {
           },
         },
       );
-      return resultFrom(input, startedAt, policyResult, callContext, projected, spanProjection);
+      return resultFrom(requestedInput, startedAt, policyResult, callContext, projected, spanProjection);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const failure = adapterFailure(error);
       await this.recordToolAudit({
-        input,
+        input: requestedInput,
         context: callContext,
         policy: policyResult,
         status: "error",
-        errorMessage,
+        errorMessage: failure.message,
       });
       const spanProjection = await this.finishMcpSpan(span, "ERROR", {
-        message: errorMessage,
+        message: failure.message,
         attributes: {
-          "error.type": errorTypeFrom(error),
+          ...failureAttributes(failure),
           "kirakira.policy.trace_id": policyResult.traceId,
           ...(policyResult.decisionId !== undefined
             ? { "kirakira.policy.decision_id": policyResult.decisionId }
             : {}),
         },
       });
-      return resultFrom(input, startedAt, policyResult, callContext, {
+      return resultFrom(requestedInput, startedAt, policyResult, callContext, {
         success: false,
         isError: true,
-        error: errorMessage,
+        error: failure.message,
+        structuredContent: failureStructuredContent(failure),
       }, spanProjection);
     }
   }
