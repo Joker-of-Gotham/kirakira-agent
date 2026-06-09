@@ -2,8 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RuntimeRequestTracker,
   makeRuntimeProtocolError,
+  parseRuntimeArtifactContentAckResult,
   parseRuntimeClientMessage,
   parseRuntimeServerMessage,
+  parseRuntimeStateSnapshotAckResult,
+  parseRuntimeSubmitAckResult,
+  parseRuntimeVoidAckResult,
 } from "../../../packages/runtime-contracts/src/index.js";
 
 describe("runtime protocol codec", () => {
@@ -176,5 +180,85 @@ describe("RuntimeRequestTracker", () => {
     tracker.rejectAll(new Error("closed"));
     await expect(first).rejects.toThrow("closed");
     vi.useRealTimers();
+  });
+
+  it("resolves correlated ack payloads through typed result parsers", async () => {
+    const tracker = new RuntimeRequestTracker({ timeoutMs: 10_000 });
+    const submit = tracker.track(
+      "submit-1",
+      "submit",
+      10_000,
+      parseRuntimeSubmitAckResult,
+    );
+    const state = tracker.track(
+      "state-1",
+      "state",
+      10_000,
+      parseRuntimeStateSnapshotAckResult,
+    );
+    const artifact = tracker.track(
+      "artifact-1",
+      "artifact",
+      10_000,
+      parseRuntimeArtifactContentAckResult,
+    );
+    const drain = tracker.track(
+      "drain-1",
+      "drain",
+      10_000,
+      parseRuntimeVoidAckResult,
+    );
+
+    tracker.handleServerMessage({ type: "ack", messageId: "submit-1", result: { runId: "run-1" } });
+    tracker.handleServerMessage({
+      type: "ack",
+      messageId: "state-1",
+      result: {
+        runId: "run-1",
+        status: "running",
+        activeWorkers: [],
+        pendingApprovals: [],
+        costSummary: { totalCostUsd: 0, totalTokens: 0 },
+      },
+    });
+    tracker.handleServerMessage({
+      type: "ack",
+      messageId: "artifact-1",
+      result: {
+        runId: "run-1",
+        artifactId: "artifact-1",
+        path: "artifacts/report.md",
+        sizeBytes: 12,
+        truncated: false,
+        encoding: "utf8",
+        content: "hello",
+      },
+    });
+    tracker.handleServerMessage({ type: "ack", messageId: "drain-1" });
+
+    await expect(submit).resolves.toEqual({ runId: "run-1" });
+    await expect(state).resolves.toMatchObject({ runId: "run-1", status: "running" });
+    await expect(artifact).resolves.toMatchObject({ artifactId: "artifact-1", content: "hello" });
+    await expect(drain).resolves.toBeUndefined();
+  });
+
+  it("rejects matching requests when typed ack payload parsing fails", async () => {
+    const tracker = new RuntimeRequestTracker({ timeoutMs: 10_000 });
+    const submit = tracker.track(
+      "submit-1",
+      "submit",
+      10_000,
+      parseRuntimeSubmitAckResult,
+    );
+
+    expect(
+      tracker.handleServerMessage({
+        type: "ack",
+        messageId: "submit-1",
+        result: { id: "run-1" },
+      }),
+    ).toBe(true);
+
+    await expect(submit).rejects.toThrow("Runtime ack result is not a valid submit result");
   });
 });

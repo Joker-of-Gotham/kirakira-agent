@@ -10,6 +10,7 @@ import {
   type RunEventKind,
 } from "./events.js";
 import type { RunStateSnapshot } from "./snapshot.js";
+import type { RuntimeAckResultParser } from "./ack-result.js";
 
 export type RuntimeClientMessage =
   | {
@@ -80,6 +81,7 @@ interface PendingRuntimeRequest {
   resolve(value: unknown): void;
   reject(error: Error): void;
   timeout: ReturnType<typeof setTimeout>;
+  parseResult?: RuntimeAckResultParser<unknown>;
 }
 
 const RUN_EVENT_KIND_SET = new Set<string>(RUN_EVENT_KINDS);
@@ -417,7 +419,12 @@ export class RuntimeRequestTracker {
     return this.pending.size;
   }
 
-  track(messageId: string, label: string, timeoutMs = this.options.timeoutMs ?? 30_000): Promise<unknown> {
+  track<T = unknown>(
+    messageId: string,
+    label: string,
+    timeoutMs = this.options.timeoutMs ?? 30_000,
+    parseResult?: RuntimeAckResultParser<T>,
+  ): Promise<T> {
     if (this.pending.has(messageId)) {
       return Promise.reject(new Error(`Duplicate runtime request id: ${messageId}`));
     }
@@ -429,7 +436,12 @@ export class RuntimeRequestTracker {
         reject(new Error(message));
       }, timeoutMs);
       timeout.unref?.();
-      this.pending.set(messageId, { resolve, reject, timeout });
+      this.pending.set(messageId, {
+        resolve: resolve as (value: unknown) => void,
+        reject,
+        timeout,
+        parseResult: parseResult as RuntimeAckResultParser<unknown> | undefined,
+      });
     });
   }
 
@@ -438,7 +450,11 @@ export class RuntimeRequestTracker {
     if (!request) return false;
     clearTimeout(request.timeout);
     this.pending.delete(messageId);
-    request.resolve(value);
+    try {
+      request.resolve(request.parseResult ? request.parseResult(value) : value);
+    } catch (error) {
+      request.reject(error instanceof Error ? error : new Error(String(error)));
+    }
     return true;
   }
 

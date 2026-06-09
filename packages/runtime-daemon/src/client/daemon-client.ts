@@ -3,12 +3,19 @@ import type {
   EventFilter,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeAckResultParser,
   RunStateSnapshot,
   RuntimeRequestTracker,
   RuntimeRunMode,
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
-import { RuntimeRequestTracker as RuntimeRequestTrackerImpl } from "@kirakira/runtime-contracts";
+import {
+  RuntimeRequestTracker as RuntimeRequestTrackerImpl,
+  parseRuntimeArtifactContentAckResult,
+  parseRuntimeStateSnapshotAckResult,
+  parseRuntimeSubmitAckResult,
+  parseRuntimeVoidAckResult,
+} from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import WebSocket from "ws";
 import { daemonSocketWebSocketUrl, resolveDaemonSocketPath } from "../ipc/socket-path.js";
@@ -157,14 +164,23 @@ export class DaemonClient {
     this.pending.rejectAll(new Error("disconnected"));
   }
 
-  private rpcResult(body: Record<string, unknown>, timeoutMs = 60_000): Promise<unknown> {
+  private rpcResult<T = unknown>(
+    body: Record<string, unknown>,
+    timeoutMs = 60_000,
+    parseResult?: RuntimeAckResultParser<T>,
+  ): Promise<T> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error("WebSocket not connected"));
     }
     const messageId = ulid();
     const msgWithId = { ...body, messageId };
-    const request = this.pending.track(messageId, String(body.type ?? "request"), timeoutMs);
+    const request = this.pending.track(
+      messageId,
+      String(body.type ?? "request"),
+      timeoutMs,
+      parseResult,
+    );
     try {
       ws.send(JSON.stringify(msgWithId));
     } catch (err) {
@@ -187,11 +203,8 @@ export class DaemonClient {
         options !== undefined
           ? { type: "submit", prompt, mode, options }
           : { type: "submit", prompt, mode },
-    });
-    const runId = (result as { runId?: string } | null)?.runId;
-    if (typeof runId !== "string") {
-      throw new Error("Invalid submit response");
-    }
+    }, 60_000, parseRuntimeSubmitAckResult);
+    const runId = result.runId;
     this.lastRunId = runId;
     return runId;
   }
@@ -214,7 +227,7 @@ export class DaemonClient {
               instruction,
             },
       ),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async approve(
@@ -242,14 +255,14 @@ export class DaemonClient {
               decision,
             },
       ),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async drain(): Promise<void> {
     await this.rpcResult({
       type: "control",
       message: { type: "drain" },
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async cancel(runId: string, reason?: string): Promise<void> {
@@ -260,7 +273,7 @@ export class DaemonClient {
           ? { type: "cancel", runId, reason }
           : { type: "cancel", runId },
       ),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async resume(runId: string, fromCheckpoint?: string): Promise<void> {
@@ -271,27 +284,27 @@ export class DaemonClient {
           ? { type: "resume", runId, fromCheckpoint }
           : { type: "resume", runId },
       ),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async getState(runId: string): Promise<RunStateSnapshot> {
-    return (await this.rpcResult({
+    return this.rpcResult({
       type: "get_state",
       runId,
       messageId: ulid(),
-    })) as RunStateSnapshot;
+    }, 60_000, parseRuntimeStateSnapshotAckResult);
   }
 
   async getArtifactContent(
     request: RuntimeArtifactContentRequest,
   ): Promise<RuntimeArtifactContent> {
-    return (await this.rpcResult({
+    return this.rpcResult({
       type: "get_artifact",
       runId: request.runId,
       artifactId: request.artifactId,
       ...(request.maxBytes !== undefined ? { maxBytes: request.maxBytes } : {}),
       messageId: ulid(),
-    })) as RuntimeArtifactContent;
+    }, 60_000, parseRuntimeArtifactContentAckResult);
   }
 
   async enqueuePrompt(prompt: string, priority?: number): Promise<void> {
@@ -300,29 +313,24 @@ export class DaemonClient {
       message: ctl(
         priority !== undefined ? { type: "enqueue", prompt, priority } : { type: "enqueue", prompt },
       ),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async provideInput(runId: string, interruptId: string, data: unknown): Promise<void> {
     await this.rpcResult({
       type: "control",
       message: ctl({ type: "provide_input", runId, interruptId, data }),
-    });
+    }, 60_000, parseRuntimeVoidAckResult);
   }
 
   async inspectThread(runId: string, includeEvents?: boolean): Promise<RunStateSnapshot> {
-    const result = await this.rpcResult({
+    return this.rpcResult({
       type: "control",
       message: ctl(
         includeEvents !== undefined
           ? { type: "inspect", runId, includeEvents }
           : { type: "inspect", runId },
       ),
-    });
-    const snap = result as RunStateSnapshot | null;
-    if (!snap || typeof snap.runId !== "string") {
-      throw new Error("Invalid inspect response");
-    }
-    return snap;
+    }, 60_000, parseRuntimeStateSnapshotAckResult);
   }
 }

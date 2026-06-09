@@ -3,12 +3,17 @@ import type {
   RuntimeEndpointParts,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeAckResultParser,
   RuntimeRunMode,
   RuntimeServerMessage,
 } from "@kirakira/runtime-contracts";
 import {
   RuntimeRequestTracker,
+  parseRuntimeArtifactContentAckResult,
   parseRuntimeServerMessage,
+  parseRuntimeStateSnapshotAckResult,
+  parseRuntimeSubmitAckResult,
+  parseRuntimeVoidAckResult,
   parseWebSocketRuntimeEndpoint,
 } from "@kirakira/runtime-contracts";
 import { fetchBrowserGatewayHealth } from "./browser-gateway-health.js";
@@ -75,20 +80,6 @@ const eventMatches = (
   return !kinds || kinds.includes(event.kind);
 };
 
-const isArtifactContent = (value: unknown): value is RuntimeArtifactContent => {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const artifact = value as Partial<RuntimeArtifactContent>;
-  return (
-    typeof artifact.runId === "string" &&
-    typeof artifact.artifactId === "string" &&
-    typeof artifact.path === "string" &&
-    typeof artifact.sizeBytes === "number" &&
-    typeof artifact.truncated === "boolean" &&
-    (artifact.encoding === "utf8" || artifact.encoding === "base64") &&
-    typeof artifact.content === "string"
-  );
-};
-
 export function createBrowserGatewayTransport(
   options: BrowserGatewayTransportOptions,
 ): RuntimeTransport {
@@ -118,13 +109,16 @@ export function createBrowserGatewayTransport(
     socket.send(JSON.stringify(message));
   };
 
-  const request = (message: RuntimeClientMessage): Promise<unknown> => {
+  const request = <T = unknown>(
+    message: RuntimeClientMessage,
+    parseResult?: RuntimeAckResultParser<T>,
+  ): Promise<T> => {
     const messageId =
       "messageId" in message && typeof message.messageId === "string"
         ? message.messageId
         : idFactory();
     const body = { ...message, messageId } as RuntimeClientMessage;
-    const result = pending.track(messageId, message.type, requestTimeoutMs);
+    const result = pending.track(messageId, message.type, requestTimeoutMs, parseResult);
     try {
       send(body);
     } catch (err) {
@@ -267,39 +261,36 @@ export function createBrowserGatewayTransport(
     },
     async submitPrompt(input: SubmitPromptRequest) {
       const mode: RuntimeRunMode = input.mode ?? "interactive";
-      const result = await request({
-        type: "control",
-        message:
-          input.options !== undefined
-            ? { type: "submit", prompt: input.prompt, mode, options: input.options }
-            : { type: "submit", prompt: input.prompt, mode },
-      });
-      const runId = (result as { runId?: unknown } | null)?.runId;
-      if (typeof runId !== "string") {
-        throw new Error("Runtime gateway returned an invalid submit ack");
-      }
-      return { runId };
+      return request(
+        {
+          type: "control",
+          message:
+            input.options !== undefined
+              ? { type: "submit", prompt: input.prompt, mode, options: input.options }
+              : { type: "submit", prompt: input.prompt, mode },
+        },
+        parseRuntimeSubmitAckResult,
+      );
     },
     async getState(runId: string): Promise<RuntimeTransportSnapshot> {
       const state = await request({
         type: "get_state",
         runId,
         messageId: idFactory(),
-      });
+      }, parseRuntimeStateSnapshotAckResult);
       return { runId, state };
     },
     async getArtifactContent(input: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent> {
-      const artifact = await request({
-        type: "get_artifact",
-        runId: input.runId,
-        artifactId: input.artifactId,
-        ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
-        messageId: idFactory(),
-      });
-      if (!isArtifactContent(artifact)) {
-        throw new Error("Runtime gateway returned an invalid artifact content response");
-      }
-      return artifact;
+      return request(
+        {
+          type: "get_artifact",
+          runId: input.runId,
+          artifactId: input.artifactId,
+          ...(input.maxBytes !== undefined ? { maxBytes: input.maxBytes } : {}),
+          messageId: idFactory(),
+        },
+        parseRuntimeArtifactContentAckResult,
+      );
     },
     subscribeRun(
       runId: string,
@@ -337,36 +328,42 @@ export function createBrowserGatewayTransport(
       };
     },
     async approve(decision: ApprovalDecision) {
-      await request({
-        type: "control",
-        message:
-          decision.reason !== undefined
-            ? {
-                type: "approve",
-                runId: decision.runId,
-                ticketId: decision.ticketId,
-                decision: decision.decision,
-                reason: decision.reason,
-              }
-            : {
-                type: "approve",
-                runId: decision.runId,
-                ticketId: decision.ticketId,
-                decision: decision.decision,
-              },
-      });
+      await request(
+        {
+          type: "control",
+          message:
+            decision.reason !== undefined
+              ? {
+                  type: "approve",
+                  runId: decision.runId,
+                  ticketId: decision.ticketId,
+                  decision: decision.decision,
+                  reason: decision.reason,
+                }
+              : {
+                  type: "approve",
+                  runId: decision.runId,
+                  ticketId: decision.ticketId,
+                  decision: decision.decision,
+                },
+        },
+        parseRuntimeVoidAckResult,
+      );
     },
     async cancel(runId: string, reason?: string) {
-      await request({
-        type: "control",
-        message:
-          reason !== undefined
-            ? { type: "cancel", runId, reason }
-            : { type: "cancel", runId },
-      });
+      await request(
+        {
+          type: "control",
+          message:
+            reason !== undefined
+              ? { type: "cancel", runId, reason }
+              : { type: "cancel", runId },
+        },
+        parseRuntimeVoidAckResult,
+      );
     },
     async drain() {
-      await request({ type: "control", message: { type: "drain" } });
+      await request({ type: "control", message: { type: "drain" } }, parseRuntimeVoidAckResult);
     },
   };
 }
