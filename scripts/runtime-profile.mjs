@@ -1458,6 +1458,9 @@ export function renderRuntimeEnv(profile = resolveRuntimeProfile()) {
 
 export function renderComposeArgs(profile = resolveRuntimeProfile()) {
   const args = [];
+  if (typeof profile.composeProject === "string" && profile.composeProject.length > 0) {
+    args.push("-p", profile.composeProject);
+  }
   for (const file of profile.composeFiles ?? []) {
     args.push("-f", file);
   }

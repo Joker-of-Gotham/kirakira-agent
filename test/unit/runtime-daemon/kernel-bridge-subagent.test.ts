@@ -433,6 +433,7 @@ describe("runtime daemon subagent bridge", () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-default-memory-"));
     const eventStorePath = join(workspaceRoot, "events");
     const recallCalls: RecallRequest[] = [];
+    const seen: RunEvent[] = [];
     let factoryCalls = 0;
     const resolvedConfig = {
       agentToml: {
@@ -526,6 +527,9 @@ describe("runtime daemon subagent bridge", () => {
 
     try {
       await bridge.create();
+      const unsubscribe = bridge.onEvent((event) => {
+        seen.push(event);
+      });
       const completed = waitForBridgeEvent(
         bridge,
         (event) => event.kind === "run.completed",
@@ -535,6 +539,7 @@ describe("runtime daemon subagent bridge", () => {
         workspaceRoot,
       });
       await completed;
+      unsubscribe();
 
       expect(factoryCalls).toBe(1);
       expect(recallCalls).toHaveLength(1);
@@ -545,6 +550,52 @@ describe("runtime daemon subagent bridge", () => {
         runId,
         level: "L3",
         includeRedacted: false,
+      });
+      expect(seen.map((event) => event.kind)).toEqual(
+        expect.arrayContaining([
+          "memory.recall.started",
+          "memory.recall.completed",
+          "research.completed",
+          "run.completed",
+        ]),
+      );
+      const recallStarted = seen.find((event) => event.kind === "memory.recall.started");
+      const recallCompleted = seen.find((event) => event.kind === "memory.recall.completed");
+      expect(recallStarted?.runId).toBe(runId);
+      expect(recallStarted?.payload).toMatchObject({
+        operation: "recall",
+        sourceKind: "memory",
+        runId,
+        researchRunId: `${runId}:research:research`,
+        researchTaskId: expect.any(String),
+        parentTaskId: "research",
+        nodeId: "research",
+        tenantId: "default-memory-workspace",
+        workspaceId: workspaceRoot,
+        level: "L3",
+        includeRedacted: false,
+        requireCitations: true,
+      });
+      expect(recallStarted?.payload.queryHash).toEqual(expect.any(String));
+      expect(recallStarted?.payload.queryPreview).toBe(
+        "What default daemon memory is available?",
+      );
+      expect(recallCompleted?.payload).toMatchObject({
+        operation: "recall",
+        sourceKind: "memory",
+        runId,
+        bundleId: "bundle-1",
+        queryId: "query-1",
+        retrievalTraceId: "trace-1",
+        routeNames: ["vector"],
+        selectedRecordIds: ["rec-1"],
+        recordIds: ["rec-1"],
+        totalTokens: 128,
+        budgetLevel: "L3",
+        routeCount: 1,
+        candidateCount: 1,
+        evidenceCount: 1,
+        citationCount: 1,
       });
     } finally {
       await bridge.destroy();

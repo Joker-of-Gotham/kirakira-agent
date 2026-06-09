@@ -47,7 +47,7 @@ describe("upgrade readiness gate", () => {
           }),
           expect.objectContaining({
             label: "Memory-store checkpoint + retain/reflect live persistence gate",
-            status: "warn",
+            status: "pass",
           }),
         ]),
       }),
@@ -56,7 +56,11 @@ describe("upgrade readiness gate", () => {
       report.openWork.some((item) =>
         item.item.includes("Memory-store checkpoint + retain/reflect live persistence gate"),
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(report.gates.memoryPersistence.evidence).toMatchObject({
+      resultPath: "docs/upgrade/gates/memory-persistence-smoke.json",
+      resultMatches: true,
+    });
     expect(JSON.stringify(report)).not.toContain("5173");
   });
 

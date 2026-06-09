@@ -608,6 +608,8 @@ describe("runtime profile rendering", () => {
 
     expect(readiness.compose?.args).toEqual([
       "compose",
+      "-p",
+      "kirakira-agent-test",
       "-f",
       "docker-compose.test.yml",
       "up",
@@ -829,6 +831,8 @@ describe("runtime profile rendering", () => {
     expect(projectionResult.status).toBe(0);
     expect(projection.fragments.readiness.compose.args).toEqual([
       "compose",
+      "-p",
+      "kirakira-agent-test",
       "-f",
       "docker-compose.test.yml",
       "up",
@@ -842,6 +846,8 @@ describe("runtime profile rendering", () => {
     ]);
     expect(projection.fragments.memoryStack.compose.args).toEqual([
       "compose",
+      "-p",
+      "kirakira-agent-test",
       "-f",
       "docker-compose.test.yml",
       "up",

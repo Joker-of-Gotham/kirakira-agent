@@ -79,6 +79,7 @@ describe("resolved state schema stability", () => {
           {
             name: "container",
             mode: "container",
+            compose_project: "kirakira-agent-test",
             compose_profiles: ["cli"],
             env_files: [".env"],
             workspace_root_env: "KIRAKIRA_WORKSPACE_ROOT",

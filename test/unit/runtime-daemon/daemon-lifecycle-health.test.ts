@@ -196,4 +196,150 @@ describe("DaemonLifecycle health", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it("uses the selected runtime profile for MCP, memory, and topology composition", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-daemon-selected-profile-"));
+    const daemon = new DaemonLifecycle();
+    await daemon.start({
+      eventStorePath: join(workspaceRoot, "events"),
+      socketPath: "\\\\.\\pipe\\kirakira-agent-selected-profile-test",
+      gateway: { disabled: true },
+      kernel: {
+        enableDaemonSubagents: false,
+        runtimeProfileName: "profiled-host",
+        resolvedConfig: {
+          agentToml: {
+            deep_research: {
+              enabled: false,
+            },
+          },
+          runtimeState: {
+            default_profile: "quiet-host",
+            profiles: [
+              {
+                name: "quiet-host",
+                mode: "host",
+                mcp_servers: [
+                  {
+                    name: "quiet-filesystem",
+                    command: "node",
+                    args: ["quiet.js"],
+                  },
+                ],
+                memory: {
+                  enabled: false,
+                },
+                orchestration: {
+                  default_role: "quiet",
+                  roles: [{ id: "quiet", lane: "background" }],
+                },
+              },
+              {
+                name: "profiled-host",
+                mode: "host",
+                mcp_server_groups: ["workspace"],
+                mcp_servers: [
+                  {
+                    name: "profiled-filesystem",
+                    command: "node",
+                    args: ["profiled.js", workspaceRoot],
+                    env: {
+                      KIRAKIRA_WORKSPACE_ROOT: workspaceRoot,
+                    },
+                  },
+                ],
+                memory: {
+                  enabled: true,
+                  services: [{ name: "postgres", url_env: "PROFILE_DATABASE_URL" }],
+                },
+                orchestration: {
+                  handoff_mode: "swarm",
+                  default_role: "profiled-supervisor",
+                  lanes: {
+                    foreground: { capacity: 1 },
+                    delegated: { capacity: 3 },
+                  },
+                  roles: [
+                    {
+                      id: "profiled-supervisor",
+                      lane: "foreground",
+                      context: "filtered",
+                      permissions: ["plan"],
+                    },
+                    {
+                      id: "profiled-implementer",
+                      lane: "delegated",
+                      context: "isolated",
+                      mcp_servers: ["profiled-filesystem"],
+                    },
+                  ],
+                  handoffs: [
+                    {
+                      from: "profiled-supervisor",
+                      to: "profiled-implementer",
+                      mode: "tool",
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        } as Pick<ResolvedConfig, "agentToml" | "runtimeState">,
+        memory: {
+          service: {
+            async recall() {
+              throw new Error("memory recall should not run during manifest composition");
+            },
+            async explainRetrieval() {
+              throw new Error("memory explain should not run during manifest composition");
+            },
+          },
+        },
+      },
+    });
+
+    try {
+      const health = await daemon.health();
+
+      expect(isRuntimeDaemonHealth(health)).toBe(true);
+      expect(health.details.manifest.capabilities.mcp.state).toBe("enabled");
+      expect(health.details.manifest.capabilities.memory.state).toBe("enabled");
+      expect(health.details.manifest.mcp).toMatchObject({
+        profileName: "profiled-host",
+        serverGroups: ["workspace"],
+        servers: [
+          {
+            name: "profiled-filesystem",
+            command: "node",
+            args: ["profiled.js", workspaceRoot],
+            envKeys: ["KIRAKIRA_WORKSPACE_ROOT"],
+          },
+        ],
+      });
+      expect(health.details.manifest.orchestration).toMatchObject({
+        profileName: "profiled-host",
+        handoffMode: "swarm",
+        defaultRole: "profiled-supervisor",
+        lanes: {
+          foreground: { capacity: 1 },
+          delegated: { capacity: 3 },
+        },
+        roles: [
+          expect.objectContaining({
+            id: "profiled-supervisor",
+            permissionLabels: ["plan"],
+          }),
+          expect.objectContaining({
+            id: "profiled-implementer",
+            mcpServers: ["profiled-filesystem"],
+          }),
+        ],
+      });
+      expect(JSON.stringify(health.details.manifest)).not.toContain("quiet-filesystem");
+      expect(JSON.stringify(health.details.manifest)).not.toContain("quiet-host");
+    } finally {
+      await daemon.stop();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
 });

@@ -244,8 +244,8 @@
       "sourceName": "memory-store",
       "targetName": "memory-store",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira adds daemon checkpoint migration and repository support so kernel checkpoints can persist through the memory Postgres profile.",
+      "status": "covered",
+      "behavior": "Kirakira adds daemon checkpoint migration and repository support so kernel checkpoints, retain, recall, reflect observations, beliefs, and outbox rows persist through the isolated test-host memory stack.",
       "extensionFiles": [
         "packages/memory-store/scripts/copy-migrations.mjs",
         "packages/memory-store/src/postgres/migrations/009_daemon_checkpoints.sql",
@@ -289,13 +289,20 @@
           "command": "node scripts/memory-persistence-smoke.mjs --profile test-host --live"
         },
         {
+          "kind": "smoke-result",
+          "path": "docs/upgrade/gates/memory-persistence-smoke.json",
+          "command": "node scripts/memory-persistence-smoke.mjs --profile test-host --live"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-child-runtime-memory-desktop-gates.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-memory-live-gate-compose-isolation.md"
         }
       ],
-      "remainingGaps": [
-        "Run the profile-gated live command `node scripts/memory-persistence-smoke.mjs --profile test-host --live` against the test-host memory stack."
-      ]
+      "remainingGaps": []
     },
     {
       "kind": "package",
@@ -319,6 +326,11 @@
           "command": "pnpm exec vitest run test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/subagent-contract.test.ts test/unit/orchestrator-kernel/daemon-orchestrator.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts"
         },
         {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-kernel-deep-research-executor.md"
         },
@@ -333,6 +345,10 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-presentation-smoke-gates.md"
         }
       ],
       "remainingGaps": [
@@ -373,6 +389,16 @@
           "command": "pnpm exec vitest run test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts test/unit/runtime-daemon/daemon-config.test.ts test/unit/runtime-daemon/socket-path.test.ts test/unit/runtime-daemon/browser-gateway-server.test.ts"
         },
         {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/daemon-lifecycle-health.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-daemon/daemon-lifecycle-health.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts test/unit/runtime-daemon/daemon-config.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/contract/runtime/workbench-smoke-gate.test.ts",
+          "command": "pnpm exec vitest run test/unit/scripts/workbench-smoke.test.ts test/contract/runtime/workbench-smoke-gate.test.ts"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-runtime-mcp-dependency-factory.md"
         },
@@ -391,6 +417,10 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-daemon-mcp-otel-sdk-factory.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-presentation-smoke-gates.md"
         }
       ],
       "remainingGaps": [

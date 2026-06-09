@@ -42,6 +42,7 @@ const runtimeServiceDeclSchema = z.object({
 const runtimeProfileDeclSchema = z.object({
   name: z.string().min(1),
   mode: z.enum(["container", "host", "hybrid"]),
+  compose_project: z.string().min(1).optional(),
   compose_profiles: z.array(z.string()).optional(),
   env_files: z.array(z.string()).optional(),
   workspace_root_env: z.string().optional(),

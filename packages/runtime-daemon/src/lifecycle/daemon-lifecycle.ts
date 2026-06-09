@@ -38,6 +38,7 @@ import {
   RuntimeArtifactContentError,
   readRuntimeArtifactContent,
 } from "../server/artifact-content.js";
+import { activeRuntimeProfile } from "../bridge/runtime-profile.js";
 
 export interface DaemonConfig {
   socketPath?: string;
@@ -91,9 +92,10 @@ function runtimeMcpManifest(
   options: KernelBridgeOptions | undefined,
 ): RuntimeMcpManifest | undefined {
   const runtimeState = options?.resolvedConfig?.runtimeState;
-  const profiles = runtimeState?.profiles ?? [];
-  const profileName = options?.runtimeProfileName ?? runtimeState?.default_profile;
-  const profile = profiles.find((item) => item.name === profileName) ?? profiles[0];
+  const profile = activeRuntimeProfile(
+    options?.resolvedConfig,
+    options?.runtimeProfileName,
+  );
   const servers = profile?.mcp_servers ?? [];
   const catalog = runtimeState?.mcp_catalog;
   if (servers.length === 0 && !catalog) return undefined;
@@ -123,10 +125,10 @@ function runtimeMcpManifest(
 function runtimeOrchestrationManifest(
   options: KernelBridgeOptions | undefined,
 ): RuntimeOrchestrationManifest | undefined {
-  const runtimeState = options?.resolvedConfig?.runtimeState;
-  const profiles = runtimeState?.profiles ?? [];
-  const profileName = options?.runtimeProfileName ?? runtimeState?.default_profile;
-  const profile = profiles.find((item) => item.name === profileName) ?? profiles[0];
+  const profile = activeRuntimeProfile(
+    options?.resolvedConfig,
+    options?.runtimeProfileName,
+  );
   const orchestration = profile?.orchestration;
   if (!profile || !orchestration) return undefined;
   return {

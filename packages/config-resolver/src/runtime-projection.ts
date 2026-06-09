@@ -196,6 +196,9 @@ function uniqueStrings(values: Array<string | undefined>): string[] {
 
 function runtimeComposeArgs(profile: ResolvedRuntimeProfileState): string[] {
   const args: string[] = [];
+  if (profile.compose_project) {
+    args.push("-p", profile.compose_project);
+  }
   for (const file of profile.compose_files ?? []) {
     args.push("-f", file);
   }

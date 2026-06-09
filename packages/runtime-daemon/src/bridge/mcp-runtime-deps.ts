@@ -5,7 +5,6 @@ import type {
   McpServerConfig,
   ResolvedConfig,
   ResolvedRuntimeMcpServerState,
-  ResolvedRuntimeProfileState,
 } from "@kirakira/core";
 import {
   buildMcpOtelRecorderPlan,
@@ -28,6 +27,8 @@ import {
   type AuditWriter,
 } from "@kirakira/policy-engine";
 import { createDaemonMcpOtelSdkFactory } from "./mcp-otel-sdk-factory.js";
+import { activeRuntimeProfile } from "./runtime-profile.js";
+export { activeRuntimeProfile } from "./runtime-profile.js";
 
 export interface DaemonMcpDependencyOptions {
   workspaceRoot: string;
@@ -65,16 +66,6 @@ function resolveMcpConfigPath(workspaceRoot: string, configPath?: string): strin
   return path.isAbsolute(configPath ?? "")
     ? configPath!
     : path.join(workspaceRoot, configPath ?? ".mcp.json");
-}
-
-export function activeRuntimeProfile(
-  resolvedConfig: Pick<ResolvedConfig, "runtimeState"> | undefined,
-  runtimeProfileName: string | undefined,
-): ResolvedRuntimeProfileState | undefined {
-  const runtimeState = resolvedConfig?.runtimeState;
-  const profiles = runtimeState?.profiles ?? [];
-  const profileName = runtimeProfileName ?? runtimeState?.default_profile;
-  return profiles.find((profile) => profile.name === profileName) ?? profiles[0];
 }
 
 export function mcpServerConfigFromResolved(

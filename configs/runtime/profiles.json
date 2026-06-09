@@ -630,6 +630,14 @@
           "daemon": ["daemon:socket", "daemon:browser-gateway"],
           "web": ["daemon:browser-gateway", "presentation:web"],
           "desktop": ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"]
+        },
+        "defaultSmokeGate": "presentation",
+        "smokeGates": {
+          "presentation": {
+            "description": "Regular opt-in workbench presentation smoke gate covering browser gateway, web, and desktop renderer readiness.",
+            "liveEnv": "KIRAKIRA_WORKBENCH_SMOKE_LIVE",
+            "surfaces": ["web", "desktop"]
+          }
         }
       },
       "mcp": {
@@ -641,6 +649,7 @@
       "mode": "host",
       "workspaceRoot": ".",
       "appRoot": ".",
+      "composeProject": "kirakira-agent-test",
       "composeFiles": ["docker-compose.test.yml"],
       "composeProfiles": [],
       "envFiles": [".env"],
@@ -690,6 +699,7 @@
       "mode": "hybrid",
       "workspaceRoot": ".",
       "appRoot": ".",
+      "composeProject": "kirakira-agent-ci",
       "composeFiles": ["docker-compose.test.yml"],
       "composeProfiles": [],
       "envFiles": [],

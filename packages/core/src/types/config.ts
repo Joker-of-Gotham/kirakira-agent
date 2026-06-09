@@ -205,6 +205,7 @@ export interface ResolvedRuntimeProfileState {
   mode: "container" | "host" | "hybrid";
   workspace_root?: string;
   app_root?: string;
+  compose_project?: string;
   compose_files?: string[];
   compose_profiles?: string[];
   env_files?: string[];

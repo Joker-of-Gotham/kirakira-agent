@@ -56,15 +56,14 @@ Renderer:
 Run these after desktop presentation changes:
 
 ```powershell
+node scripts/presentation-quality-gate.mjs --profile workbench-host --format markdown --fail-on-issues
 pnpm --filter @kirakira/desktop typecheck
 pnpm exec vitest run test/unit/desktop/startup-manifest.test.ts test/unit/desktop/main-security.test.ts test/unit/desktop/preload.test.ts test/unit/desktop/renderer-endpoint.test.ts test/unit/desktop/runtime-ipc.test.ts test/unit/desktop/desktop-transport.test.ts
 ```
 
 Remaining design work:
 
-- Add a real headless Electron smoke harness that asserts page content, not only
-  load completion.
 - Document the shared web/desktop view taxonomy once multi-view workbench
   routing stabilizes.
-- Add visual QA snapshots after the renderer moves beyond shared workbench
-  embedding.
+- Capture archived visual QA snapshots from the presentation gate once renderer
+  screenshot automation lands.

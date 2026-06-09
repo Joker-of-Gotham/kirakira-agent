@@ -13,6 +13,7 @@ import type { ResolvedConfig } from "@kirakira/core";
 import type { OrchestratorKernelOptions } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
 import type { BrowserGatewayConfig } from "../server/browser-gateway-server.js";
 import type { DaemonConfig } from "../lifecycle/daemon-lifecycle.js";
+import { activeRuntimeProfile } from "../bridge/runtime-profile.js";
 
 export type DaemonEnv = Record<string, string | undefined>;
 
@@ -62,9 +63,10 @@ function runtimeProfileFromResolvedConfig(
   resolvedConfig: ResolvedConfig,
   env: DaemonEnv,
 ) {
-  const profiles = resolvedConfig.runtimeState?.profiles ?? [];
-  const name = env.KIRAKIRA_RUNTIME_PROFILE ?? resolvedConfig.runtimeState?.default_profile;
-  return profiles.find((profile) => profile.name === name) ?? profiles[0];
+  return activeRuntimeProfile(
+    resolvedConfig,
+    env.KIRAKIRA_RUNTIME_PROFILE,
+  );
 }
 
 function mcpServerNamesFromResolvedConfig(

@@ -2,8 +2,10 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 import {
   buildWorkbenchSmokeCommand,
+  buildWorkbenchSmokeGateCommand,
   normalizeSmokeArgs,
   runWorkbenchSmoke,
+  runWorkbenchSmokeGate,
 } from "../../../scripts/kirakira-workbench-smoke.mjs";
 import {
   buildWorkbenchSmokePlan,
@@ -32,6 +34,32 @@ describe("workbench smoke gate", () => {
       timeoutMs: 120_000,
       live: true,
     });
+  });
+
+  it("parses a profile-owned gate command shape", () => {
+    const options = normalizeSmokeArgs([
+      "--profile",
+      "workbench-host",
+      "--gate",
+      "presentation",
+      "--timeout-ms",
+      "120000",
+      "--live",
+    ]);
+
+    expect(options).toMatchObject({
+      profileName: "workbench-host",
+      gateName: "presentation",
+      timeoutMs: 120_000,
+      live: true,
+    });
+    expect(normalizeSmokeArgs(["--gate", "presentation", "--", "--dry-run"])).toMatchObject({
+      gateName: "presentation",
+      dryRun: true,
+    });
+    expect(() => normalizeSmokeArgs(["--gate", "presentation", "--surface", "web"])).toThrow(
+      /--gate cannot be combined with --surface/u,
+    );
   });
 
   it("builds a profile-derived web smoke plan without live mode by default", () => {
@@ -148,6 +176,60 @@ describe("workbench smoke gate", () => {
       },
       {
         KIRAKIRA_LIVE_E2E: "1",
+      },
+    );
+
+    expect(smoke.live).toBe(true);
+  });
+
+  it("builds the profile-owned presentation smoke gate for web, desktop, and gateway targets", () => {
+    const smoke = buildWorkbenchSmokeGateCommand(
+      {
+        profileName: "workbench-host",
+        gateName: "presentation",
+        skipInfra: true,
+      },
+      {},
+    );
+
+    expect(smoke.live).toBe(false);
+    expect(smoke.gate).toMatchObject({
+      name: "presentation",
+      source: "runtime-profile.workbench.smokeGates",
+      liveEnv: "KIRAKIRA_WORKBENCH_SMOKE_LIVE",
+      surfaces: ["web", "desktop"],
+    });
+    expect(smoke.surfaces.map((surface) => surface.plan.surface)).toEqual(["web", "desktop"]);
+    expect(smoke.checks).toEqual([
+      "daemon:browser-gateway",
+      "presentation:web",
+      "daemon:socket",
+      "presentation:desktop",
+    ]);
+    expect(smoke.targets).toMatchObject({
+      "daemon:browser-gateway": {
+        target: "http://127.0.0.1:17373/healthz",
+        endpoint: "ws://127.0.0.1:17373/runtime",
+      },
+      "presentation:web": {
+        target: "http://127.0.0.1:5183/",
+      },
+      "presentation:desktop": {
+        target: "http://127.0.0.1:5174/",
+      },
+    });
+    expect(JSON.stringify(smoke)).not.toContain("5173");
+  });
+
+  it("uses the profile gate live environment opt-in", () => {
+    const smoke = buildWorkbenchSmokeGateCommand(
+      {
+        profileName: "workbench-host",
+        gateName: "presentation",
+        skipInfra: true,
+      },
+      {
+        KIRAKIRA_WORKBENCH_SMOKE_LIVE: "1",
       },
     );
 
@@ -324,6 +406,60 @@ describe("workbench smoke gate", () => {
       "foreground:desktop-shell:1",
       "wait:daemon:socket,daemon:browser-gateway,presentation:desktop:75",
       "stop",
+    ]);
+  });
+
+  it("runs every surface in a profile-owned smoke gate", async () => {
+    const smoke = buildWorkbenchSmokeGateCommand(
+      {
+        profileName: "workbench-host",
+        gateName: "presentation",
+        skipInfra: true,
+        timeoutMs: 90,
+      },
+      {},
+    );
+    const events: string[] = [];
+
+    await runWorkbenchSmokeGate(smoke, {
+      processes: {
+        spawn: (step: { name: string }) => {
+          events.push(`spawn:${step.name}`);
+          return fakeChild(step.name);
+        },
+        forceStop: (child: ReturnType<typeof fakeChild>) => {
+          events.push(`stop:${child.name}`);
+          child.killed = true;
+          child.emit("close", 0, null);
+        },
+        gracefulStop: (child: ReturnType<typeof fakeChild>) => {
+          events.push(`stop:${child.name}`);
+          child.killed = true;
+          child.emit("close", 0, null);
+        },
+      },
+      runForeground: async (step: { name: string }) => {
+        events.push(`foreground:${step.name}`);
+      },
+      waitForReadiness: async (_readiness, checks, options) => {
+        events.push(`wait:${checks.join(",")}:${options.timeoutMs}`);
+      },
+    });
+
+    expect(events).toEqual([
+      "spawn:daemon",
+      "wait:daemon:browser-gateway:90",
+      "spawn:web",
+      "wait:daemon:browser-gateway,presentation:web:90",
+      "stop:web",
+      "stop:daemon",
+      "spawn:daemon",
+      "spawn:desktop-renderer",
+      "wait:daemon:socket,daemon:browser-gateway,presentation:desktop:90",
+      "foreground:desktop-shell",
+      "wait:daemon:socket,daemon:browser-gateway,presentation:desktop:90",
+      "stop:desktop-renderer",
+      "stop:daemon",
     ]);
   });
 });

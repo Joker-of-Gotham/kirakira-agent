@@ -16,7 +16,7 @@ import type {
   DaemonMemoryResearchSourceOptions,
   DaemonRunEventSink,
 } from "./deep-research.js";
-import { activeRuntimeProfile } from "./mcp-runtime-deps.js";
+import { activeRuntimeProfile } from "./runtime-profile.js";
 
 export type DaemonMemoryEnv = Record<string, string | undefined>;
 

@@ -136,6 +136,62 @@ describe("workbench live smoke gate contract", () => {
     ]);
   });
 
+  it("reports the profile-owned web and desktop smoke gate from the smoke CLI dry-run", () => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/kirakira-workbench-smoke.mjs",
+        "--dry-run",
+        "--profile",
+        "workbench-host",
+        "--gate",
+        "presentation",
+        "--skip-infra",
+      ],
+      {
+        cwd: repoRoot,
+        encoding: "utf8",
+        maxBuffer: 4 * 1024 * 1024,
+      },
+    );
+
+    expect(result.status).toBe(0);
+    expect(result.stderr).toBe("");
+    expect(result.stdout).not.toContain("5173");
+
+    const report = JSON.parse(result.stdout) as {
+      profile: string;
+      gate: string;
+      gateSource: string;
+      checks: string[];
+      targets: Record<string, { target?: string; endpoint?: string }>;
+      surfaces: Array<{ surface: string; checks: string[] }>;
+    };
+
+    expect(report.profile).toBe("workbench-host");
+    expect(report.gate).toBe("presentation");
+    expect(report.gateSource).toBe("runtime-profile.workbench.smokeGates");
+    expect(report.surfaces.map((surface) => surface.surface)).toEqual(["web", "desktop"]);
+    expect(report.checks).toEqual([
+      "daemon:browser-gateway",
+      "presentation:web",
+      "daemon:socket",
+      "presentation:desktop",
+    ]);
+    expect(report.targets).toMatchObject({
+      "daemon:browser-gateway": {
+        target: "http://127.0.0.1:17373/healthz",
+        endpoint: "ws://127.0.0.1:17373/runtime",
+      },
+      "presentation:web": {
+        target: "http://127.0.0.1:5183/",
+      },
+      "presentation:desktop": {
+        target: "http://127.0.0.1:5174/",
+      },
+    });
+  });
+
   it("reports the same hidden Electron smoke contract from launcher desktop dry-run", () => {
     const result = spawnSync(
       process.execPath,

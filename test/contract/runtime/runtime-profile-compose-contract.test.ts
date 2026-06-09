@@ -162,6 +162,7 @@ describe("runtime profile compose contracts", () => {
     const profile = resolveRuntimeProfile("test-host", loadRuntimeProfiles(), emptyEnv);
     const compose = loadComposeFile("docker-compose.test.yml", import.meta.url);
 
+    expect(profile.composeProject).toBe("kirakira-agent-test");
     expect(profile.composeFiles).toEqual(["docker-compose.test.yml"]);
     expect(Object.keys(profile.services ?? {}).sort()).toEqual([
       "minio",

@@ -36,6 +36,7 @@ export function normalizeSmokeArgs(argv) {
   const options = {
     profileName: undefined,
     surface: undefined,
+    gateName: undefined,
     skipInfra: false,
     skipDaemon: false,
     dryRun: false,
@@ -47,6 +48,9 @@ export function normalizeSmokeArgs(argv) {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === "--") {
+      continue;
+    }
     if (arg === "--profile") {
       options.profileName = readValue(args, index, "--profile");
       index += 1;
@@ -54,6 +58,11 @@ export function normalizeSmokeArgs(argv) {
     }
     if (arg === "--surface") {
       options.surface = readValue(args, index, "--surface");
+      index += 1;
+      continue;
+    }
+    if (arg === "--gate") {
+      options.gateName = readValue(args, index, "--gate");
       index += 1;
       continue;
     }
@@ -101,11 +110,20 @@ export function normalizeSmokeArgs(argv) {
     throw new Error(`Unknown workbench smoke argument: ${arg}`);
   }
 
+  if (options.gateName !== undefined && options.surface !== undefined) {
+    throw new Error("--gate cannot be combined with --surface or a positional surface");
+  }
+
   return options;
 }
 
-function liveRequested(options, env) {
-  return options.live || env.KIRAKIRA_LIVE_E2E === "1" || env.KIRAKIRA_WORKBENCH_SMOKE_LIVE === "1";
+function liveRequested(options, env, gate = undefined) {
+  return (
+    options.live ||
+    env.KIRAKIRA_LIVE_E2E === "1" ||
+    env.KIRAKIRA_WORKBENCH_SMOKE_LIVE === "1" ||
+    (typeof gate?.liveEnv === "string" && env[gate.liveEnv] === "1")
+  );
 }
 
 function readinessTargetSummary(check) {
@@ -126,6 +144,39 @@ export function buildWorkbenchSmokeTargets(readinessPlan) {
       readinessTargetSummary(check),
     ]),
   );
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function isRecord(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+export function resolveWorkbenchSmokeGate(profile, gateName = undefined) {
+  const gates = isRecord(profile.workbench?.smokeGates) ? profile.workbench.smokeGates : {};
+  const selectedName = gateName ?? profile.workbench?.defaultSmokeGate;
+  if (typeof selectedName !== "string" || selectedName.length === 0) {
+    const available = Object.keys(gates).sort().join(", ");
+    throw new Error(`Workbench profile "${profile.name}" has no default smoke gate. Available: ${available}`);
+  }
+  const gate = gates[selectedName];
+  if (!isRecord(gate)) {
+    const available = Object.keys(gates).sort().join(", ");
+    throw new Error(`Unknown workbench smoke gate "${selectedName}". Available gates: ${available}`);
+  }
+  const surfaces = uniqueStrings(Array.isArray(gate.surfaces) ? gate.surfaces : []);
+  if (surfaces.length === 0) {
+    throw new Error(`Workbench smoke gate "${selectedName}" must declare at least one surface`);
+  }
+  return {
+    name: selectedName,
+    source: "runtime-profile.workbench.smokeGates",
+    surfaces,
+    ...(typeof gate.description === "string" ? { description: gate.description } : {}),
+    ...(typeof gate.liveEnv === "string" ? { liveEnv: gate.liveEnv } : {}),
+  };
 }
 
 export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
@@ -150,6 +201,35 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
   };
 }
 
+export function buildWorkbenchSmokeGateCommand(options = {}, env = process.env) {
+  const profile = profileFromOptions(options, env);
+  const gate = resolveWorkbenchSmokeGate(profile, options.gateName);
+  const surfaces = gate.surfaces.map((surface) =>
+    buildWorkbenchSmokeCommand(
+      {
+        ...options,
+        profileName: profile.name,
+        surface,
+        gateName: undefined,
+      },
+      env,
+    ),
+  );
+  return {
+    live: liveRequested(options, env, gate),
+    profile,
+    gate,
+    surfaces,
+    checks: uniqueStrings(surfaces.flatMap((surface) => surface.checks)),
+    targets: Object.assign({}, ...surfaces.map((surface) => surface.targets)),
+    readiness: {
+      timeoutMs: options.timeoutMs ?? DEFAULT_SMOKE_TIMEOUT_MS,
+      intervalMs: options.intervalMs ?? DEFAULT_SMOKE_INTERVAL_MS,
+      probeTimeoutMs: options.probeTimeoutMs ?? DEFAULT_SMOKE_PROBE_TIMEOUT_MS,
+    },
+  };
+}
+
 export async function runWorkbenchSmoke(smokeCommand, options = {}) {
   await runWorkbenchSmokePlan(smokeCommand.plan, {
     supervisor: options.supervisor,
@@ -162,10 +242,44 @@ export async function runWorkbenchSmoke(smokeCommand, options = {}) {
   });
 }
 
-async function main(argv) {
-  const options = normalizeSmokeArgs(argv);
-  const smokePlan = buildWorkbenchSmokeCommand(options);
-  const report = {
+export async function runWorkbenchSmokeGate(smokeGateCommand, options = {}) {
+  for (const smokeCommand of smokeGateCommand.surfaces) {
+    await runWorkbenchSmoke(smokeCommand, options);
+  }
+}
+
+function surfaceSmokeReport(smokePlan) {
+  return {
+    surface: smokePlan.plan.surface,
+    checks: smokePlan.checks,
+    targets: smokePlan.targets,
+    stepOverrides: smokePlan.plan.smoke?.stepOverrides ?? [],
+    readinessPlan: smokePlan.readinessPlan,
+    steps: smokePlan.plan.steps.map((step) => ({
+      name: step.name,
+      mode: step.mode,
+      command: step.command,
+      args: step.args,
+      waitFor: step.waitFor,
+    })),
+  };
+}
+
+function smokeReport(smokePlan) {
+  if (smokePlan.gate) {
+    return {
+      profile: smokePlan.profile.name,
+      gate: smokePlan.gate.name,
+      gateSource: smokePlan.gate.source,
+      live: smokePlan.live,
+      checks: smokePlan.checks,
+      targets: smokePlan.targets,
+      readiness: smokePlan.readiness,
+      surfaces: smokePlan.surfaces.map(surfaceSmokeReport),
+    };
+  }
+
+  return {
     profile: smokePlan.plan.profile,
     surface: smokePlan.plan.surface,
     live: smokePlan.live,
@@ -182,6 +296,14 @@ async function main(argv) {
       waitFor: step.waitFor,
     })),
   };
+}
+
+async function main(argv) {
+  const options = normalizeSmokeArgs(argv);
+  const smokePlan = options.gateName
+    ? buildWorkbenchSmokeGateCommand(options)
+    : buildWorkbenchSmokeCommand(options);
+  const report = smokeReport(smokePlan);
 
   if (options.dryRun) {
     console.log(JSON.stringify(report, null, 2));
@@ -197,7 +319,11 @@ async function main(argv) {
   process.env.KIRAKIRA_RUNTIME_PROFILE = smokePlan.profile.name;
   ensureEnvFile(repoRoot);
   ensureMcpConfig(repoRoot, smokePlan.profile);
-  await runWorkbenchSmoke(smokePlan, { installSignalHandlers: true });
+  if (smokePlan.gate) {
+    await runWorkbenchSmokeGate(smokePlan, { installSignalHandlers: true });
+  } else {
+    await runWorkbenchSmoke(smokePlan, { installSignalHandlers: true });
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

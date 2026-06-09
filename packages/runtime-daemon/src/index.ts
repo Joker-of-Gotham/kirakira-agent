@@ -61,12 +61,12 @@ export type {
   DaemonMcpDependencyOptions,
 } from "./bridge/mcp-runtime-deps.js";
 export {
-  activeRuntimeProfile,
   createDaemonMcpDependencies,
   mcpServerConfigFromResolved,
   registerMcpConfigFile,
   registerResolvedProfileServers,
 } from "./bridge/mcp-runtime-deps.js";
+export { activeRuntimeProfile } from "./bridge/runtime-profile.js";
 export { createDaemonMcpOtelSdkFactory } from "./bridge/mcp-otel-sdk-factory.js";
 export type {
   DaemonMcpRuntimeOptions,

@@ -18,6 +18,8 @@
     "dev:web": "pnpm --filter @kirakira/web dev",
     "dev:desktop": "node scripts/kirakira-workbench.mjs desktop --skip-infra --skip-daemon",
     "e2e:workbench": "node scripts/kirakira-workbench-smoke.mjs",
+    "e2e:workbench:gate": "node scripts/kirakira-workbench-smoke.mjs --gate presentation",
+    "e2e:workbench:live": "node scripts/kirakira-workbench-smoke.mjs --gate presentation --live",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",
     "runtime:doctor": "node scripts/runtime-doctor.mjs",

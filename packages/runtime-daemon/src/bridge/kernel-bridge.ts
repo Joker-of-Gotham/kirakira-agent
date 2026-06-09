@@ -98,6 +98,9 @@ export class KernelBridge {
       resolvedConfig: this.options.resolvedConfig,
       kernelDeepResearch: kernelOptions.deepResearch,
       daemonDeepResearch,
+      eventSink: async (event) => {
+        this.dispatchEvent(writer.append(event));
+      },
     });
     let subagentBridge: DelegateRunnerSubagentBridge | undefined;
     if (this.options.enableDaemonSubagents !== false) {

@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 import {
   buildMemoryPersistenceSmokeCommand,
@@ -25,7 +28,10 @@ describe("memory persistence smoke gate", () => {
   });
 
   it("builds a profile-gated plan without live mode by default", () => {
-    const smoke = buildMemoryPersistenceSmokeCommand({ profileName: "test-host" }, {});
+    const smoke = buildMemoryPersistenceSmokeCommand(
+      { profileName: "test-host", resultPath: null },
+      {},
+    );
 
     expect(smoke.profile).toBe("test-host");
     expect(smoke.live).toBe(false);
@@ -46,6 +52,8 @@ describe("memory persistence smoke gate", () => {
     expect(smoke.liveGate.status).toBe("skipped");
     expect(smoke.liveGate.compose?.args).toEqual([
       "compose",
+      "-p",
+      "kirakira-agent-test",
       "-f",
       "docker-compose.test.yml",
       "up",
@@ -68,11 +76,49 @@ describe("memory persistence smoke gate", () => {
 
   it("can mark the live gate externally passed for readiness reports", () => {
     const smoke = buildMemoryPersistenceSmokeCommand(
-      { profileName: "test-host" },
+      { profileName: "test-host", resultPath: null },
       { KIRAKIRA_MEMORY_PERSISTENCE_SMOKE_PASSED: "1" },
     );
 
     expect(smoke.status).toBe("passed");
     expect(smoke.liveGate.status).toBe("passed");
+  });
+
+  it("trusts a matching live evidence file for readiness reports", () => {
+    const dir = mkdtempSync(join(tmpdir(), "kirakira-memory-smoke-"));
+    const resultPath = join(dir, "memory-persistence-smoke.json");
+    try {
+      writeFileSync(
+        resultPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          gate: "memory-store:persistence",
+          profile: "test-host",
+          status: "passed",
+          passedAt: "2026-06-10T00:00:00.000Z",
+          checks: ["memory-store:checkpoint", "memory-store:retain-reflect"],
+          unitTests: [
+            "test/unit/runtime-daemon/memory-runtime-deps.test.ts",
+            "test/unit/runtime/memory-test-host-env.test.ts",
+          ],
+          liveTests: [
+            "test/integration/memory/checkpoint-restore.test.ts",
+            "test/integration/memory/retain-to-recall.test.ts",
+          ],
+        }),
+      );
+
+      const smoke = buildMemoryPersistenceSmokeCommand({ profileName: "test-host", resultPath }, {});
+
+      expect(smoke.status).toBe("passed");
+      expect(smoke.liveGate.status).toBe("passed");
+      expect(smoke.evidence).toMatchObject({
+        resultStatus: "passed",
+        resultPassedAt: "2026-06-10T00:00:00.000Z",
+        resultMatches: true,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

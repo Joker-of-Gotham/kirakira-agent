@@ -692,6 +692,7 @@ function projectRuntimeProfile(
     mode: rawProfile.mode === "hybrid" ? "hybrid" : rawProfile.mode === "host" ? "host" : "container",
     workspace_root: stringValue(env.KIRAKIRA_WORKSPACE_ROOT) ?? stringValue(rawProfile.workspaceRoot),
     app_root: stringValue(env.KIRAKIRA_APP_ROOT) ?? stringValue(rawProfile.appRoot),
+    compose_project: stringValue(rawProfile.composeProject),
     compose_files: stringArray(rawProfile.composeFiles),
     compose_profiles: stringArray(rawProfile.composeProfiles),
     env_files: stringArray(rawProfile.envFiles),
