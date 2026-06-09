@@ -923,6 +923,14 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.kk-runtime-detail {
+  display: block;
+  margin-top: 2px;
+  color: var(--kk-muted);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
 .kk-config-error {
   min-height: 100vh;
   display: grid;

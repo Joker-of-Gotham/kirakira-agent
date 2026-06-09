@@ -1,12 +1,16 @@
 import type { IpcMain, IpcMainInvokeEvent, WebContents } from "electron";
 import type { DaemonClient, ServerMessage } from "@kirakira/runtime-daemon";
 import {
+  isRuntimeDaemonHealth,
   parseRuntimeClientMessage,
+  sanitizeRuntimeDaemonHealth,
+  type RuntimeDaemonHealth,
   type RuntimeClientMessage,
 } from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
   RuntimeTransportEvent,
+  RuntimeTransportStatus,
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
@@ -25,6 +29,7 @@ export interface RuntimeIpcControllerOptions {
     | "drain"
     | "onMessage"
   >;
+  getHealth?: () => Promise<RuntimeDaemonHealth> | RuntimeDaemonHealth;
   webContentsFromId(id: number): Pick<WebContents, "send" | "isDestroyed"> | undefined;
   socketPath?: string;
   isTrustedSender?(event: IpcMainInvokeEvent): boolean;
@@ -58,6 +63,39 @@ function validateRuntimeClientMessage(raw: RuntimeClientMessage): RuntimeClientM
     throw new Error(result.error.message);
   }
   return result.message;
+}
+
+function runtimeTransportStatus(
+  input: Omit<RuntimeTransportStatus, "mode">,
+): RuntimeTransportStatus {
+  return {
+    mode: "desktop-ipc",
+    ...input,
+  };
+}
+
+async function getRuntimeStatus(
+  connected: boolean,
+  getHealth?: () => Promise<RuntimeDaemonHealth> | RuntimeDaemonHealth,
+): Promise<RuntimeTransportStatus> {
+  if (!getHealth) {
+    return runtimeTransportStatus({
+      state: connected ? "healthy" : "unknown",
+      label: "Desktop IPC",
+      detail: connected ? "Connected to daemon socket" : "Daemon socket not connected",
+    });
+  }
+  const health = await getHealth();
+  if (!isRuntimeDaemonHealth(health)) {
+    throw new Error("Runtime daemon health response is invalid");
+  }
+  const sanitizedHealth = sanitizeRuntimeDaemonHealth(health);
+  return runtimeTransportStatus({
+    state: sanitizedHealth.ok ? "healthy" : "unavailable",
+    label: "Desktop daemon",
+    detail: sanitizedHealth.ok ? undefined : "Daemon health check reported unavailable",
+    health: sanitizedHealth,
+  });
 }
 
 function validateControlMessage(
@@ -338,6 +376,14 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         disposeAll();
         options.client.disconnect();
         connected = false;
+      });
+
+      ipcMain.handle("runtime:getStatus", async (event, ...args: unknown[]) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        if (args.length > 0) {
+          throw new Error("runtime:getStatus does not accept arguments");
+        }
+        return getRuntimeStatus(connected, options.getHealth);
       });
 
       ipcMain.handle("runtime:submitPrompt", async (event, rawRequest: unknown) => {

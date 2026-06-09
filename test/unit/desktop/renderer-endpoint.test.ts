@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
   desktopRendererUrl,
   isTrustedDesktopRuntimeSenderUrl,
@@ -49,14 +51,26 @@ describe("desktop renderer endpoint", () => {
     ).toBeNull();
   });
 
-  it("trusts packaged file renderers and rejects unrelated local origins", () => {
+  it("trusts only the configured packaged file renderer and explicit local origins", () => {
     const env = {
       KIRAKIRA_DESKTOP_RENDERER_URL: "http://127.0.0.1:5174",
     };
+    const packagedRendererUrl = pathToFileURL(
+      resolve("apps/desktop/dist/renderer/index.html"),
+    ).toString();
+    const unrelatedFileUrl = pathToFileURL(resolve("other/index.html")).toString();
 
-    expect(isTrustedDesktopRuntimeSenderUrl("file:///app/renderer/index.html", env)).toBe(
-      true,
-    );
+    expect(
+      isTrustedDesktopRuntimeSenderUrl(packagedRendererUrl, env, {
+        packagedRendererUrl,
+      }),
+    ).toBe(true);
+    expect(
+      isTrustedDesktopRuntimeSenderUrl(unrelatedFileUrl, env, {
+        packagedRendererUrl,
+      }),
+    ).toBe(false);
+    expect(isTrustedDesktopRuntimeSenderUrl(packagedRendererUrl, env)).toBe(false);
     expect(isTrustedDesktopRuntimeSenderUrl("http://127.0.0.1:5174/workbench", env)).toBe(
       true,
     );

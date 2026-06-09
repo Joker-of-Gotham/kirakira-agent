@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
   ApprovalDecision,
   RuntimeTransportEvent,
+  RuntimeTransportStatus,
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
@@ -14,6 +15,7 @@ const nextSubscriptionId = () =>
 contextBridge.exposeInMainWorld("kirakiraRuntime", {
   connect: () => ipcRenderer.invoke("runtime:connect") as Promise<void>,
   disconnect: () => ipcRenderer.invoke("runtime:disconnect") as Promise<void>,
+  getStatus: () => ipcRenderer.invoke("runtime:getStatus") as Promise<RuntimeTransportStatus>,
   submitPrompt: (request: SubmitPromptRequest) =>
     ipcRenderer.invoke("runtime:submitPrompt", request) as Promise<{ runId: string }>,
   getState: (runId: string) =>

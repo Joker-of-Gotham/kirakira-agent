@@ -3,11 +3,17 @@ import {
   parseHttpRuntimeEndpoint,
   type RuntimeEndpointParts,
 } from "@kirakira/runtime-contracts";
+import { normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface DesktopRendererEndpointEnv {
   readonly [key: string]: string | undefined;
   KIRAKIRA_DESKTOP_RENDERER_URL?: string;
   KIRAKIRA_DESKTOP_DEV_URL?: string;
+}
+
+export interface DesktopRuntimeSenderTrustOptions {
+  packagedRendererUrl?: string | null;
 }
 
 const configuredRendererUrl = (env: DesktopRendererEndpointEnv): string | undefined =>
@@ -41,14 +47,36 @@ export function trustedDesktopRendererOrigins(
   return endpoint ? new Set([endpoint.origin]) : new Set<string>();
 }
 
+function normalizedFileUrlPath(value: string): string | null {
+  try {
+    const path = normalize(fileURLToPath(value));
+    return process.platform === "win32" ? path.toLowerCase() : path;
+  } catch {
+    return null;
+  }
+}
+
+function isTrustedPackagedRendererUrl(
+  frameUrl: string,
+  packagedRendererUrl: string | null | undefined,
+): boolean {
+  if (!packagedRendererUrl) return false;
+  const framePath = normalizedFileUrlPath(frameUrl);
+  const trustedPath = normalizedFileUrlPath(packagedRendererUrl);
+  return Boolean(framePath && trustedPath && framePath === trustedPath);
+}
+
 export function isTrustedDesktopRuntimeSenderUrl(
   frameUrl: string | undefined,
   env: DesktopRendererEndpointEnv = process.env,
+  options: DesktopRuntimeSenderTrustOptions = {},
 ): boolean {
   if (!frameUrl) return false;
   try {
     const parsed = new URL(frameUrl);
-    if (parsed.protocol === "file:") return true;
+    if (parsed.protocol === "file:") {
+      return isTrustedPackagedRendererUrl(frameUrl, options.packagedRendererUrl);
+    }
     return trustedDesktopRendererOrigins(env).has(parsed.origin);
   } catch {
     return false;

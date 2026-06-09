@@ -1,6 +1,6 @@
 import { app, BrowserWindow, ipcMain, webContents, type IpcMainInvokeEvent } from "electron";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { DaemonClient } from "@kirakira/runtime-daemon";
 import {
   desktopRendererUrl,
@@ -9,10 +9,14 @@ import {
 import { createRuntimeIpcController } from "./runtime-ipc.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const packagedRendererPath = join(__dirname, "..", "renderer", "index.html");
+const packagedRendererUrl = pathToFileURL(packagedRendererPath).toString();
 const client = new DaemonClient();
 
 const isTrustedRuntimeSender = (event: IpcMainInvokeEvent): boolean => {
-  return isTrustedDesktopRuntimeSenderUrl(event.senderFrame?.url);
+  return isTrustedDesktopRuntimeSenderUrl(event.senderFrame?.url, process.env, {
+    packagedRendererUrl,
+  });
 };
 
 createRuntimeIpcController({
@@ -44,7 +48,7 @@ const createWindow = async () => {
   if (devUrl) {
     await window.loadURL(devUrl);
   } else {
-    await window.loadFile(join(__dirname, "..", "renderer", "index.html"));
+    await window.loadFile(packagedRendererPath);
   }
 };
 

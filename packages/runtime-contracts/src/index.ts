@@ -84,6 +84,7 @@ export {
   runtimeBrowserGatewayHealth,
   runtimeDaemonHealth,
   runtimeServiceHealth,
+  sanitizeRuntimeDaemonHealth,
 } from "./status.js";
 export type {
   ApprovalSummary,

@@ -7,6 +7,7 @@ import {
   runtimeBrowserGatewayHealth,
   runtimeDaemonHealth,
   runtimeServiceHealth,
+  sanitizeRuntimeDaemonHealth,
 } from "../../../packages/runtime-contracts/src/index.js";
 
 const collectKeys = (value: unknown): string[] => {
@@ -100,5 +101,40 @@ describe("runtime status contract", () => {
         },
       }),
     ).toBe(false);
+  });
+
+  it("sanitizes daemon health to the public health contract", () => {
+    const endpoint = renderRuntimeEndpoint(DEFAULT_BROWSER_GATEWAY_ENDPOINT);
+    const health = {
+      ...runtimeDaemonHealth({
+        gateway: true,
+        kernel: true,
+        socket: true,
+        browserGateway: {
+          endpoint: { ...endpoint, token: "secret-token" },
+          tokenRequired: true,
+        },
+      }),
+      token: "secret-token",
+      details: {
+        socketPath: "\\\\.\\pipe\\kirakira-agent-test",
+        browserGateway: {
+          endpoint: { ...endpoint, token: "secret-token" },
+          tokenRequired: true,
+          token: "secret-token",
+        },
+        token: "secret-token",
+      },
+    };
+
+    const sanitized = sanitizeRuntimeDaemonHealth(health);
+
+    expect(isRuntimeDaemonHealth(sanitized)).toBe(true);
+    expect(JSON.stringify(sanitized)).not.toContain("secret-token");
+    expect(collectKeys(sanitized)).not.toContain("token");
+    expect(Object.keys(sanitized.details.browserGateway ?? {})).toEqual([
+      "endpoint",
+      "tokenRequired",
+    ]);
   });
 });

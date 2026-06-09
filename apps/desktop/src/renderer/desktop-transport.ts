@@ -1,9 +1,17 @@
 import type {
   RuntimeTransport,
   RuntimeTransportEvent,
+  RuntimeTransportStatus,
   SubscribeRunOptions,
   Unsubscribe,
 } from "@kirakira/frontend-core";
+
+const unavailableDesktopStatus = (): RuntimeTransportStatus => ({
+  mode: "desktop-ipc",
+  state: "unavailable",
+  label: "Desktop IPC",
+  detail: "Desktop status check failed",
+});
 
 export function createDesktopRuntimeTransport(): RuntimeTransport | null {
   const bridge = window.kirakiraRuntime;
@@ -15,6 +23,7 @@ export function createDesktopRuntimeTransport(): RuntimeTransport | null {
     disconnect: () => {
       void bridge.disconnect();
     },
+    getStatus: () => bridge.getStatus().catch(unavailableDesktopStatus),
     submitPrompt: (request) => bridge.submitPrompt(request),
     getState: (runId) => bridge.getState(runId),
     subscribeRun(

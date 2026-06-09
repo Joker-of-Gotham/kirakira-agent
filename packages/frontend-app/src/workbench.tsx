@@ -529,9 +529,16 @@ export function KirakiraWorkbench({
             <div>
               <dt>Health</dt>
               <dd>
-                {runtimeStatus
-                  ? `${runtimeStatus.state}, ${runtimeStatus.label}`
-                  : "checking"}
+                {runtimeStatus ? (
+                  <>
+                    <span>{`${runtimeStatus.state}, ${runtimeStatus.label}`}</span>
+                    {runtimeStatus.detail ? (
+                      <span className="kk-runtime-detail">{runtimeStatus.detail}</span>
+                    ) : null}
+                  </>
+                ) : (
+                  "checking"
+                )}
               </dd>
             </div>
             <div>

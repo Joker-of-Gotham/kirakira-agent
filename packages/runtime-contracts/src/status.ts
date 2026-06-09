@@ -138,6 +138,44 @@ const isEndpointParts = (value: unknown): value is RuntimeEndpointParts =>
   typeof value.url === "string" &&
   typeof value.origin === "string";
 
+function sanitizeEndpointParts(endpoint: RuntimeEndpointParts): RuntimeEndpointParts {
+  return {
+    protocol: endpoint.protocol,
+    host: endpoint.host,
+    port: endpoint.port,
+    path: endpoint.path,
+    url: endpoint.url,
+    origin: endpoint.origin,
+  };
+}
+
+function sanitizeServiceHealth(service: RuntimeServiceHealth): RuntimeServiceHealth {
+  return {
+    ok: service.ok,
+    state: service.state,
+    ...(service.message !== undefined ? { message: service.message } : {}),
+  };
+}
+
+function sanitizeSocketHealth(service: RuntimeSocketHealth): RuntimeSocketHealth {
+  return {
+    ...sanitizeServiceHealth(service),
+    ...(service.socketPath !== undefined ? { socketPath: service.socketPath } : {}),
+  };
+}
+
+function sanitizeBrowserGatewayServiceHealth(
+  service: RuntimeBrowserGatewayServiceHealth,
+): RuntimeBrowserGatewayServiceHealth {
+  return {
+    ...sanitizeServiceHealth(service),
+    ...(service.endpoint !== undefined
+      ? { endpoint: sanitizeEndpointParts(service.endpoint) }
+      : {}),
+    ...(service.tokenRequired !== undefined ? { tokenRequired: service.tokenRequired } : {}),
+  };
+}
+
 const isRuntimeServiceHealth = (value: unknown): value is RuntimeServiceHealth =>
   isRecord(value) &&
   typeof value.ok === "boolean" &&
@@ -203,4 +241,37 @@ export function isRuntimeDaemonHealth(value: unknown): value is RuntimeDaemonHea
         isEndpointParts(detailsGateway.endpoint) &&
         typeof detailsGateway.tokenRequired === "boolean"))
   );
+}
+
+export function sanitizeRuntimeDaemonHealth(health: RuntimeDaemonHealth): RuntimeDaemonHealth {
+  if (!isRuntimeDaemonHealth(health)) {
+    throw new Error("Runtime daemon health response is invalid");
+  }
+  return {
+    schemaVersion: 1,
+    ok: health.ok,
+    gateway: health.gateway,
+    kernel: health.kernel,
+    socket: health.socket,
+    browserGateway: health.browserGateway,
+    services: {
+      gateway: sanitizeServiceHealth(health.services.gateway),
+      kernel: sanitizeServiceHealth(health.services.kernel),
+      socket: sanitizeSocketHealth(health.services.socket),
+      browserGateway: sanitizeBrowserGatewayServiceHealth(health.services.browserGateway),
+    },
+    details: {
+      ...(health.details.socketPath !== undefined
+        ? { socketPath: health.details.socketPath }
+        : {}),
+      ...(health.details.browserGateway !== undefined
+        ? {
+            browserGateway: {
+              endpoint: sanitizeEndpointParts(health.details.browserGateway.endpoint),
+              tokenRequired: health.details.browserGateway.tokenRequired,
+            },
+          }
+        : {}),
+    },
+  };
 }

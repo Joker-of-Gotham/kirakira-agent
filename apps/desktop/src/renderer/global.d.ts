@@ -1,6 +1,7 @@
 import type {
   ApprovalDecision,
   RuntimeTransportEvent,
+  RuntimeTransportStatus,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -9,6 +10,7 @@ import type {
 export interface KirakiraDesktopRuntimeBridge {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
+  getStatus(): Promise<RuntimeTransportStatus>;
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<{ runId: string; state: unknown }>;
   subscribeRun(

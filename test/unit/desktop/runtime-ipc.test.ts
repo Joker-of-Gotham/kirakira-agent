@@ -1,9 +1,31 @@
 import { describe, expect, it, vi } from "vitest";
 import type { IpcMainInvokeEvent } from "electron";
+import { resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { isTrustedDesktopRuntimeSenderUrl } from "../../../apps/desktop/src/main/renderer-endpoint.js";
 import { createRuntimeIpcController } from "../../../apps/desktop/src/main/runtime-ipc.js";
+import type { RuntimeTransportStatus } from "../../../packages/frontend-core/src/index.js";
 import type { ServerMessage } from "../../../packages/runtime-daemon/src/index.js";
+import {
+  DEFAULT_BROWSER_GATEWAY_ENDPOINT,
+  renderRuntimeEndpoint,
+  runtimeDaemonHealth,
+} from "../../../packages/runtime-contracts/src/index.js";
 
 type Handler = (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown;
+
+const statusTrustEnv = {
+  KIRAKIRA_DESKTOP_RENDERER_URL: "http://127.0.0.1:5174",
+};
+
+const packagedRendererUrl = pathToFileURL(
+  resolve("apps/desktop/dist/renderer/index.html"),
+).toString();
+
+const isTrustedStatusSender = (event: IpcMainInvokeEvent): boolean =>
+  isTrustedDesktopRuntimeSenderUrl(event.senderFrame?.url, statusTrustEnv, {
+    packagedRendererUrl,
+  });
 
 class FakeIpcMain {
   readonly handlers = new Map<string, Handler>();
@@ -238,6 +260,192 @@ describe("desktop runtime IPC controller", () => {
       }),
     ).rejects.toThrow("subscribe filter is malformed");
     expect(fake.client.subscribeToRun).not.toHaveBeenCalled();
+  });
+
+  it("reports desktop IPC status without forcing daemon connection", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:getStatus", eventFor(40)),
+    ).resolves.toMatchObject({
+      mode: "desktop-ipc",
+      state: "unknown",
+      label: "Desktop IPC",
+      detail: "Daemon socket not connected",
+    });
+    expect(fake.client.connect).not.toHaveBeenCalled();
+    expect(fake.client.getState).not.toHaveBeenCalled();
+    expect(fake.client.submitPrompt).not.toHaveBeenCalled();
+    expect(fake.client.subscribeToRun).not.toHaveBeenCalled();
+    expect(fake.client.unsubscribe).not.toHaveBeenCalled();
+
+    await ipcMain.invoke("runtime:connect", eventFor(40));
+    await expect(
+      ipcMain.invoke("runtime:getStatus", eventFor(40)),
+    ).resolves.toMatchObject({
+      mode: "desktop-ipc",
+      state: "healthy",
+      label: "Desktop IPC",
+      detail: "Connected to daemon socket",
+    });
+  });
+
+  it("validates and returns daemon health from a trusted status provider", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const endpoint = renderRuntimeEndpoint(DEFAULT_BROWSER_GATEWAY_ENDPOINT);
+    const health = runtimeDaemonHealth({
+      gateway: true,
+      kernel: true,
+      socket: true,
+      browserGateway: {
+        endpoint,
+        tokenRequired: true,
+      },
+    });
+    const getHealth = vi.fn(async () => ({
+      ...health,
+      token: "secret-token",
+      services: {
+        ...health.services,
+        browserGateway: {
+          ...health.services.browserGateway,
+          token: "secret-token",
+          endpoint: { ...endpoint, token: "secret-token" },
+        },
+      },
+      details: {
+        ...health.details,
+        browserGateway: {
+          endpoint: { ...endpoint, token: "secret-token" },
+          tokenRequired: true,
+          token: "secret-token",
+        },
+        token: "secret-token",
+      },
+    }));
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      getHealth,
+      isTrustedSender: isTrustedStatusSender,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:getStatus", eventFor(41, "http://127.0.0.1:5173/")),
+    ).rejects.toThrow("Untrusted runtime IPC sender");
+    expect(getHealth).not.toHaveBeenCalled();
+
+    const status = (await ipcMain.invoke(
+      "runtime:getStatus",
+      eventFor(41),
+    )) as RuntimeTransportStatus;
+    expect(status).toMatchObject({
+      mode: "desktop-ipc",
+      state: "healthy",
+      label: "Desktop daemon",
+      health: {
+        ok: true,
+        details: {
+          browserGateway: {
+            endpoint,
+            tokenRequired: true,
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(status)).not.toContain("5173");
+    expect(JSON.stringify(status)).not.toContain("secret-token");
+    const daemonHealth = status.health as {
+      details: { browserGateway?: Record<string, unknown> };
+    };
+    expect(Object.keys(daemonHealth.details.browserGateway ?? {})).toEqual([
+      "endpoint",
+      "tokenRequired",
+    ]);
+
+    await expect(
+      ipcMain.invoke("runtime:getStatus", eventFor(41, packagedRendererUrl)),
+    ).resolves.toMatchObject({
+      mode: "desktop-ipc",
+      state: "healthy",
+      label: "Desktop daemon",
+    });
+  });
+
+  it("maps unhealthy daemon health to unavailable desktop status", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      getHealth: async () =>
+        runtimeDaemonHealth({
+          gateway: false,
+          kernel: true,
+          socket: true,
+        }),
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(ipcMain.invoke("runtime:getStatus", eventFor(43))).resolves.toMatchObject({
+      mode: "desktop-ipc",
+      state: "unavailable",
+      label: "Desktop daemon",
+      detail: "Daemon health check reported unavailable",
+      health: {
+        ok: false,
+      },
+    });
+  });
+
+  it("rejects unexpected desktop status arguments", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const getHealth = vi.fn(async () =>
+      runtimeDaemonHealth({
+        gateway: true,
+        kernel: true,
+        socket: true,
+      }),
+    );
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      getHealth,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:getStatus", eventFor(44), { payload: true }),
+    ).rejects.toThrow("runtime:getStatus does not accept arguments");
+    expect(getHealth).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed daemon health provider results", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      getHealth: async () => ({ ok: true }) as never,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(ipcMain.invoke("runtime:getStatus", eventFor(42))).rejects.toThrow(
+      "Runtime daemon health response is invalid",
+    );
   });
 });
 
