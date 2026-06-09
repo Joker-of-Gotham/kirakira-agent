@@ -35,6 +35,9 @@ export class DelegateRunnerSubagentBridge implements RuntimeSubagentBridge {
         : {}),
       inputArtifactRefs: request.spec.inputArtifactRefs,
       outputSchema: request.spec.outputSchema,
+      ...(request.spec.permissions !== undefined ? { permissions: request.spec.permissions } : {}),
+      ...(request.spec.topology !== undefined ? { topology: request.spec.topology } : {}),
+      ...(request.spec.lineage !== undefined ? { lineage: request.spec.lineage } : {}),
       action: {
         kind: "delegate",
         args: {

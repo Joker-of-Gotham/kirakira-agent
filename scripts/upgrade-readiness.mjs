@@ -75,6 +75,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     harnessApiTrack(context),
     ecosystemTrack(context),
   ].map(scoreTrack);
+  const openWork = buildOpenWork(tracks, parity);
   const totals = tracks.reduce(
     (summary, track) => {
       summary.pass += track.summary.pass;
@@ -94,8 +95,10 @@ export function buildUpgradeReadinessReport(options = {}) {
       ...totals,
       score: scoreFromCounts(totals),
       status: totals.fail > 0 ? "fail" : totals.warn > 0 ? "warn" : "pass",
+      openWork: openWork.length,
     },
     tracks,
+    openWork,
   };
 }
 
@@ -114,8 +117,21 @@ export function renderUpgradeReadinessReport(report, format = "markdown") {
     `- Status: ${report.summary.status}`,
     `- Score: ${report.summary.score}%`,
     `- Checks: ${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail`,
+    `- Open work items: ${report.summary.openWork}`,
     "",
   ];
+
+  if (report.openWork.length > 0) {
+    lines.push("## Open Work", "");
+    lines.push("| Track | Status | Item | Evidence |");
+    lines.push("| --- | --- | --- | --- |");
+    for (const item of report.openWork) {
+      lines.push(
+        `| ${escapeTableCell(item.track)} | ${item.status} | ${escapeTableCell(item.item)} | ${escapeTableCell(item.evidence)} |`,
+      );
+    }
+    lines.push("");
+  }
 
   for (const track of report.tracks) {
     lines.push(`## ${track.title}`, "");
@@ -130,6 +146,36 @@ export function renderUpgradeReadinessReport(report, format = "markdown") {
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function buildOpenWork(tracks, parity) {
+  const readinessItems = tracks.flatMap((track) =>
+    track.checks
+      .filter((check) => check.status !== "pass")
+      .map((check) => ({
+        track: track.title,
+        status: check.status,
+        item: check.label,
+        evidence: check.evidence,
+      })),
+  );
+
+  const behaviorItems = (parity.behaviorParity?.checks ?? [])
+    .filter((check) => check.status !== "covered")
+    .flatMap((check) => {
+      const gaps =
+        check.remainingGaps.length > 0
+          ? check.remainingGaps
+          : [`Behavior parity check remains ${check.status}`];
+      return gaps.map((gap) => ({
+        track: "EAM Mechanism Parity",
+        status: check.status === "partial" ? "warn" : "fail",
+        item: `${check.targetName}: ${gap}`,
+        evidence: `${check.classification}; behavior=${check.status}`,
+      }));
+    });
+
+  return [...readinessItems, ...behaviorItems];
 }
 
 function eamMechanismTrack({ workspaceRoot, parity }) {

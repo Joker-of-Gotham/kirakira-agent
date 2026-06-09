@@ -568,6 +568,16 @@ describe("orchestrator subagent contract", () => {
         policyCeiling: { network: "restricted" },
         inputArtifactRefs: ["artifact-source"],
         outputSchema: { type: "object" },
+        permissions: ["workspace-write-gated"],
+        topology: {
+          parentRole: "supervisor",
+          handoffEdgeId: "handoff:supervisor:implementer:tool:0",
+        },
+        lineage: {
+          rootLineageId: "run-1",
+          parentLineageId: "run-1:worker:worker-parent",
+          lineageId: "run-1:task:step-a:subagent",
+        },
         action: {
           args: {
             permissions: ["workspace-write-gated"],

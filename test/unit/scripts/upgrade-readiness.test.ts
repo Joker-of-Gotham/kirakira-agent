@@ -34,6 +34,8 @@ describe("upgrade readiness gate", () => {
     ]);
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
+    expect(report.summary.openWork).toBeGreaterThan(0);
+    expect(report.openWork.some((item) => item.item.includes("profile-selected OTel"))).toBe(true);
     expect(JSON.stringify(report)).not.toContain("5173");
   });
 
@@ -43,7 +45,9 @@ describe("upgrade readiness gate", () => {
     const json = JSON.parse(renderUpgradeReadinessReport(report, "json"));
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
+    expect(markdown).toContain("## Open Work");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
+    expect(json.openWork.length).toBe(report.openWork.length);
   });
 });

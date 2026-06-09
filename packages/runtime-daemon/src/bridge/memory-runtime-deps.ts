@@ -9,13 +9,63 @@ import {
   createPgClient,
   PostgresCheckpointEnvelopeRepository,
 } from "@kirakira/memory-store";
+import type { RunEvent, RunEventKind } from "@kirakira/runtime-contracts";
+import { ulid } from "ulid";
 
-import type { DaemonMemoryResearchSourceOptions } from "./deep-research.js";
+import type {
+  DaemonMemoryResearchSourceOptions,
+  DaemonRunEventSink,
+} from "./deep-research.js";
 import { activeRuntimeProfile } from "./mcp-runtime-deps.js";
 
 export type DaemonMemoryEnv = Record<string, string | undefined>;
 
+export type DaemonMemoryNamespace = "user" | "project" | "org" | "agent" | "shared";
+export type DaemonMemoryEpisodeSourceType = "chat" | "tool" | "file" | "web" | "sandbox";
+export type DaemonMemoryRetentionClass = "default" | "regulated" | "ephemeral";
+export type DaemonMemoryPiiLevel = "none" | "low" | "high";
+
+export interface DaemonMemoryRetainRequest {
+  tenantId: string;
+  workspaceId: string;
+  actorId?: string;
+  namespace: DaemonMemoryNamespace;
+  sourceType: DaemonMemoryEpisodeSourceType;
+  content: string;
+  metadata?: Record<string, unknown>;
+  sessionId?: string;
+  runId?: string;
+  retentionClass?: DaemonMemoryRetentionClass;
+  piiLevel?: DaemonMemoryPiiLevel;
+}
+
+export interface DaemonMemoryRetainReceipt {
+  episodeId: string;
+  memoryRecordIds: string[];
+  factIds: string[];
+  outboxEventId: string;
+  retainedAt: string;
+}
+
+export interface DaemonMemoryReflectRequest {
+  tenantId: string;
+  workspaceId: string;
+  scope?: string;
+  factIds?: string[];
+  episodeIds?: string[];
+  maxConsolidations?: number;
+}
+
+export interface DaemonMemoryReflectReceipt {
+  observationIds: string[];
+  beliefUpdates: Array<{ beliefId: string; action: "created" | "updated" | "invalidated" }>;
+  contradictions: Array<{ factId: string; conflictsWith: string; resolution: string }>;
+  reflectedAt: string;
+}
+
 export type DaemonMemoryService = MemoryRecallPort & {
+  retain?: (req: DaemonMemoryRetainRequest) => Promise<DaemonMemoryRetainReceipt>;
+  reflect?: (req: DaemonMemoryReflectRequest) => Promise<DaemonMemoryReflectReceipt>;
   close?: () => Promise<void> | void;
 };
 
@@ -30,14 +80,59 @@ export interface DaemonMemoryDependencyOptions {
   runtimeProfileName?: string;
   service?: DaemonMemoryService;
   serviceFactory?: (config: MemoryServiceConfig) => DaemonMemoryService;
+  eventSink?: DaemonRunEventSink;
+  enableRetain?: boolean;
+  enableReflect?: boolean;
   enableCheckpointRepository?: boolean;
   checkpointRepository?: DaemonCheckpointRepository;
   checkpointRepositoryFactory?: (config: MemoryServiceConfig) => DaemonCheckpointRepository;
 }
 
+export type DaemonMemoryOperationName = "retain" | "reflect";
+
+export type DaemonMemoryEventDestination =
+  | {
+      channel: "memory-service";
+      enabled: boolean;
+      operation: DaemonMemoryOperationName;
+    }
+  | {
+      channel: "memory-service-outbox";
+      enabled: boolean;
+      eventTypes: readonly string[];
+    }
+  | {
+      channel: "runtime-events";
+      enabled: boolean;
+      eventKinds: readonly RunEventKind[];
+      requiresRunId: boolean;
+    };
+
+export interface DaemonMemoryOperationContext {
+  runId?: string;
+  sessionId?: string;
+  traceId?: string;
+  parentTaskId?: string;
+  nodeId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface DaemonMemoryOperationBridge<Request, Receipt> {
+  operation: DaemonMemoryOperationName;
+  enabled: boolean;
+  destinations: DaemonMemoryEventDestination[];
+  invoke?: (request: Request, context?: DaemonMemoryOperationContext) => Promise<Receipt>;
+}
+
+export interface DaemonMemoryRetainReflectBridge {
+  retain: DaemonMemoryOperationBridge<DaemonMemoryRetainRequest, DaemonMemoryRetainReceipt>;
+  reflect: DaemonMemoryOperationBridge<DaemonMemoryReflectRequest, DaemonMemoryReflectReceipt>;
+}
+
 export interface DaemonMemoryDependencies {
   researchSource?: DaemonMemoryResearchSourceOptions;
   checkpointRepository?: CheckpointRepository;
+  retainReflect: DaemonMemoryRetainReflectBridge;
   config?: MemoryServiceConfig;
   close(): Promise<void>;
 }
@@ -45,6 +140,19 @@ export interface DaemonMemoryDependencies {
 const MEMORY_SERVICE_NAMES = new Set(["postgres", "redis", "qdrant", "neo4j", "minio"]);
 const MEMORY_CONTEXT_LEVELS = new Set(["L0", "L1", "L2", "L3"]);
 const DEFAULT_MEMORY_LEVEL: NonNullable<DaemonMemoryResearchSourceOptions["level"]> = "L3";
+export const DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS = [
+  "memory.retain.started",
+  "memory.retain.completed",
+  "memory.retain.failed",
+] as const satisfies readonly RunEventKind[];
+export const DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS = [
+  "memory.fact.extract",
+  "memory.index.materialize",
+  "memory.reflect.request",
+] as const;
+export const DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS = [
+  "memory.observation.created",
+] as const;
 const LOCAL_MEMORY_DEFAULTS = {
   postgresDsn: "postgresql://localhost:5432/kirakira",
   redisUrl: "redis://localhost:6379/0",
@@ -267,6 +375,56 @@ export function shouldCreateDaemonMemoryDependencies(
   );
 }
 
+function serviceSupportsOperation(
+  service: DaemonMemoryService | undefined,
+  operation: DaemonMemoryOperationName,
+): boolean {
+  return typeof service?.[operation] === "function";
+}
+
+function shouldCreateDaemonMemoryOperation(
+  options: DaemonMemoryDependencyOptions,
+  operation: DaemonMemoryOperationName,
+): boolean {
+  const env = options.env ?? process.env;
+  const enabled = envFlag(env, "KIRAKIRA_MEMORY_ENABLED");
+  const operationEnabled = envFlag(
+    env,
+    operation === "retain"
+      ? "KIRAKIRA_MEMORY_RETAIN_ENABLED"
+      : "KIRAKIRA_MEMORY_REFLECT_ENABLED",
+  );
+  const memory = activeRuntimeMemory(options);
+  const optionEnabled =
+    operation === "retain" ? options.enableRetain : options.enableReflect;
+  const hasMemoryServiceConfig = hasRuntimeMemoryEnv(env, memory);
+  if (optionEnabled === false) return false;
+  if (operationEnabled === false) return false;
+  if (enabled === false) return false;
+  if (memory?.enabled === false) return false;
+  if (options.service) {
+    return serviceSupportsOperation(options.service, operation) &&
+      (optionEnabled === true ||
+        operationEnabled === true ||
+        enabled === true ||
+        memoryProfileHasBackingServices(options));
+  }
+  if (optionEnabled === true) return hasMemoryServiceConfig;
+  if (operationEnabled === true) return hasMemoryServiceConfig;
+  if (enabled === true) return hasMemoryServiceConfig;
+  return Boolean(
+    memoryProfileHasBackingServices(options) &&
+      hasMemoryServiceConfig,
+  );
+}
+
+export function shouldCreateDaemonMemoryRetainReflectBridge(
+  options: DaemonMemoryDependencyOptions,
+): boolean {
+  return shouldCreateDaemonMemoryOperation(options, "retain") ||
+    shouldCreateDaemonMemoryOperation(options, "reflect");
+}
+
 export function shouldCreateDaemonMemoryCheckpointRepository(
   options: DaemonMemoryDependencyOptions,
 ): boolean {
@@ -445,7 +603,7 @@ export function memoryServiceConfigFromEnv(
   };
 }
 
-class LazyMemoryRecallPort implements DaemonMemoryService {
+class LazyMemoryService implements DaemonMemoryService {
   private service: DaemonMemoryService | undefined;
 
   constructor(
@@ -459,6 +617,22 @@ class LazyMemoryRecallPort implements DaemonMemoryService {
 
   async explainRetrieval(...args: Parameters<MemoryRecallPort["explainRetrieval"]>) {
     return this.getService().explainRetrieval(...args);
+  }
+
+  async retain(req: DaemonMemoryRetainRequest): Promise<DaemonMemoryRetainReceipt> {
+    const service = this.getService();
+    if (!service.retain) {
+      throw new Error("Daemon memory service does not implement retain");
+    }
+    return service.retain(req);
+  }
+
+  async reflect(req: DaemonMemoryReflectRequest): Promise<DaemonMemoryReflectReceipt> {
+    const service = this.getService();
+    if (!service.reflect) {
+      throw new Error("Daemon memory service does not implement reflect");
+    }
+    return service.reflect(req);
   }
 
   async close(): Promise<void> {
@@ -512,13 +686,243 @@ function createDefaultCheckpointRepository(
   };
 }
 
+function memoryOperationDestinations(
+  operation: DaemonMemoryOperationName,
+  enabled: boolean,
+  eventSink: DaemonRunEventSink | undefined,
+): DaemonMemoryEventDestination[] {
+  const serviceOutboxEvents =
+    operation === "retain"
+      ? DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS
+      : DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS;
+  const destinations: DaemonMemoryEventDestination[] = [
+    { channel: "memory-service", enabled, operation },
+    {
+      channel: "memory-service-outbox",
+      enabled,
+      eventTypes: serviceOutboxEvents,
+    },
+  ];
+  if (operation === "retain") {
+    destinations.push({
+      channel: "runtime-events",
+      enabled: enabled && eventSink !== undefined,
+      eventKinds: DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
+      requiresRunId: true,
+    });
+  }
+  return destinations;
+}
+
+function memoryOperationContract<Request, Receipt>(
+  operation: DaemonMemoryOperationName,
+  enabled: boolean,
+  eventSink: DaemonRunEventSink | undefined,
+  invoke?: (request: Request, context?: DaemonMemoryOperationContext) => Promise<Receipt>,
+): DaemonMemoryOperationBridge<Request, Receipt> {
+  return {
+    operation,
+    enabled,
+    destinations: memoryOperationDestinations(operation, enabled, eventSink),
+    ...(enabled && invoke ? { invoke } : {}),
+  };
+}
+
+function createRetainReflectBridge(input: {
+  service?: DaemonMemoryService;
+  eventSink?: DaemonRunEventSink;
+  retainEnabled: boolean;
+  reflectEnabled: boolean;
+}): DaemonMemoryRetainReflectBridge {
+  const retainInvoke = input.service
+    ? (request: DaemonMemoryRetainRequest, context?: DaemonMemoryOperationContext) =>
+        invokeRetain(input.service!, request, context, input.eventSink)
+    : undefined;
+  const reflectInvoke = input.service
+    ? async (request: DaemonMemoryReflectRequest) => {
+        const service = input.service!;
+        if (!service.reflect) {
+          throw new Error("Daemon memory service does not implement reflect");
+        }
+        return service.reflect(request);
+      }
+    : undefined;
+  return {
+    retain: memoryOperationContract(
+      "retain",
+      input.retainEnabled,
+      input.eventSink,
+      retainInvoke,
+    ),
+    reflect: memoryOperationContract(
+      "reflect",
+      input.reflectEnabled,
+      input.eventSink,
+      reflectInvoke,
+    ),
+  };
+}
+
+async function invokeRetain(
+  service: DaemonMemoryService,
+  request: DaemonMemoryRetainRequest,
+  context: DaemonMemoryOperationContext | undefined,
+  eventSink: DaemonRunEventSink | undefined,
+): Promise<DaemonMemoryRetainReceipt> {
+  if (!service.retain) {
+    throw new Error("Daemon memory service does not implement retain");
+  }
+  const operationId = ulid();
+  const startedAt = Date.now();
+  const startedAtIso = new Date(startedAt).toISOString();
+  const runId = context?.runId ?? request.runId;
+  const basePayload = memoryRetainRequestPayload(operationId, request, context, startedAtIso);
+  if (eventSink && runId) {
+    await emitDaemonMemoryOperationEvent(
+      eventSink,
+      runId,
+      "memory.retain.started",
+      basePayload,
+    );
+  }
+  try {
+    const receipt = await service.retain(request);
+    if (eventSink && runId) {
+      await emitDaemonMemoryOperationEvent(
+        eventSink,
+        runId,
+        "memory.retain.completed",
+        {
+          ...basePayload,
+          ...memoryRetainReceiptPayload(receipt),
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt,
+        },
+      );
+    }
+    return receipt;
+  } catch (error) {
+    if (eventSink && runId) {
+      await emitDaemonMemoryOperationEvent(
+        eventSink,
+        runId,
+        "memory.retain.failed",
+        {
+          ...basePayload,
+          completedAt: new Date().toISOString(),
+          durationMs: Date.now() - startedAt,
+          error: errorMessage(error),
+        },
+      );
+    }
+    throw error;
+  }
+}
+
+function memoryRetainRequestPayload(
+  operationId: string,
+  request: DaemonMemoryRetainRequest,
+  context: DaemonMemoryOperationContext | undefined,
+  startedAt: string,
+): Record<string, unknown> {
+  return compactRecord({
+    memoryOperationId: operationId,
+    operation: "retain",
+    runId: context?.runId ?? request.runId,
+    sessionId: context?.sessionId ?? request.sessionId,
+    traceId: context?.traceId,
+    parentTaskId: context?.parentTaskId,
+    nodeId: context?.nodeId,
+    tenantId: request.tenantId,
+    workspaceId: request.workspaceId,
+    actorId: request.actorId,
+    namespace: request.namespace,
+    sourceType: request.sourceType,
+    retentionClass: request.retentionClass,
+    piiLevel: request.piiLevel,
+    contentLength: request.content.length,
+    startedAt,
+    metadata: sanitizeRecord(context?.metadata),
+  });
+}
+
+function memoryRetainReceiptPayload(receipt: DaemonMemoryRetainReceipt): Record<string, unknown> {
+  return compactRecord({
+    episodeId: receipt.episodeId,
+    memoryRecordIds: receipt.memoryRecordIds.slice(0, 50),
+    factIds: receipt.factIds.slice(0, 50),
+    outboxEventId: receipt.outboxEventId,
+    retainedAt: receipt.retainedAt,
+    serviceOutboxEventTypes: DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
+  });
+}
+
+async function emitDaemonMemoryOperationEvent(
+  eventSink: DaemonRunEventSink,
+  runId: string,
+  kind: RunEventKind,
+  payload: Record<string, unknown>,
+): Promise<RunEvent> {
+  const event: RunEvent = {
+    id: ulid(),
+    runId,
+    timestamp: new Date().toISOString(),
+    kind,
+    payload: compactRecord(payload),
+  };
+  await eventSink(event);
+  return event;
+}
+
+function compactRecord(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  );
+}
+
+function sanitizeRecord(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!value) return undefined;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      item === null ||
+      typeof item === "string" ||
+      typeof item === "number" ||
+      typeof item === "boolean"
+    ) {
+      out[key] = typeof item === "string" ? preview(item, 240) : item;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function preview(value: string, max = 160): string {
+  const clean = value.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  return `${clean.slice(0, Math.max(0, max - 3))}...`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? preview(error.message, 240) : preview(String(error), 240);
+}
+
 export function createDaemonMemoryDependencies(
   options: DaemonMemoryDependencyOptions,
 ): DaemonMemoryDependencies {
   const shouldCreateRecall = shouldCreateDaemonMemoryDependencies(options);
+  const shouldCreateRetain = shouldCreateDaemonMemoryOperation(options, "retain");
+  const shouldCreateReflect = shouldCreateDaemonMemoryOperation(options, "reflect");
   const shouldCreateCheckpoint = shouldCreateDaemonMemoryCheckpointRepository(options);
-  if (!shouldCreateRecall && !shouldCreateCheckpoint) {
-    return { async close() {} };
+  if (!shouldCreateRecall && !shouldCreateRetain && !shouldCreateReflect && !shouldCreateCheckpoint) {
+    return {
+      retainReflect: createRetainReflectBridge({
+        retainEnabled: false,
+        reflectEnabled: false,
+      }),
+      async close() {},
+    };
   }
 
   const env = options.env ?? process.env;
@@ -535,11 +939,13 @@ export function createDaemonMemoryDependencies(
     );
   }
   const needsConfig = (shouldCreateRecall && !options.service) ||
+    ((shouldCreateRetain || shouldCreateReflect) && !options.service) ||
     (shouldCreateCheckpoint && !options.checkpointRepository);
   const config = needsConfig ? memoryServiceConfigFromEnv(env, memory) : undefined;
-  const service = shouldCreateRecall
+  const shouldCreateService = shouldCreateRecall || shouldCreateRetain || shouldCreateReflect;
+  const service = shouldCreateService
     ? options.service ??
-      new LazyMemoryRecallPort(
+      new LazyMemoryService(
         config!,
         options.serviceFactory ?? ((serviceConfig) => new MemoryServiceImpl(serviceConfig)),
       )
@@ -548,11 +954,18 @@ export function createDaemonMemoryDependencies(
     ? options.checkpointRepository ??
       (options.checkpointRepositoryFactory ?? createDefaultCheckpointRepository)(config!)
     : undefined;
+  const retainReflect = createRetainReflectBridge({
+    ...(service ? { service } : {}),
+    ...(options.eventSink ? { eventSink: options.eventSink } : {}),
+    retainEnabled: shouldCreateRetain,
+    reflectEnabled: shouldCreateReflect,
+  });
 
   return {
+    retainReflect,
     ...(config ? { config } : {}),
     ...(checkpointRepository ? { checkpointRepository } : {}),
-    ...(service
+    ...(shouldCreateRecall && service
       ? {
           researchSource: {
             service,

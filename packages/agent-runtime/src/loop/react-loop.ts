@@ -10,7 +10,10 @@ import type {
   Action,
   SandboxPolicyCeiling,
   SubagentCapability,
+  SubagentHandoffMetadata,
+  SubagentLineageMetadata,
   SubagentRuntimePolicy,
+  SubagentTopologyMetadata,
   ReactWorkerState,
 } from "../types.js";
 import {
@@ -58,6 +61,9 @@ export interface DelegateRequest {
   runtimePolicy?: SubagentRuntimePolicy;
   inputArtifactRefs?: string[];
   outputSchema?: Record<string, unknown>;
+  permissions?: string[];
+  topology?: SubagentTopologyMetadata;
+  lineage?: SubagentLineageMetadata;
   action: Action & { kind: "delegate" };
 }
 
@@ -128,6 +134,69 @@ function stringArrayArg(action: Action, key: string): string[] | undefined {
 function objectArg<T extends object>(action: Action, key: string): T | undefined {
   const value = action.args?.[key];
   return value && typeof value === "object" && !Array.isArray(value) ? (value as T) : undefined;
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
+}
+
+function stringArrayValue(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const out = value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+  return out.length > 0 ? out : undefined;
+}
+
+function handoffArg(value: unknown): SubagentHandoffMetadata | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const id = stringValue(raw.id);
+  const from = stringValue(raw.from);
+  const to = stringValue(raw.to);
+  if (!id || !from || !to) return undefined;
+  return {
+    id,
+    from,
+    to,
+    ...(stringValue(raw.mode) !== undefined ? { mode: stringValue(raw.mode) } : {}),
+    ...(stringValue(raw.inputFilter) !== undefined
+      ? { inputFilter: stringValue(raw.inputFilter) }
+      : {}),
+    ...(typeof raw.approvalRequired === "boolean"
+      ? { approvalRequired: raw.approvalRequired }
+      : {}),
+    ...(stringArrayValue(raw.conditions) !== undefined
+      ? { conditions: stringArrayValue(raw.conditions) }
+      : {}),
+  };
+}
+
+function topologyArg(action: Action): SubagentTopologyMetadata | undefined {
+  const raw = action.args?.topology;
+  const topology = raw && typeof raw === "object" && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : undefined;
+  const parentRole = stringValue(topology?.parentRole);
+  const handoffEdgeId = stringValue(topology?.handoffEdgeId) ?? stringArg(action, "handoffEdgeId");
+  const handoff = handoffArg(topology?.handoff);
+  const out: SubagentTopologyMetadata = {
+    ...(parentRole !== undefined ? { parentRole } : {}),
+    ...(handoffEdgeId !== undefined ? { handoffEdgeId } : {}),
+    ...(handoff !== undefined ? { handoff } : {}),
+  };
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function lineageArg(action: Action): SubagentLineageMetadata | undefined {
+  const raw = action.args?.lineage;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const lineage = raw as Record<string, unknown>;
+  const rootLineageId = stringValue(lineage.rootLineageId);
+  const parentLineageId = stringValue(lineage.parentLineageId);
+  const lineageId = stringValue(lineage.lineageId);
+  if (!rootLineageId || !parentLineageId || !lineageId) return undefined;
+  return { rootLineageId, parentLineageId, lineageId };
 }
 
 function delegateCapabilities(action: Action): SubagentCapability[] | undefined {
@@ -416,6 +485,9 @@ ${execRes.stderr}`;
       const policyCeiling = objectArg<SandboxPolicyCeiling>(delegateAction, "policyCeiling");
       const inputArtifactRefs = stringArrayArg(delegateAction, "inputArtifactRefs");
       const outputSchema = objectArg<Record<string, unknown>>(delegateAction, "outputSchema");
+      const permissions = stringArrayArg(delegateAction, "permissions");
+      const topology = topologyArg(delegateAction);
+      const lineage = lineageArg(delegateAction);
       const subagentPayload = {
         subagentId,
         parentWorkerId: state.config.id,
@@ -430,6 +502,9 @@ ${execRes.stderr}`;
         ...(policyCeiling !== undefined ? { policyCeiling } : {}),
         ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
         ...(outputSchema !== undefined ? { outputSchema } : {}),
+        ...(permissions !== undefined ? { permissions } : {}),
+        ...(topology !== undefined ? { topology } : {}),
+        ...(lineage !== undefined ? { lineage } : {}),
       };
       if (!task) {
         consecutiveErrors += 1;
@@ -498,6 +573,9 @@ ${execRes.stderr}`;
           ...(policyCeiling !== undefined ? { policyCeiling } : {}),
           ...(inputArtifactRefs !== undefined ? { inputArtifactRefs } : {}),
           ...(outputSchema !== undefined ? { outputSchema } : {}),
+          ...(permissions !== undefined ? { permissions } : {}),
+          ...(topology !== undefined ? { topology } : {}),
+          ...(lineage !== undefined ? { lineage } : {}),
           action: delegateAction,
         });
       } catch (error) {

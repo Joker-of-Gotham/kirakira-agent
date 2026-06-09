@@ -77,6 +77,7 @@ export interface RunDashboardResearchRun {
   evidenceCount: number;
   citationCount: number;
   citationIds: string[];
+  citations: Record<string, RunDashboardResearchCitation>;
   latestCitation?: RunDashboardResearchCitation;
   unknowns?: string[];
   error?: string;
@@ -546,6 +547,10 @@ function applyResearch(
     previous?.citationIds ?? [],
     firstString(event.payload, ["citationId"]),
   );
+  const citations =
+    citation !== undefined
+      ? { ...(previous?.citations ?? {}), [citation.id]: citation }
+      : previous?.citations ?? {};
   const evidenceIncrement = event.kind === "research.evidence.collected" ? 1 : 0;
   const citationIncrement = event.kind === "research.citation.added" ? 1 : 0;
 
@@ -565,6 +570,7 @@ function applyResearch(
           numberValue(event.payload.citationCount) ??
           ((previous?.citationCount ?? 0) + citationIncrement),
         citationIds,
+        citations,
         ...(citation !== undefined ? { latestCitation: citation } : {}),
         updatedAt: event.timestamp,
       },

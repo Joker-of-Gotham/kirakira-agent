@@ -182,6 +182,10 @@
         },
         {
           "kind": "record",
+          "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
+        },
+        {
+          "kind": "record",
           "path": "docs/change-records/2026-06-09-runtime-mcp-discovery-events.md"
         },
         {
@@ -194,9 +198,8 @@
         }
       ],
       "remainingGaps": [
-        "Inject the profile-selected MCP OTel recorder into daemon-owned transports and configure a real OTLP/OpenTelemetry SDK exporter when required.",
-        "Add live propagation smoke coverage across daemon-owned MCP transports.",
-        "Ensure direct browser and desktop tool actions continue returning tool-originated failures as MCP tool results with isError true."
+        "Configure a real OTLP/OpenTelemetry SDK exporter when required by the selected runtime profile.",
+        "Add live propagation smoke coverage across daemon-owned MCP transports."
       ]
     },
     {
@@ -224,11 +227,15 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-daemon-durable-checkpoints.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
         }
       ],
       "remainingGaps": [
-        "Run gated Docker/local checkpoint persistence validation against the test-host memory stack.",
-        "Connect retain and reflect events to the daemon memory service in addition to checkpoint persistence."
+        "Run gated Docker/local checkpoint and retain/reflect persistence validation against the test-host memory stack.",
+        "Add runtime-contract reflect event kinds before emitting reflect timeline events."
       ]
     },
     {
@@ -259,10 +266,13 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-topology-manifest-doctor-policy.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
         }
       ],
       "remainingGaps": [
-        "Promote lineage, topology, and permission metadata from delegate action args into top-level agent-runtime DelegateRequest fields.",
         "Expand behavior validation from injected adapters to live daemon source adapters where practical."
       ]
     },
@@ -309,12 +319,15 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-profile-driven-workbench-socket.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-delegate-memory-otel-workbench-details.md"
         }
       ],
       "remainingGaps": [
         "Run regular live Docker/local web and desktop smoke gates outside focused unit tests.",
-        "Wire the profile-selected MCP OTel recorder, audit bridge, memory, and topology dependencies through one profile-derived composition path.",
-        "Reduce remaining daemon lifecycle and runtime-profile projection duplication."
+        "Keep profile-selected OTel, audit, memory, and topology dependency composition covered while reducing remaining daemon lifecycle and runtime-profile projection duplication."
       ]
     }
   ],

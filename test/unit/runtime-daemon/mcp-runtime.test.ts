@@ -2,12 +2,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { McpAuth, McpServerConfig, McpTransport } from "@kirakira/core";
+import type { McpAuth, McpServerConfig, McpTransport, ResolvedConfig } from "@kirakira/core";
 import {
   ExportingMcpSpanRecorder,
   InMemoryMcpSpanExporter,
   type McpAuditBridge,
   type McpClientManager,
+  type OpenTelemetryApiLike,
 } from "@kirakira/mcp-adapter";
 import type { EnforcementResult, McpPep } from "@kirakira/policy-engine";
 import { describe, expect, it, vi } from "vitest";
@@ -124,6 +125,18 @@ function fakeManager(
   return { manager, request, getConfig, registerServer, registerMany, startServer, stopAll };
 }
 
+function resolvedRuntimeConfig(
+  profiles: Array<Record<string, unknown>>,
+  defaultProfile: string,
+): Pick<ResolvedConfig, "runtimeState"> {
+  return {
+    runtimeState: {
+      default_profile: defaultProfile,
+      profiles,
+    },
+  } as unknown as Pick<ResolvedConfig, "runtimeState">;
+}
+
 describe("DaemonMcpRuntime", () => {
   it("registers resolved profile MCP servers through the shared dependency factory", async () => {
     const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-deps-"));
@@ -184,6 +197,363 @@ describe("DaemonMcpRuntime", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
     expect(manager.stopAll).not.toHaveBeenCalled();
+  });
+
+  it("selects a profile memory MCP OTel recorder and uses it for daemon MCP spans", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-otel-"));
+    const traceId = "22222222222222222222222222222222";
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "quiet-host",
+          mode: "host",
+          mcp: { telemetry: { enabled: false, mode: "off" } },
+        },
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp: {
+            telemetry: {
+              enabled: true,
+              mode: "memory",
+              tracerName: "kirakira.test.daemon.mcp",
+            },
+          },
+        },
+      ],
+      "quiet-host",
+    );
+    const manager = fakeManager({
+      content: [{ type: "text", text: "hello" }],
+      structuredContent: { ok: true },
+      isError: false,
+    });
+    const deps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: { OTEL_SERVICE_NAME: "kirakira-test" },
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: { OTEL_SERVICE_NAME: "kirakira-test" },
+    });
+
+    try {
+      expect(deps.mcpOtelRecorderPlan).toMatchObject({
+        enabled: true,
+        mode: "memory",
+        tracerName: "kirakira.test.daemon.mcp",
+        defaultAttributes: {
+          "service.name": "kirakira-test",
+          "kirakira.runtime.profile": "profiled-host",
+          "kirakira.runtime.mode": "host",
+        },
+      });
+      expect(deps.mcpSpanRecorder).toBeDefined();
+      expect(deps.mcpOtelExporter).toBeDefined();
+
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        traceId,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {
+        _meta: {
+          traceparent: expect.stringMatching(
+            /^00-22222222222222222222222222222222-[0-9a-f]{16}-01$/,
+          ),
+        },
+      });
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/call", {
+        name: "read_file",
+        arguments: { path: "README.md" },
+        _meta: {
+          traceparent: expect.stringMatching(
+            /^00-22222222222222222222222222222222-[0-9a-f]{16}-01$/,
+          ),
+        },
+      });
+      expect(result).toMatchObject({
+        success: true,
+        structuredContent: { ok: true },
+        isError: false,
+        otel: {
+          traceId,
+          spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+          status: "OK",
+        },
+      });
+    } finally {
+      await runtime.close();
+      await deps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("honors disabled MCP OTel mode while preserving inbound trace context", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-otel-off-"));
+    const traceContext = {
+      traceparent: "00-33333333333333333333333333333333-4444444444444444-01",
+      tracestate: "vendor=value",
+      baggage: "tenant=acme",
+    };
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp: { telemetry: { enabled: true, mode: "memory" } },
+        },
+      ],
+      "profiled-host",
+    );
+    const manager = fakeManager({
+      content: [{ type: "text", text: "hello" }],
+      isError: false,
+    });
+    const deps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: { KIRAKIRA_MCP_OTEL_MODE: "off" },
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: { KIRAKIRA_MCP_OTEL_MODE: "off" },
+    });
+
+    try {
+      expect(deps.mcpOtelRecorderPlan).toMatchObject({
+        enabled: false,
+        mode: "off",
+      });
+      expect(deps.mcpSpanRecorder).toBeUndefined();
+
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        traceId: "55555555555555555555555555555555",
+        traceContext,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {
+        _meta: traceContext,
+      });
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/call", {
+        name: "read_file",
+        arguments: { path: "README.md" },
+        _meta: traceContext,
+      });
+      expect(result.otel).toMatchObject({
+        spanName: "tools/call read_file",
+        traceContext,
+        status: "OK",
+      });
+      expect(result.otel.traceId).toBeUndefined();
+      expect(result.otel.spanId).toBeUndefined();
+    } finally {
+      await runtime.close();
+      await deps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves tool-originated MCP errors with profile memory trace propagation", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-error-"));
+    const traceContext = {
+      traceparent: "00-66666666666666666666666666666666-7777777777777777-01",
+      tracestate: "vendor=state",
+      baggage: "tenant=acme,run=run-1",
+    };
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp: { telemetry: { enabled: true, mode: "memory" } },
+        },
+      ],
+      "profiled-host",
+    );
+    const manager = fakeManager({
+      content: [{ type: "text", text: "missing required path" }],
+      structuredContent: { code: "missing_path" },
+      isError: true,
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: {},
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "" },
+        traceContext,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/call", {
+        name: "read_file",
+        arguments: { path: "" },
+        _meta: {
+          traceparent: expect.stringMatching(
+            /^00-66666666666666666666666666666666-[0-9a-f]{16}-01$/,
+          ),
+          tracestate: "vendor=state",
+          baggage: "tenant=acme,run=run-1",
+        },
+      });
+      expect(result).toMatchObject({
+        server: "filesystem-core",
+        tool: "read_file",
+        success: false,
+        content: [{ type: "text", text: "missing required path" }],
+        structuredContent: { code: "missing_path" },
+        isError: true,
+        error: "missing required path",
+        otel: {
+          traceId: "66666666666666666666666666666666",
+          parentSpanId: "7777777777777777",
+          traceContext: {
+            traceparent: expect.stringMatching(
+              /^00-66666666666666666666666666666666-[0-9a-f]{16}-01$/,
+            ),
+            tracestate: "vendor=state",
+            baggage: "tenant=acme,run=run-1",
+          },
+          status: "ERROR",
+          attributes: {
+            "mcp.method.name": "tools/call",
+            "gen_ai.operation.name": "execute_tool",
+            "gen_ai.tool.name": "read_file",
+            "error.type": "tool_error",
+          },
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("exposes OpenTelemetry API recorder plans without inventing an OTLP exporter", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-profile-api-"));
+    const resolvedConfig = resolvedRuntimeConfig(
+      [
+        {
+          name: "profiled-host",
+          mode: "host",
+          mcp: {
+            telemetry: {
+              enabled: true,
+              mode: "opentelemetry-api",
+              tracerName: "kirakira.api.daemon.mcp",
+            },
+          },
+        },
+      ],
+      "profiled-host",
+    );
+    const noApiManager = fakeManager({ content: [] });
+    const missingApiDeps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: noApiManager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: {},
+    });
+    const otelSpan = {
+      spanContext: vi.fn(() => ({
+        traceId: "88888888888888888888888888888888",
+        spanId: "9999999999999999",
+      })),
+      setAttributes: vi.fn(),
+      setStatus: vi.fn(),
+      end: vi.fn(),
+    };
+    const tracer = { startSpan: vi.fn(() => otelSpan) };
+    const api: OpenTelemetryApiLike = {
+      context: { active: vi.fn(() => ({ active: true })) },
+      trace: {
+        getTracer: vi.fn(() => tracer),
+        setSpan: vi.fn((context, span) => ({ context, span })),
+      },
+      propagation: { inject: vi.fn() },
+    };
+    const apiManager = fakeManager({ content: [] });
+    const apiDeps = createDaemonMcpDependencies({
+      workspaceRoot,
+      mcpManager: apiManager.manager,
+      mcpPep: fakePep(decision("allow")),
+      resolvedConfig,
+      runtimeProfileName: "profiled-host",
+      mcpOtelEnv: {},
+      mcpOtelApi: api,
+    });
+
+    try {
+      expect(missingApiDeps).toMatchObject({
+        mcpOtelRecorderPlan: {
+          enabled: true,
+          mode: "opentelemetry-api",
+          tracerName: "kirakira.api.daemon.mcp",
+        },
+        mcpOtelRecorderError: expect.stringMatching(/OpenTelemetry MCP recorder plan requires/u),
+      });
+      expect(missingApiDeps.mcpSpanRecorder).toBeUndefined();
+      expect(missingApiDeps.mcpOtelExporter).toBeUndefined();
+
+      expect(apiDeps.mcpOtelRecorderPlan).toMatchObject({
+        enabled: true,
+        mode: "opentelemetry-api",
+        tracerName: "kirakira.api.daemon.mcp",
+      });
+      expect(apiDeps.mcpSpanRecorder).toBeDefined();
+      expect(apiDeps.mcpOtelRecorderError).toBeUndefined();
+
+      const span = apiDeps.mcpSpanRecorder?.startSpan({ name: "tools/list", kind: "CLIENT" });
+      span?.end({ status: { code: "OK" }, endTimeUnixMs: 25 });
+      expect(api.trace.getTracer).toHaveBeenCalledWith("kirakira.api.daemon.mcp", undefined);
+      expect(tracer.startSpan).toHaveBeenCalledWith(
+        "tools/list",
+        expect.objectContaining({
+          kind: 2,
+          attributes: expect.objectContaining({
+            "service.name": "kirakira-agent",
+            "kirakira.runtime.profile": "profiled-host",
+          }),
+        }),
+        expect.anything(),
+      );
+      expect(otelSpan.setStatus).toHaveBeenCalledWith({ code: 1 });
+      expect(otelSpan.end).toHaveBeenCalledWith(25);
+    } finally {
+      await missingApiDeps.close();
+      await apiDeps.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
   });
 
   it("enforces MCP PEP, starts the target server, and returns a typed tool result", async () => {

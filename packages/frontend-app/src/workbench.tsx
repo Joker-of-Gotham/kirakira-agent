@@ -26,6 +26,7 @@ import {
   createRunInspector,
   createRunWorkstream,
   createSubagentTopologyView,
+  createWorkbenchDetailViews,
   createWorkbenchNavigationView,
   createWorkbenchInspectorView,
   projectRunDashboard,
@@ -60,6 +61,12 @@ import {
   type SubagentTopologyView,
   type WorkbenchInspectorView,
   type WorkbenchInspectorViewId,
+  type WorkbenchArtifactDetailsView,
+  type WorkbenchCitationLedgerView,
+  type WorkbenchDetailChip,
+  type WorkbenchDetailRow,
+  type WorkbenchDetailViews,
+  type WorkbenchSelectedSubagentDrawer,
   type WorkbenchViewId,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
@@ -164,6 +171,7 @@ export function KirakiraWorkbench({
   const [mcpToolCall, setMcpToolCall] = useState<McpToolCallState>({ status: "idle" });
   const [activeWorkbenchView, setActiveWorkbenchView] = useState<WorkbenchViewId>("runs");
   const [inspectorViewId, setInspectorViewId] = useState<WorkbenchInspectorViewId>("mcp");
+  const [selectedCitationId, setSelectedCitationId] = useState<string | undefined>();
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
@@ -385,6 +393,7 @@ export function KirakiraWorkbench({
       setRunId(result.runId);
       setEvents([]);
       setSelectedWorkstreamItemId(undefined);
+      setSelectedCitationId(undefined);
       setArtifactPreviews({});
       unsubscribeRef.current = runtime.subscribeRun(result.runId, handleTransportEvent);
     } catch (err) {
@@ -480,20 +489,34 @@ export function KirakiraWorkbench({
   const artifacts = Object.values(projection.artifactDetails).sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
-  const selectedArtifactId = inspector.selectedFocus?.kind === "artifact"
-    ? inspector.selectedFocus.id.replace(/^artifact:/, "")
+  const selectedSubagentId = selectedFocusId?.startsWith("subagent:")
+    ? selectedFocusId.replace(/^subagent:/, "")
     : undefined;
+  const selectedArtifactId = selectedFocusId?.startsWith("artifact:")
+    ? selectedFocusId.replace(/^artifact:/, "")
+    : undefined;
+  const detailViews = useMemo(
+    () =>
+      createWorkbenchDetailViews({
+        projection,
+        selectedSubagentId,
+        selectedCitationId,
+        selectedArtifactId,
+      }),
+    [projection, selectedArtifactId, selectedCitationId, selectedSubagentId],
+  );
+  const activeArtifactId = detailViews.artifactDetails.selected?.id;
   const selectedArtifactPreviewKey =
-    runId && selectedArtifactId ? `${runId}:${selectedArtifactId}` : undefined;
+    runId && activeArtifactId ? `${runId}:${activeArtifactId}` : undefined;
   const selectedArtifactPreview = selectedArtifactPreviewKey
     ? artifactPreviews[selectedArtifactPreviewKey]
     : undefined;
   const artifactContentCapabilityKnown = runtimeStatus !== undefined;
   const artifactContentAvailable = runtimeTransportSupportsArtifactContent(runtimeStatus);
   const selectedArtifactPreviewDisplay = selectedArtifactPreview ??
-    (selectedArtifactId && artifactContentCapabilityKnown && !artifactContentAvailable
+    (activeArtifactId && artifactContentCapabilityKnown && !artifactContentAvailable
       ? {
-          artifactId: selectedArtifactId,
+          artifactId: activeArtifactId,
           status: "error" as const,
           message: "Artifact preview is not enabled by this runtime",
         }
@@ -510,7 +533,7 @@ export function KirakiraWorkbench({
     : 0;
 
   useEffect(() => {
-    if (!runId || !selectedArtifactId || !selectedArtifactPreviewKey) return;
+    if (!runId || !activeArtifactId || !selectedArtifactPreviewKey) return;
     if (!artifactContentAvailable) return;
     const existing = artifactPreviews[selectedArtifactPreviewKey];
     if (existing) return;
@@ -518,18 +541,18 @@ export function KirakiraWorkbench({
     setArtifactPreviews((items) => ({
       ...items,
       [selectedArtifactPreviewKey]: {
-        artifactId: selectedArtifactId,
+        artifactId: activeArtifactId,
         status: "loading",
       },
     }));
     runtime
-      .getArtifactContent({ runId, artifactId: selectedArtifactId })
+      .getArtifactContent({ runId, artifactId: activeArtifactId })
       .then((content) => {
         if (disposed) return;
         setArtifactPreviews((items) => ({
           ...items,
           [selectedArtifactPreviewKey]: {
-            artifactId: selectedArtifactId,
+            artifactId: activeArtifactId,
             status: "ready",
             content,
           },
@@ -540,7 +563,7 @@ export function KirakiraWorkbench({
         setArtifactPreviews((items) => ({
           ...items,
           [selectedArtifactPreviewKey]: {
-            artifactId: selectedArtifactId,
+            artifactId: activeArtifactId,
             status: "error",
             message: error instanceof Error ? error.message : String(error),
           },
@@ -552,9 +575,9 @@ export function KirakiraWorkbench({
   }, [
     artifactPreviews,
     artifactContentAvailable,
+    activeArtifactId,
     runId,
     runtime,
-    selectedArtifactId,
     selectedArtifactPreviewKey,
   ]);
 
@@ -642,6 +665,8 @@ export function KirakiraWorkbench({
           topology={topology}
           researchRuns={researchRuns}
           artifacts={artifacts}
+          detailViews={detailViews}
+          artifactPreview={selectedArtifactPreviewDisplay}
           systemInspector={workbenchInspector}
           mcpState={mcpDirectory}
           mcpDirectoryView={mcpDirectoryView}
@@ -655,6 +680,7 @@ export function KirakiraWorkbench({
           onSelectItem={selectWorkstreamItem}
           onSelectFocus={setSelectedFocusId}
           onSelectArtifact={(id) => setSelectedFocusId(`artifact:${id}`)}
+          onSelectCitation={setSelectedCitationId}
           onInspectorViewChange={setInspectorViewId}
           onSelectMcpTool={setSelectedMcpToolId}
           onMcpArgumentDraftChange={updateMcpArgumentDraft}
@@ -905,6 +931,8 @@ function WorkbenchViewSurface({
   topology,
   researchRuns,
   artifacts,
+  detailViews,
+  artifactPreview,
   systemInspector,
   mcpState,
   mcpDirectoryView,
@@ -918,6 +946,7 @@ function WorkbenchViewSurface({
   onSelectItem,
   onSelectFocus,
   onSelectArtifact,
+  onSelectCitation,
   onInspectorViewChange,
   onSelectMcpTool,
   onMcpArgumentDraftChange,
@@ -930,6 +959,8 @@ function WorkbenchViewSurface({
   topology: SubagentTopologyView;
   researchRuns: RunDashboardResearchRun[];
   artifacts: RunDashboardArtifact[];
+  detailViews: WorkbenchDetailViews;
+  artifactPreview?: ArtifactPreviewState;
   systemInspector: WorkbenchInspectorView;
   mcpState: McpDirectoryState;
   mcpDirectoryView: RuntimeMcpDirectoryView;
@@ -943,6 +974,7 @@ function WorkbenchViewSurface({
   onSelectItem: (itemId: string, focusId?: string) => void;
   onSelectFocus: (id: string) => void;
   onSelectArtifact: (id: string) => void;
+  onSelectCitation: (id: string) => void;
   onInspectorViewChange: (id: WorkbenchInspectorViewId) => void;
   onSelectMcpTool: (id: string) => void;
   onMcpArgumentDraftChange: (toolId: string, draft: string) => void;
@@ -957,6 +989,7 @@ function WorkbenchViewSurface({
         <AgentOperationsPanel
           topology={topology}
           workstream={workstream}
+          subagentDrawer={detailViews.subagentDrawer}
           onSelectFocus={onSelectFocus}
           onSelectItem={onSelectItem}
         />
@@ -970,10 +1003,15 @@ function WorkbenchViewSurface({
         <ResearchWorkspacePanel
           researchRuns={researchRuns}
           artifacts={artifacts}
+          citationLedger={detailViews.citationLedger}
           onSelectFocus={onSelectFocus}
+          onSelectCitation={onSelectCitation}
+        />
+        <ArtifactDetailsPanel
+          view={detailViews.artifactDetails}
+          artifactPreview={artifactPreview}
           onSelectArtifact={onSelectArtifact}
         />
-        <OutputArtifactsPanel artifacts={artifacts} onSelectArtifact={onSelectArtifact} />
       </section>
     );
   }
@@ -1021,11 +1059,13 @@ function WorkbenchViewSurface({
 function AgentOperationsPanel({
   topology,
   workstream,
+  subagentDrawer,
   onSelectFocus,
   onSelectItem,
 }: {
   topology: SubagentTopologyView;
   workstream: RunWorkstreamProjection;
+  subagentDrawer: WorkbenchSelectedSubagentDrawer;
   onSelectFocus: (id: string) => void;
   onSelectItem: (itemId: string, focusId?: string) => void;
 }) {
@@ -1100,7 +1140,12 @@ function AgentOperationsPanel({
                 <button
                   key={worker.id}
                   type="button"
-                  className="kk-agent-worker-row"
+                  className={
+                    subagentDrawer.selected?.id === worker.id
+                      ? "kk-agent-worker-row kk-agent-worker-row-active"
+                      : "kk-agent-worker-row"
+                  }
+                  aria-pressed={subagentDrawer.selected?.id === worker.id}
                   onClick={() => onSelectFocus(`subagent:${worker.id}`)}
                 >
                   <span className={`kk-dot kk-dot-${worker.phase}`} />
@@ -1115,6 +1160,8 @@ function AgentOperationsPanel({
           </div>
         </section>
       </div>
+
+      <SelectedSubagentDrawer drawer={subagentDrawer} onSelectFocus={onSelectFocus} />
 
       <section aria-label="Agent attention">
         <div className="kk-section-heading">
@@ -1146,20 +1193,133 @@ function AgentOperationsPanel({
   );
 }
 
+function SelectedSubagentDrawer({
+  drawer,
+  onSelectFocus,
+}: {
+  drawer: WorkbenchSelectedSubagentDrawer;
+  onSelectFocus: (id: string) => void;
+}) {
+  const selected = drawer.selected;
+  return (
+    <section className="kk-selected-drawer" aria-label="Selected subagent detail">
+      <div className="kk-section-heading">
+        <span>Selected subagent</span>
+        <span>{drawer.candidates.length}</span>
+      </div>
+
+      {drawer.candidates.length > 1 ? (
+        <div className="kk-subagent-picker" aria-label="Subagent detail selector">
+          {drawer.candidates.slice(0, 5).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={
+                item.selected
+                  ? `kk-subagent-pick kk-subagent-pick-active kk-subagent-pick-${item.tone}`
+                  : `kk-subagent-pick kk-subagent-pick-${item.tone}`
+              }
+              aria-pressed={item.selected}
+              onClick={() => onSelectFocus(item.focusId)}
+            >
+              <span className={`kk-dot kk-dot-${item.phase}`} />
+              <span>{item.title}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {!selected ? (
+        <div className="kk-empty">{drawer.emptyMessage ?? "No selected subagent"}</div>
+      ) : (
+        <article className={`kk-selected-detail kk-selected-detail-${selected.tone}`}>
+          <header>
+            <span className={`kk-pill kk-pill-${selected.phase}`}>{selected.phase}</span>
+            <h3>{selected.title}</h3>
+            <p>{selected.summary}</p>
+          </header>
+
+          <dl className="kk-mini-metrics">
+            {selected.metrics.map((metric) => (
+              <div key={`${selected.id}-${metric.label}`} className={`kk-mini-metric-${metric.tone}`}>
+                <dt>{metric.label}</dt>
+                <dd>{metric.value}</dd>
+              </div>
+            ))}
+          </dl>
+
+          <DetailRows rows={selected.rows} />
+
+          {selected.capabilities.length > 0 ? (
+            <div className="kk-chip-strip" aria-label="Subagent capabilities">
+              {selected.capabilities.map((chip) => (
+                <span key={chip.label} className={`kk-chip kk-chip-${chip.tone}`}>
+                  {chip.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {selected.artifactRefs.length > 0 ? (
+            <div className="kk-artifact-ref-list" aria-label="Subagent artifact references">
+              {selected.artifactRefs.map((ref) =>
+                ref.focusId ? (
+                  <button
+                    key={`${ref.source}-${ref.id}`}
+                    type="button"
+                    className={`kk-artifact-ref kk-artifact-ref-${ref.tone}`}
+                    onClick={() => onSelectFocus(ref.focusId!)}
+                  >
+                    <span>{ref.source}</span>
+                    <strong>{ref.label}</strong>
+                  </button>
+                ) : (
+                  <div key={`${ref.source}-${ref.id}`} className="kk-artifact-ref kk-artifact-ref-warning">
+                    <span>{ref.source}</span>
+                    <strong>{ref.label}</strong>
+                  </div>
+                ),
+              )}
+            </div>
+          ) : null}
+
+          {selected.visualQaHooks.length > 0 ? (
+            <div className="kk-qa-hook-strip" aria-label="Subagent visual QA hooks">
+              {selected.visualQaHooks.map((hook) => (
+                <button
+                  key={hook.id}
+                  type="button"
+                  className="kk-qa-hook"
+                  onClick={() => onSelectFocus(hook.focusId)}
+                >
+                  <CheckCircle2 size={14} />
+                  <span>{hook.title}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </article>
+      )}
+    </section>
+  );
+}
+
 function ResearchWorkspacePanel({
   researchRuns,
   artifacts,
+  citationLedger,
   onSelectFocus,
-  onSelectArtifact,
+  onSelectCitation,
 }: {
   researchRuns: RunDashboardResearchRun[];
   artifacts: RunDashboardArtifact[];
+  citationLedger: WorkbenchCitationLedgerView;
   onSelectFocus: (id: string) => void;
-  onSelectArtifact: (id: string) => void;
+  onSelectCitation: (id: string) => void;
 }) {
   const sortedRuns = [...researchRuns].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const evidenceCount = sortedRuns.reduce((total, run) => total + run.evidenceCount, 0);
-  const citationCount = sortedRuns.reduce((total, run) => total + run.citationCount, 0);
+  const citationCount = citationLedger.citations.length;
   return (
     <section className="kk-research-workspace" aria-label="Research evidence workspace">
       <div className="kk-pane-header">
@@ -1218,56 +1378,220 @@ function ResearchWorkspacePanel({
 
         <section aria-label="Latest citations">
           <div className="kk-section-heading">
-            <span>Citations</span>
+            <span>Citation ledger</span>
             <span>{citationCount}</span>
           </div>
           <div className="kk-citation-list">
-            {sortedRuns.filter((run) => run.latestCitation).length === 0 ? (
+            {citationLedger.citations.length === 0 ? (
               <div className="kk-empty">No citations captured</div>
             ) : (
-              sortedRuns.map((run) =>
-                run.latestCitation ? (
-                  <a key={`${run.id}-${run.latestCitation.id}`} href={run.latestCitation.uri} target="_blank" rel="noreferrer">
+              citationLedger.citations.map((citation) => (
+                <article
+                  key={`${citation.runId}-${citation.id}`}
+                  className={
+                    citation.selected
+                      ? `kk-citation-row kk-citation-row-active kk-citation-row-${citation.tone}`
+                      : `kk-citation-row kk-citation-row-${citation.tone}`
+                  }
+                >
+                  <button type="button" onClick={() => onSelectCitation(citation.id)}>
                     <FileSearch size={15} />
                     <span>
-                      <strong>{run.latestCitation.title ?? run.latestCitation.uri}</strong>
-                      <small>{run.sourcePolicy ?? run.phase}</small>
+                      <strong>{citation.title}</strong>
+                      <small>{citation.sourceLabel}</small>
                     </span>
-                  </a>
-                ) : null,
-              )
+                  </button>
+                  {citation.href ? (
+                    <a href={citation.href} target="_blank" rel="noreferrer" aria-label={`Open ${citation.title}`}>
+                      <ExternalLink size={14} />
+                    </a>
+                  ) : null}
+                </article>
+              ))
             )}
           </div>
         </section>
       </div>
 
-      <section aria-label="Artifact queue">
-        <div className="kk-section-heading">
-          <span>Artifact queue</span>
-          <span>{artifacts.length}</span>
-        </div>
-        <div className="kk-research-artifact-strip">
-          {artifacts.length === 0 ? (
-            <div className="kk-empty">No source artifacts</div>
-          ) : (
-            artifacts.slice(0, 6).map((artifact) => (
-              <button
-                key={artifact.id}
-                type="button"
-                className="kk-research-artifact"
-                onClick={() => onSelectArtifact(artifact.id)}
-              >
-                <span className={`kk-dot kk-dot-${artifact.phase}`} />
-                <span>
-                  <strong>{artifact.title ?? artifact.path ?? artifact.id}</strong>
-                  <small>{artifact.summary ?? artifact.kind ?? artifact.phase}</small>
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      </section>
+      <CitationLedgerDetail ledger={citationLedger} onSelectFocus={onSelectFocus} />
     </section>
+  );
+}
+
+function CitationLedgerDetail({
+  ledger,
+  onSelectFocus,
+}: {
+  ledger: WorkbenchCitationLedgerView;
+  onSelectFocus: (id: string) => void;
+}) {
+  const selected = ledger.selected;
+  return (
+    <section className="kk-citation-detail" aria-label="Selected citation detail">
+      <div className="kk-section-heading">
+        <span>Selected citation</span>
+        <span>{selected?.sourceLabel ?? "none"}</span>
+      </div>
+      {!selected ? (
+        <div className="kk-empty">{ledger.emptyMessage ?? "No citation selected"}</div>
+      ) : (
+        <article className={`kk-selected-detail kk-selected-detail-${selected.tone}`}>
+          <header>
+            <span className={`kk-pill kk-pill-${selected.tone}`}>{selected.sourceLabel}</span>
+            <h3>{selected.title}</h3>
+            <p>{selected.summary}</p>
+          </header>
+          <DetailRows rows={selected.rows} />
+          <div className="kk-citation-actions">
+            {selected.href ? (
+              <a className="kk-icon-button" href={selected.href} target="_blank" rel="noreferrer">
+                <ExternalLink size={14} />
+                <span>Open source</span>
+              </a>
+            ) : null}
+            {selected.artifactFocusId ? (
+              <button
+                type="button"
+                className="kk-icon-button"
+                onClick={() => onSelectFocus(selected.artifactFocusId!)}
+              >
+                <FileSearch size={14} />
+                <span>Open artifact</span>
+              </button>
+            ) : null}
+          </div>
+        </article>
+      )}
+    </section>
+  );
+}
+
+function ArtifactDetailsPanel({
+  view,
+  artifactPreview,
+  onSelectArtifact,
+}: {
+  view: WorkbenchArtifactDetailsView;
+  artifactPreview?: ArtifactPreviewState;
+  onSelectArtifact: (id: string) => void;
+}) {
+  const selected = view.selected;
+  return (
+    <section className="kk-artifact-detail-panel" aria-label="Artifact detail cards">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Artifacts</p>
+          <h2>Detail Cards</h2>
+        </div>
+        <span className={`kk-system-status kk-system-status-${view.visualQa.tone}`}>
+          {view.visualQa.statusLabel}
+        </span>
+      </div>
+
+      <dl className="kk-ops-metrics">
+        {view.metrics.map((metric) => (
+          <div key={metric.label} className={`kk-ops-${metric.tone}`}>
+            <dt>{metric.label}</dt>
+            <dd>{metric.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      <div className="kk-artifact-card-list">
+        {view.cards.length === 0 ? (
+          <div className="kk-empty">{view.emptyMessage ?? "No artifacts yet"}</div>
+        ) : (
+          view.cards.slice(0, 8).map((artifact) => (
+            <button
+              key={artifact.id}
+              type="button"
+              className={
+                artifact.selected
+                  ? `kk-artifact-card kk-artifact-card-active kk-artifact-card-${artifact.tone}`
+                  : `kk-artifact-card kk-artifact-card-${artifact.tone}`
+              }
+              aria-pressed={artifact.selected}
+              onClick={() => onSelectArtifact(artifact.id)}
+            >
+              <span className={`kk-dot kk-dot-${artifact.phase}`} />
+              <span>
+                <strong>{artifact.title}</strong>
+                <small>{artifact.summary}</small>
+              </span>
+              {artifact.visualQa ? <em>QA</em> : null}
+            </button>
+          ))
+        )}
+      </div>
+
+      {selected ? (
+        <article className={`kk-selected-detail kk-artifact-selected kk-selected-detail-${selected.tone}`}>
+          <header>
+            <span className={`kk-pill kk-pill-${selected.phase}`}>{selected.kind ?? selected.phase}</span>
+            <h3>{selected.title}</h3>
+            <p>{selected.summary}</p>
+          </header>
+          {selected.qaLabels.length > 0 ? (
+            <div className="kk-chip-strip" aria-label="Visual QA labels">
+              {selected.qaLabels.map((label) => (
+                <span key={label} className="kk-chip kk-chip-warning">
+                  {label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          <DetailRows rows={selected.rows} />
+          <RelatedChipStrip title="Subagents" chips={selected.relatedSubagents} />
+          <RelatedChipStrip title="Citations" chips={selected.relatedCitations} />
+          <ArtifactContentPreview preview={artifactPreview} />
+        </article>
+      ) : null}
+    </section>
+  );
+}
+
+function DetailRows({ rows }: { rows: WorkbenchDetailRow[] }) {
+  if (rows.length === 0) return <div className="kk-empty">No detail rows</div>;
+  return (
+    <dl className="kk-detail-list kk-compact-detail-list">
+      {rows.map((row) => (
+        <div key={`${row.label}-${row.value}`}>
+          <dt>{row.label}</dt>
+          <dd>
+            {row.href ? (
+              <a href={row.href} target="_blank" rel="noreferrer">
+                {row.value}
+                <ExternalLink size={13} aria-hidden="true" />
+              </a>
+            ) : (
+              row.value
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function RelatedChipStrip({
+  title,
+  chips,
+}: {
+  title: string;
+  chips: WorkbenchDetailChip[];
+}) {
+  if (chips.length === 0) return null;
+  return (
+    <div className="kk-related-strip" aria-label={`Related ${title.toLowerCase()}`}>
+      <span>{title}</span>
+      <div className="kk-chip-strip">
+        {chips.map((chip) => (
+          <span key={`${title}-${chip.label}`} className={`kk-chip kk-chip-${chip.tone}`}>
+            {chip.label}
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

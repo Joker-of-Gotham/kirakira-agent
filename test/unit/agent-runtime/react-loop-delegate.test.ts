@@ -7,7 +7,10 @@ import type {
   WorkingSet,
   Workspace,
 } from "../../../packages/agent-runtime/src/index.js";
-import type { RuntimeDeps } from "../../../packages/agent-runtime/src/loop/react-loop.js";
+import type {
+  DelegateRequest,
+  RuntimeDeps,
+} from "../../../packages/agent-runtime/src/loop/react-loop.js";
 
 function initialState(): ReactWorkerState {
   return {
@@ -153,6 +156,22 @@ describe("reactLoop delegate handling", () => {
             lane: "delegated",
             traceId: "trace-1",
             capabilities: [{ kind: "tool", name: "repo.read" }],
+            permissions: ["workspace-read"],
+            topology: {
+              parentRole: "supervisor",
+              handoffEdgeId: "handoff:supervisor:worker:tool:0",
+              handoff: {
+                id: "handoff:supervisor:worker:tool:0",
+                from: "supervisor",
+                to: "worker",
+                mode: "tool",
+              },
+            },
+            lineage: {
+              rootLineageId: "run-1",
+              parentLineageId: "run-1:worker:worker-parent",
+              lineageId: "run-1:task:task-parent:subagent",
+            },
           },
         },
         { kind: "final_output", output: "parent done" },
@@ -163,6 +182,16 @@ describe("reactLoop delegate handling", () => {
       expect(request.parentTaskId).toBe("task-parent");
       expect(request.lane).toBe("delegated");
       expect(request.traceId).toBe("trace-1");
+      expect(request.permissions).toEqual(["workspace-read"]);
+      expect(request.topology).toMatchObject({
+        parentRole: "supervisor",
+        handoffEdgeId: "handoff:supervisor:worker:tool:0",
+      });
+      expect(request.lineage).toEqual({
+        rootLineageId: "run-1",
+        parentLineageId: "run-1:worker:worker-parent",
+        lineageId: "run-1:task:task-parent:subagent",
+      });
       return {
         success: true,
         workerId: "worker-child",
@@ -181,6 +210,16 @@ describe("reactLoop delegate handling", () => {
         lane: "delegated",
         traceId: "trace-1",
         capabilities: [{ kind: "tool", name: "repo.read" }],
+        permissions: ["workspace-read"],
+        topology: {
+          parentRole: "supervisor",
+          handoffEdgeId: "handoff:supervisor:worker:tool:0",
+        },
+        lineage: {
+          rootLineageId: "run-1",
+          parentLineageId: "run-1:worker:worker-parent",
+          lineageId: "run-1:task:task-parent:subagent",
+        },
       });
     expect(emitted.find((event) => event.kind === "subagent.completed")?.payload)
       .toMatchObject({
@@ -189,6 +228,7 @@ describe("reactLoop delegate handling", () => {
         lane: "delegated",
         traceId: "trace-1",
         workerId: "worker-child",
+        permissions: ["workspace-read"],
       });
   });
 
@@ -301,6 +341,152 @@ describe("reactLoop delegate handling", () => {
     expect(result.finalText).toBe("child result");
     expect(result.workerId).toBeTruthy();
     expect(emitted.map((event) => event.kind)).toContain("run.completed");
+  });
+
+  it("hydrates legacy delegate action metadata for EphemeralWorker-backed delegates", async () => {
+    const parentDeps = runtimeDeps([], []);
+    delete parentDeps.delegateRunner;
+    const childEmitted: RunEvent[] = [];
+    const childDeps = runtimeDeps([{ kind: "final_output", output: "child result" }], childEmitted);
+    delete childDeps.delegateRunner;
+    let forkedRequest: DelegateRequest | undefined;
+
+    const runner = createEphemeralDelegateRunner(parentDeps, {
+      forkDeps(_deps, _scope, request) {
+        forkedRequest = request;
+        return childDeps;
+      },
+    });
+    const result = await runner({
+      subagentId: "sg-1",
+      parentWorkerId: "worker-parent",
+      parentConfig: initialState().config,
+      runId: "run-1",
+      task: "child task",
+      action: {
+        kind: "delegate",
+        args: {
+          task: "child task",
+          permissions: ["workspace-read"],
+          topology: {
+            parentRole: "supervisor",
+            handoffEdgeId: "handoff:supervisor:worker:tool:0",
+          },
+          lineage: {
+            rootLineageId: "run-1",
+            parentLineageId: "run-1:worker:worker-parent",
+            lineageId: "run-1:task:child:subagent",
+          },
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(forkedRequest).toMatchObject({
+      permissions: ["workspace-read"],
+      topology: {
+        parentRole: "supervisor",
+        handoffEdgeId: "handoff:supervisor:worker:tool:0",
+      },
+      lineage: {
+        rootLineageId: "run-1",
+        parentLineageId: "run-1:worker:worker-parent",
+        lineageId: "run-1:task:child:subagent",
+      },
+    });
+    const assembler = childDeps.contextAssembler as RuntimeDeps["contextAssembler"] & {
+      assembledStates: ReactWorkerState[];
+    };
+    expect(assembler.assembledStates[0]?.config).toMatchObject({
+      permissions: ["workspace-read"],
+      topology: {
+        parentRole: "supervisor",
+        handoffEdgeId: "handoff:supervisor:worker:tool:0",
+      },
+      lineage: {
+        rootLineageId: "run-1",
+        parentLineageId: "run-1:worker:worker-parent",
+        lineageId: "run-1:task:child:subagent",
+      },
+    });
+  });
+
+  it("prefers top-level delegate metadata over legacy action args for child config", async () => {
+    const parentDeps = runtimeDeps([], []);
+    delete parentDeps.delegateRunner;
+    const childEmitted: RunEvent[] = [];
+    const childDeps = runtimeDeps([{ kind: "final_output", output: "child result" }], childEmitted);
+    delete childDeps.delegateRunner;
+    let forkedRequest: DelegateRequest | undefined;
+
+    const runner = createEphemeralDelegateRunner(parentDeps, {
+      forkDeps(_deps, _scope, request) {
+        forkedRequest = request;
+        return childDeps;
+      },
+    });
+    const result = await runner({
+      subagentId: "sg-1",
+      parentWorkerId: "worker-parent",
+      parentConfig: initialState().config,
+      runId: "run-1",
+      task: "child task",
+      permissions: ["top-level"],
+      topology: {
+        parentRole: "top-parent",
+        handoffEdgeId: "handoff:top",
+      },
+      lineage: {
+        rootLineageId: "run-top",
+        parentLineageId: "run-top:worker:parent",
+        lineageId: "run-top:task:child:subagent",
+      },
+      action: {
+        kind: "delegate",
+        args: {
+          task: "child task",
+          permissions: ["legacy"],
+          topology: {
+            parentRole: "legacy-parent",
+            handoffEdgeId: "handoff:legacy",
+          },
+          lineage: {
+            rootLineageId: "run-legacy",
+            parentLineageId: "run-legacy:worker:parent",
+            lineageId: "run-legacy:task:child:subagent",
+          },
+        },
+      },
+    });
+
+    expect(result.success).toBe(true);
+    expect(forkedRequest).toMatchObject({
+      permissions: ["top-level"],
+      topology: {
+        parentRole: "top-parent",
+        handoffEdgeId: "handoff:top",
+      },
+      lineage: {
+        rootLineageId: "run-top",
+        parentLineageId: "run-top:worker:parent",
+        lineageId: "run-top:task:child:subagent",
+      },
+    });
+    const assembler = childDeps.contextAssembler as RuntimeDeps["contextAssembler"] & {
+      assembledStates: ReactWorkerState[];
+    };
+    expect(assembler.assembledStates[0]?.config).toMatchObject({
+      permissions: ["top-level"],
+      topology: {
+        parentRole: "top-parent",
+        handoffEdgeId: "handoff:top",
+      },
+      lineage: {
+        rootLineageId: "run-top",
+        parentLineageId: "run-top:worker:parent",
+        lineageId: "run-top:task:child:subagent",
+      },
+    });
   });
 
   it("scopes EphemeralWorker-backed delegates from requested capabilities", async () => {

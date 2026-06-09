@@ -11,12 +11,15 @@ import {
   type McpGatewayPolicyContext,
   type McpGatewayServerContext,
   type McpGatewayToolContext,
+  type McpGatewayTrustContext,
+  type McpOtelRecorderPlan,
   type McpSpanAttributes,
+  type McpSpanExporter,
   type McpSpanHandle,
   type McpSpanRecorder,
   type McpSpanStatusCode,
   type McpTraceContextCarrier,
-  type McpGatewayTrustContext,
+  type OpenTelemetryApiLike,
 } from "@kirakira/mcp-adapter";
 import {
   McpPep,
@@ -52,6 +55,10 @@ export interface DaemonMcpRuntimeOptions {
   mcpPep?: McpPep;
   mcpAuditBridge?: McpAuditBridge | null;
   mcpSpanRecorder?: McpSpanRecorder | null;
+  mcpOtelRecorderPlan?: McpOtelRecorderPlan;
+  mcpOtelApi?: OpenTelemetryApiLike;
+  mcpOtelExporter?: McpSpanExporter;
+  mcpOtelEnv?: Record<string, string | undefined>;
   auditWriter?: AuditWriter;
   userId?: string;
 }
@@ -423,8 +430,7 @@ export class DaemonMcpRuntime {
     this.manager = deps.mcpManager;
     this.mcpPep = deps.mcpPep;
     this.mcpAuditBridge = deps.mcpAuditBridge;
-    this.mcpSpanRecorder =
-      options.mcpSpanRecorder === null ? undefined : options.mcpSpanRecorder;
+    this.mcpSpanRecorder = deps.mcpSpanRecorder;
     this.contextFactory = new McpGatewayContextFactory({ manager: this.manager });
     this.closeDeps = deps.close;
     this.userId = options.userId ?? process.env.USERNAME ?? process.env.USER ?? "local-user";

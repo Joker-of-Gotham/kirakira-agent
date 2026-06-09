@@ -3,13 +3,24 @@ import type {
   ResolvedConfig,
   ResolvedRuntimeMemoryState,
 } from "../../../packages/core/src/index.js";
-import type { MemoryBundle, RecallRequest, RetrievalTrace } from "../../../packages/memory-core/src/index.js";
+import type {
+  MemoryBundle,
+  RecallRequest,
+  ReflectRequest,
+  RetainRequest,
+  RetrievalTrace,
+} from "../../../packages/memory-core/src/index.js";
+import type { RunEvent } from "../../../packages/runtime-contracts/src/index.js";
 import {
   createDaemonMemoryDependencies,
+  DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
+  DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
+  DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
   memoryPostgresConfigFromEnv,
   memoryServiceConfigFromEnv,
   shouldCreateDaemonMemoryCheckpointRepository,
   shouldCreateDaemonMemoryDependencies,
+  shouldCreateDaemonMemoryRetainReflectBridge,
   type DaemonMemoryEnv,
 } from "../../../packages/runtime-daemon/src/bridge/memory-runtime-deps.js";
 
@@ -37,6 +48,21 @@ const bundle: MemoryBundle = {
   trace,
   recordIds: [],
   totalTokens: 4,
+};
+
+const retainReceipt = {
+  episodeId: "episode-retained",
+  memoryRecordIds: ["record-episode", "record-fact"],
+  factIds: ["record-fact"],
+  outboxEventId: "outbox-index",
+  retainedAt: "2026-06-09T00:00:01.000Z",
+};
+
+const reflectReceipt = {
+  observationIds: ["observation-1"],
+  beliefUpdates: [{ beliefId: "belief-1", action: "created" as const }],
+  contradictions: [],
+  reflectedAt: "2026-06-09T00:00:02.000Z",
 };
 
 function env(overrides: DaemonMemoryEnv = {}): DaemonMemoryEnv {
@@ -532,6 +558,276 @@ describe("daemon memory runtime dependencies", () => {
         env: { KIRAKIRA_MEMORY_CHECKPOINTS_ENABLED: "1" },
       }),
     ).toThrow(/requires a Postgres DSN/);
+  });
+
+  it("exposes disabled retain and reflect contracts when memory is not configured", () => {
+    const options = {
+      workspaceRoot: "C:/workspace",
+      env: {},
+      resolvedConfig: {
+        agentToml: {
+          workspace_name: "disabled-memory-workspace",
+          deep_research: { enabled: false },
+        },
+        runtimeState: {
+          default_profile: "local",
+          profiles: [{ name: "local", mode: "host" }],
+        },
+      } as Pick<ResolvedConfig, "agentToml" | "runtimeState">,
+    };
+
+    expect(shouldCreateDaemonMemoryRetainReflectBridge(options)).toBe(false);
+    expect(
+      shouldCreateDaemonMemoryRetainReflectBridge({
+        ...options,
+        env: { KIRAKIRA_MEMORY_ENABLED: "1" },
+      }),
+    ).toBe(false);
+
+    const deps = createDaemonMemoryDependencies(options);
+
+    expect(deps.config).toBeUndefined();
+    expect(deps.researchSource).toBeUndefined();
+    expect(deps.checkpointRepository).toBeUndefined();
+    expect(deps.retainReflect.retain.enabled).toBe(false);
+    expect(deps.retainReflect.reflect.enabled).toBe(false);
+    expect(deps.retainReflect.retain.invoke).toBeUndefined();
+    expect(deps.retainReflect.reflect.invoke).toBeUndefined();
+    expect(deps.retainReflect.retain.destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: "memory-service",
+          enabled: false,
+          operation: "retain",
+        }),
+        expect.objectContaining({
+          channel: "runtime-events",
+          enabled: false,
+          eventKinds: DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
+        }),
+      ]),
+    );
+    expect(deps.retainReflect.reflect.destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: "memory-service-outbox",
+          enabled: false,
+          eventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
+        }),
+      ]),
+    );
+  });
+
+  it("exposes profile-driven retain and reflect service events without live memory infra", async () => {
+    const events: RunEvent[] = [];
+    const retainCalls: RetainRequest[] = [];
+    const reflectCalls: ReflectRequest[] = [];
+    let capturedConfig: ReturnType<typeof memoryServiceConfigFromEnv> | undefined;
+    let factoryCalls = 0;
+    let closed = false;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "profiled-memory-workspace",
+        deep_research: { enabled: false },
+      },
+      runtimeState: {
+        default_profile: "profiled",
+        profiles: [
+          {
+            name: "profiled",
+            mode: "host",
+            workspace_root: "C:/workspace",
+            memory: {
+              enabled: true,
+              services: [
+                { name: "postgres", url_env: "PROFILE_DATABASE_URL" },
+                { name: "redis", url_env: "PROFILE_REDIS_URL" },
+                { name: "qdrant", url_env: "PROFILE_QDRANT_URL" },
+                { name: "neo4j", url_env: "PROFILE_NEO4J_URI" },
+                { name: "minio", url_env: "PROFILE_S3_ENDPOINT" },
+              ],
+              vector: {
+                backend: "qdrant",
+                url_env: "PROFILE_QDRANT_URL",
+              },
+              graph: {
+                backend: "neo4j",
+                uri_env: "PROFILE_NEO4J_URI",
+                username_env: "PROFILE_NEO4J_USER",
+                password_env: "PROFILE_NEO4J_PASSWORD",
+              },
+              blob: {
+                backend: "s3",
+                endpoint_env: "PROFILE_S3_ENDPOINT",
+                bucket: "profile-memory",
+                access_key_id_env: "PROFILE_S3_ACCESS_KEY_ID",
+                secret_access_key_env: "PROFILE_S3_SECRET_ACCESS_KEY",
+              },
+            },
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+
+    const deps = createDaemonMemoryDependencies({
+      workspaceRoot: "C:/workspace",
+      resolvedConfig,
+      runtimeProfileName: "profiled",
+      enableCheckpointRepository: false,
+      env: {
+        PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+        PROFILE_QDRANT_URL: "http://profile-qdrant:7333",
+        PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+        PROFILE_NEO4J_USER: "profile-neo4j",
+        PROFILE_NEO4J_PASSWORD: "profile-neo4j-secret",
+        PROFILE_S3_ENDPOINT: "http://profile-minio:19000",
+        PROFILE_S3_ACCESS_KEY_ID: "profile-access",
+        PROFILE_S3_SECRET_ACCESS_KEY: "profile-secret",
+      },
+      eventSink(event) {
+        events.push(event);
+      },
+      serviceFactory(config) {
+        capturedConfig = config;
+        factoryCalls += 1;
+        return {
+          async recall() {
+            return bundle;
+          },
+          async explainRetrieval() {
+            return trace;
+          },
+          async retain(request) {
+            retainCalls.push(request);
+            return retainReceipt;
+          },
+          async reflect(request) {
+            reflectCalls.push(request);
+            return reflectReceipt;
+          },
+          async close() {
+            closed = true;
+          },
+        };
+      },
+    });
+
+    expect(deps.researchSource).toBeUndefined();
+    expect(deps.checkpointRepository).toBeUndefined();
+    expect(deps.retainReflect.retain.enabled).toBe(true);
+    expect(deps.retainReflect.reflect.enabled).toBe(true);
+    expect(factoryCalls).toBe(0);
+    expect(deps.retainReflect.retain.destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: "memory-service-outbox",
+          enabled: true,
+          eventTypes: DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
+        }),
+        expect.objectContaining({
+          channel: "runtime-events",
+          enabled: true,
+          eventKinds: DAEMON_MEMORY_RETAIN_RUNTIME_EVENTS,
+          requiresRunId: true,
+        }),
+      ]),
+    );
+    expect(deps.retainReflect.reflect.destinations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channel: "memory-service",
+          enabled: true,
+          operation: "reflect",
+        }),
+        expect.objectContaining({
+          channel: "memory-service-outbox",
+          enabled: true,
+          eventTypes: DAEMON_MEMORY_REFLECT_SERVICE_OUTBOX_EVENTS,
+        }),
+      ]),
+    );
+
+    const retained = await deps.retainReflect.retain.invoke?.(
+      {
+        tenantId: "tenant",
+        workspaceId: "workspace",
+        namespace: "project",
+        sourceType: "chat",
+        content: "The runtime memory bridge requires retain events. Reflect should observe important facts.",
+        runId: "run-memory",
+        sessionId: "session-memory",
+      },
+      {
+        traceId: "trace-memory",
+        parentTaskId: "task-memory",
+        nodeId: "node-memory",
+        metadata: {
+          source: "unit-test",
+          nested: { ignored: true },
+        },
+      },
+    );
+
+    expect(retained).toEqual(retainReceipt);
+    expect(factoryCalls).toBe(1);
+    expect(retainCalls).toHaveLength(1);
+    expect(capturedConfig?.postgres).toMatchObject({
+      host: "profile-pg",
+      port: 15432,
+      database: "profile",
+      username: "profile",
+      password: "secret",
+    });
+    expect(JSON.stringify(capturedConfig)).not.toContain("localhost");
+    expect(events.map((event) => event.kind)).toEqual([
+      "memory.retain.started",
+      "memory.retain.completed",
+    ]);
+    expect(events[0]?.runId).toBe("run-memory");
+    expect(events[0]?.payload).toMatchObject({
+      operation: "retain",
+      tenantId: "tenant",
+      workspaceId: "workspace",
+      namespace: "project",
+      sourceType: "chat",
+      runId: "run-memory",
+      sessionId: "session-memory",
+      traceId: "trace-memory",
+      parentTaskId: "task-memory",
+      nodeId: "node-memory",
+      contentLength: 89,
+      metadata: { source: "unit-test" },
+    });
+    expect(events[0]?.payload).not.toHaveProperty("content");
+    expect(events[1]?.payload).toMatchObject({
+      episodeId: "episode-retained",
+      memoryRecordIds: ["record-episode", "record-fact"],
+      factIds: ["record-fact"],
+      outboxEventId: "outbox-index",
+      serviceOutboxEventTypes: DAEMON_MEMORY_RETAIN_SERVICE_OUTBOX_EVENTS,
+    });
+
+    const reflected = await deps.retainReflect.reflect.invoke?.({
+      tenantId: "tenant",
+      workspaceId: "workspace",
+      factIds: ["record-fact"],
+      maxConsolidations: 2,
+    });
+
+    expect(reflected).toEqual(reflectReceipt);
+    expect(factoryCalls).toBe(1);
+    expect(reflectCalls).toEqual([
+      {
+        tenantId: "tenant",
+        workspaceId: "workspace",
+        factIds: ["record-fact"],
+        maxConsolidations: 2,
+      },
+    ]);
+    expect(events).toHaveLength(2);
+    await deps.close();
+    expect(closed).toBe(true);
   });
 
   it("constructs the production service lazily on first recall", async () => {

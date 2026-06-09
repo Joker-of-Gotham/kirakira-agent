@@ -132,6 +132,9 @@ export interface ReactWorkerConfig {
   mcpServers?: string[];
   sandboxProfile?: string;
   subagentPolicy?: SubagentRuntimePolicy;
+  permissions?: string[];
+  topology?: SubagentTopologyMetadata;
+  lineage?: SubagentLineageMetadata;
 }
 
 /** ReAct loop worker state (`ReactWorkerState` in public API). */
@@ -371,6 +374,9 @@ export interface WorkerConfig {
   skillAllowlist?: string[];
   modelDefault?: string;
   policyCeiling?: SandboxPolicyCeiling;
+  permissions?: string[];
+  topology?: SubagentTopologyMetadata;
+  lineage?: SubagentLineageMetadata;
   extra?: Record<string, unknown>;
 }
 
@@ -415,6 +421,28 @@ export interface SubagentRuntimePolicy {
   systemPreamble?: string;
   contextMode?: SubagentContextMode;
   traceHandoffs?: boolean;
+}
+
+export interface SubagentHandoffMetadata {
+  id: string;
+  from: string;
+  to: string;
+  mode?: string;
+  inputFilter?: string;
+  approvalRequired?: boolean;
+  conditions?: string[];
+}
+
+export interface SubagentTopologyMetadata {
+  parentRole?: string;
+  handoffEdgeId?: string;
+  handoff?: SubagentHandoffMetadata;
+}
+
+export interface SubagentLineageMetadata {
+  rootLineageId: string;
+  parentLineageId: string;
+  lineageId: string;
 }
 
 export interface EphemeralAgentConfig extends WorkerConfig {

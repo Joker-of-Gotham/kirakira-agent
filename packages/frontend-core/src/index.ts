@@ -114,6 +114,12 @@ export type {
 
 export { createWorkbenchInspectorView } from "./workbench-inspector.js";
 export { createWorkbenchNavigationView } from "./workbench-navigation.js";
+export {
+  createArtifactDetailsView,
+  createCitationLedgerView,
+  createSelectedSubagentDrawer,
+  createWorkbenchDetailViews,
+} from "./workbench-details.js";
 
 export type {
   WorkbenchInspectorInput,
@@ -136,6 +142,24 @@ export type {
   WorkbenchViewId,
   WorkbenchViewTone,
 } from "./workbench-navigation.js";
+
+export type {
+  WorkbenchArtifactCard,
+  WorkbenchArtifactDetailsView,
+  WorkbenchArtifactReference,
+  WorkbenchCitationLedgerItem,
+  WorkbenchCitationLedgerView,
+  WorkbenchDetailChip,
+  WorkbenchDetailMetric,
+  WorkbenchDetailRow,
+  WorkbenchDetailTone,
+  WorkbenchDetailViews,
+  WorkbenchDetailViewsInput,
+  WorkbenchSelectedSubagentDrawer,
+  WorkbenchSubagentCandidate,
+  WorkbenchSubagentDetail,
+  WorkbenchVisualQaHooks,
+} from "./workbench-details.js";
 
 export {
   createEmptyRunDashboard,
