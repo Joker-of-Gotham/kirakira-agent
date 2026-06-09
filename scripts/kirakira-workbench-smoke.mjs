@@ -13,6 +13,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_SMOKE_TIMEOUT_MS = 120_000;
 const DEFAULT_SMOKE_INTERVAL_MS = 1_000;
 const DEFAULT_SMOKE_PROBE_TIMEOUT_MS = 2_000;
+const ELECTRON_SMOKE_ENV = "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE";
 
 function readValue(args, index, name) {
   const value = args[index + 1];
@@ -109,10 +110,11 @@ function liveRequested(options, env) {
 
 export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
   const profile = profileFromOptions(options, env);
-  const plan = buildLauncherWorkbenchSmokePlan(profile, options.surface, {
+  const basePlan = buildLauncherWorkbenchSmokePlan(profile, options.surface, {
     skipInfra: options.skipInfra,
     skipDaemon: options.skipDaemon,
   });
+  const plan = withSmokeStepOverrides(basePlan);
   return {
     live: liveRequested(options, env),
     profile,
@@ -126,12 +128,31 @@ export function buildWorkbenchSmokeCommand(options = {}, env = process.env) {
   };
 }
 
+function withSmokeStepOverrides(plan) {
+  if (plan.surface !== "desktop") return plan;
+  return {
+    ...plan,
+    steps: plan.steps.map((step) => {
+      if (step.name !== "desktop-shell") return step;
+      return {
+        ...step,
+        mode: "foreground",
+        env: {
+          ...step.env,
+          [ELECTRON_SMOKE_ENV]: "1",
+        },
+      };
+    }),
+  };
+}
+
 export async function runWorkbenchSmoke(smokeCommand, options = {}) {
   await runWorkbenchSmokePlan(smokeCommand.plan, {
     supervisor: options.supervisor,
     processes: options.processes,
     installSignalHandlers: options.installSignalHandlers,
     runChecked: options.runChecked,
+    runForeground: options.runForeground,
     waitForReadiness: options.waitForReadiness,
     readiness: smokeCommand.readiness,
   });

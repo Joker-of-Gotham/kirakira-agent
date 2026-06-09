@@ -1,6 +1,7 @@
 import type { ResolvedConfig } from "@kirakira/core";
 import {
   McpGatewayContextFactory,
+  mcpMetaFromSpanContext,
   filterTools,
   type McpAuditBridge,
   type McpClientManager,
@@ -9,6 +10,10 @@ import {
   type McpGatewayPolicyContext,
   type McpGatewayServerContext,
   type McpGatewayToolContext,
+  type McpSpanAttributes,
+  type McpSpanHandle,
+  type McpSpanRecorder,
+  type McpSpanStatusCode,
   type McpGatewayTrustContext,
 } from "@kirakira/mcp-adapter";
 import {
@@ -29,6 +34,7 @@ import type {
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
+  RuntimeMcpOtelSpanStatus,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { createDaemonMcpDependencies } from "./mcp-runtime-deps.js";
@@ -42,6 +48,7 @@ export interface DaemonMcpRuntimeOptions {
   mcpManager?: McpClientManager;
   mcpPep?: McpPep;
   mcpAuditBridge?: McpAuditBridge | null;
+  mcpSpanRecorder?: McpSpanRecorder | null;
   auditWriter?: AuditWriter;
   userId?: string;
 }
@@ -51,6 +58,11 @@ export type DaemonMcpListInput = RuntimeMcpListRequest;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+function errorTypeFrom(error: unknown): string {
+  if (error instanceof Error) return error.name || "Error";
+  return "error";
+}
 
 function policyResultFromEnforcement(
   result: EnforcementResult,
@@ -65,12 +77,21 @@ function policyResultFromEnforcement(
   };
 }
 
+interface RuntimeMcpSpanProjection {
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  status?: RuntimeMcpOtelSpanStatus;
+  durationMs?: number;
+}
+
 function resultFrom(
   input: RuntimeMcpToolCallRequest,
   startedAt: number,
   policy: RuntimeMcpToolPolicyResult,
   context: McpGatewayToolContext,
   overrides: Partial<Omit<RuntimeMcpToolCallResult, "server" | "tool" | "latencyMs" | "policy">>,
+  span?: RuntimeMcpSpanProjection,
 ): RuntimeMcpToolCallResult {
   return {
     server: input.server,
@@ -86,7 +107,7 @@ function resultFrom(
     policy,
     trust: projectTrust(context.trust),
     audit: withAuditDecision(projectAudit(context.audit), policy.decisionId),
-    otel: projectOtel(context.otel),
+    otel: projectOtel(context.otel, span),
   };
 }
 
@@ -119,6 +140,11 @@ interface DiscoveredMcpTool {
   outputSchema?: Record<string, unknown>;
   annotations?: Record<string, unknown>;
   execution?: Record<string, unknown>;
+}
+
+interface ActiveRuntimeMcpSpan {
+  startedAt: number;
+  handle?: McpSpanHandle;
 }
 
 function projectTrust(context: McpGatewayTrustContext): RuntimeMcpTrustMetadata {
@@ -163,10 +189,18 @@ function withAuditDecision(
   return decisionId === undefined ? audit : { ...audit, decisionId };
 }
 
-function projectOtel(context: McpGatewayOtelContext): RuntimeMcpOtelMetadata {
+function projectOtel(
+  context: McpGatewayOtelContext,
+  span?: RuntimeMcpSpanProjection,
+): RuntimeMcpOtelMetadata {
   return {
     spanName: context.spanName,
     attributes: context.attributes,
+    ...(span?.traceId !== undefined ? { traceId: span.traceId } : {}),
+    ...(span?.spanId !== undefined ? { spanId: span.spanId } : {}),
+    ...(span?.parentSpanId !== undefined ? { parentSpanId: span.parentSpanId } : {}),
+    ...(span?.status !== undefined ? { status: span.status } : {}),
+    ...(span?.durationMs !== undefined ? { durationMs: span.durationMs } : {}),
   };
 }
 
@@ -206,6 +240,7 @@ export class DaemonMcpRuntime {
   private readonly manager: McpClientManager;
   private readonly mcpPep: McpPep;
   private readonly mcpAuditBridge?: McpAuditBridge;
+  private readonly mcpSpanRecorder?: McpSpanRecorder;
   private readonly contextFactory: McpGatewayContextFactory;
   private readonly closeDeps: () => Promise<void>;
   private readonly userId: string;
@@ -216,9 +251,84 @@ export class DaemonMcpRuntime {
     this.manager = deps.mcpManager;
     this.mcpPep = deps.mcpPep;
     this.mcpAuditBridge = deps.mcpAuditBridge;
+    this.mcpSpanRecorder =
+      options.mcpSpanRecorder === null ? undefined : options.mcpSpanRecorder;
     this.contextFactory = new McpGatewayContextFactory({ manager: this.manager });
     this.closeDeps = deps.close;
     this.userId = options.userId ?? process.env.USERNAME ?? process.env.USER ?? "local-user";
+  }
+
+  private startMcpSpan(
+    context: McpGatewayOtelContext,
+    options: {
+      traceId?: string;
+      attributes?: McpSpanAttributes;
+    } = {},
+  ): ActiveRuntimeMcpSpan {
+    const startedAt = Date.now();
+    if (this.mcpSpanRecorder === undefined) return { startedAt };
+
+    try {
+      const handle = this.mcpSpanRecorder.startSpan({
+        name: context.spanName,
+        kind: "CLIENT",
+        attributes: {
+          ...context.attributes,
+          ...(options.traceId !== undefined ? { "kirakira.trace.id": options.traceId } : {}),
+          ...(options.attributes ?? {}),
+        },
+        startTimeUnixMs: startedAt,
+        ...(options.traceId !== undefined ? { traceId: options.traceId } : {}),
+      });
+      return { startedAt, handle };
+    } catch {
+      return { startedAt };
+    }
+  }
+
+  private async finishMcpSpan(
+    span: ActiveRuntimeMcpSpan,
+    status: McpSpanStatusCode,
+    options: {
+      message?: string;
+      attributes?: McpSpanAttributes;
+    } = {},
+  ): Promise<RuntimeMcpSpanProjection> {
+    const endTimeUnixMs = Date.now();
+    await Promise.resolve(
+      span.handle?.end({
+        status: { code: status, ...(options.message !== undefined ? { message: options.message } : {}) },
+        ...(options.attributes !== undefined ? { attributes: options.attributes } : {}),
+        endTimeUnixMs,
+      }),
+    ).catch(() => {});
+
+    return {
+      ...(span.handle?.context.traceId !== undefined ? { traceId: span.handle.context.traceId } : {}),
+      ...(span.handle?.context.spanId !== undefined ? { spanId: span.handle.context.spanId } : {}),
+      ...(span.handle?.context.parentSpanId !== undefined
+        ? { parentSpanId: span.handle.context.parentSpanId }
+        : {}),
+      status,
+      durationMs: Math.max(0, endTimeUnixMs - span.startedAt),
+    };
+  }
+
+  private withMcpTraceMeta<T extends Record<string, unknown>>(
+    params: T,
+    span: ActiveRuntimeMcpSpan,
+  ): T {
+    if (span.handle === undefined) return params;
+    const traceMeta = mcpMetaFromSpanContext(span.handle.context);
+    if (traceMeta === undefined) return params;
+    const existingMeta = isRecord(params._meta) ? params._meta : {};
+    return {
+      ...params,
+      _meta: {
+        ...existingMeta,
+        ...traceMeta,
+      },
+    } as T;
   }
 
   private pepContext(input: RuntimeMcpToolCallRequest): PepContext {
@@ -312,6 +422,13 @@ export class DaemonMcpRuntime {
 
     for (const server of selectedServers) {
       const serverContext = this.contextFactory.serverContext(server, "tools/list");
+      const span = this.startMcpSpan(serverContext.otel, {
+        ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
+        attributes: { "kirakira.runtime.message.type": "mcp_list" },
+      });
+      let spanStatus: McpSpanStatusCode = "OK";
+      let spanAttributes: McpSpanAttributes = {};
+      let spanMessage: string | undefined;
       let health = this.manager.getHealth(server) as RuntimeMcpServerHealth;
       let error = this.manager.getLastError(server);
       let tools: RuntimeMcpToolSummary[] | undefined;
@@ -328,12 +445,17 @@ export class DaemonMcpRuntime {
           await this.recordConnection(startContext, "failed", "daemon", traceId);
           health = this.manager.getHealth(server) as RuntimeMcpServerHealth;
           error = startError instanceof Error ? startError.message : String(startError);
+          spanStatus = "ERROR";
+          spanAttributes = { ...spanAttributes, "error.type": errorTypeFrom(startError) };
+          spanMessage = error;
         }
       }
 
       if (input.includeTools && health === "healthy") {
         try {
-          const rawTools = extractToolsFromResult(await this.manager.request(server, "tools/list", {}));
+          const rawTools = extractToolsFromResult(
+            await this.manager.request(server, "tools/list", this.withMcpTraceMeta({}, span)),
+          );
           const filtered = filterTools(
             rawTools,
             this.manager.getConfig(server)?.tools,
@@ -346,8 +468,16 @@ export class DaemonMcpRuntime {
           );
         } catch (listError) {
           error = listError instanceof Error ? listError.message : String(listError);
+          spanStatus = "ERROR";
+          spanAttributes = { ...spanAttributes, "error.type": errorTypeFrom(listError) };
+          spanMessage = error;
         }
       }
+
+      const spanProjection = await this.finishMcpSpan(span, spanStatus, {
+        ...(spanMessage !== undefined ? { message: spanMessage } : {}),
+        attributes: spanAttributes,
+      });
 
       servers.push({
         name: server,
@@ -355,7 +485,7 @@ export class DaemonMcpRuntime {
         policy: projectPolicy(serverContext.policy),
         trust: projectTrust(serverContext.trust),
         audit: projectAudit(serverContext.audit),
-        otel: projectOtel(serverContext.otel),
+        otel: projectOtel(serverContext.otel, spanProjection),
         ...(tools !== undefined ? { tools, toolCount: tools.length } : {}),
         ...(error !== undefined ? { error } : {}),
       });
@@ -371,38 +501,65 @@ export class DaemonMcpRuntime {
     const args = input.arguments ?? {};
     const startedAt = Date.now();
     const callContext = this.contextFactory.toolContext(input.server, input.tool, "tools/call");
-    const pepContext = this.pepContext(input);
-    const policy = await this.mcpPep.enforce(
-      {
-        mcpServer: input.server,
-        server: input.server,
-        serverId: input.server,
-        ...(callContext.trust.issuer !== undefined ? { issuer: callContext.trust.issuer } : {}),
-        toolName: input.tool,
-        tool: input.tool,
-        args: Object.values(args),
-        env: {
-          MCP_TRUST: callContext.trust.tier,
-          KIRAKIRA_MCP_TRUST: callContext.trust.tier,
-          KIRAKIRA_TRUST_TIER: callContext.trust.tier,
-        },
+    const span = this.startMcpSpan(callContext.otel, {
+      ...(input.traceId !== undefined ? { traceId: input.traceId } : {}),
+      attributes: {
+        "kirakira.runtime.message.type": "mcp_call",
+        ...(input.runId !== undefined ? { "kirakira.run.id": input.runId } : {}),
       },
-      pepContext,
-    );
+    });
+    const pepContext = this.pepContext(input);
+    let policy: EnforcementResult;
+    try {
+      policy = await this.mcpPep.enforce(
+        {
+          mcpServer: input.server,
+          server: input.server,
+          serverId: input.server,
+          ...(callContext.trust.issuer !== undefined ? { issuer: callContext.trust.issuer } : {}),
+          toolName: input.tool,
+          tool: input.tool,
+          args: Object.values(args),
+          env: {
+            MCP_TRUST: callContext.trust.tier,
+            KIRAKIRA_MCP_TRUST: callContext.trust.tier,
+            KIRAKIRA_TRUST_TIER: callContext.trust.tier,
+          },
+        },
+        pepContext,
+      );
+    } catch (error) {
+      await this.finishMcpSpan(span, "ERROR", {
+        message: error instanceof Error ? error.message : String(error),
+        attributes: { "error.type": errorTypeFrom(error) },
+      });
+      throw error;
+    }
     const policyResult = policyResultFromEnforcement(policy);
     if (!policy.allowed) {
+      const errorCode = policy.decision.effect === "escalate" ? "approval_required" : "policy_denied";
       await this.recordToolAudit({
         input,
         context: callContext,
         policy: policyResult,
         status: "error",
-        errorMessage: policy.decision.effect === "escalate" ? "approval_required" : "policy_denied",
+        errorMessage: errorCode,
+      });
+      const spanProjection = await this.finishMcpSpan(span, "ERROR", {
+        message: errorCode,
+        attributes: {
+          "error.type": errorCode,
+          "kirakira.policy.trace_id": policyResult.traceId,
+          ...(policyResult.decisionId !== undefined
+            ? { "kirakira.policy.decision_id": policyResult.decisionId }
+            : {}),
+        },
       });
       return resultFrom(input, startedAt, policyResult, callContext, {
         success: false,
         isError: true,
-        error: policy.decision.effect === "escalate" ? "approval_required" : "policy_denied",
-      });
+        error: errorCode,
+      }, spanProjection);
     }
 
     try {
@@ -412,10 +569,14 @@ export class DaemonMcpRuntime {
         pepContext.sessionId,
         pepContext.traceId,
       );
-      const raw = await this.manager.request(input.server, "tools/call", {
-        name: input.tool,
-        arguments: args,
-      });
+      const raw = await this.manager.request(
+        input.server,
+        "tools/call",
+        this.withMcpTraceMeta({
+          name: input.tool,
+          arguments: args,
+        }, span),
+      );
       await this.recordToolAudit({
         input,
         context: callContext,
@@ -423,7 +584,21 @@ export class DaemonMcpRuntime {
         status: "success",
         result: raw,
       });
-      return resultFrom(input, startedAt, policyResult, callContext, projectMcpResult(raw));
+      const projected = projectMcpResult(raw);
+      const spanProjection = await this.finishMcpSpan(
+        span,
+        projected.isError === true ? "ERROR" : "OK",
+        {
+          attributes: {
+            "kirakira.policy.trace_id": policyResult.traceId,
+            ...(policyResult.decisionId !== undefined
+              ? { "kirakira.policy.decision_id": policyResult.decisionId }
+              : {}),
+            ...(projected.isError === true ? { "error.type": "tool_error" } : {}),
+          },
+        },
+      );
+      return resultFrom(input, startedAt, policyResult, callContext, projected, spanProjection);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.recordToolAudit({
@@ -433,11 +608,21 @@ export class DaemonMcpRuntime {
         status: "error",
         errorMessage,
       });
+      const spanProjection = await this.finishMcpSpan(span, "ERROR", {
+        message: errorMessage,
+        attributes: {
+          "error.type": errorTypeFrom(error),
+          "kirakira.policy.trace_id": policyResult.traceId,
+          ...(policyResult.decisionId !== undefined
+            ? { "kirakira.policy.decision_id": policyResult.decisionId }
+            : {}),
+        },
+      });
       return resultFrom(input, startedAt, policyResult, callContext, {
         success: false,
         isError: true,
         error: errorMessage,
-      });
+      }, spanProjection);
     }
   }
 

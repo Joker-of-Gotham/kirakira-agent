@@ -13,6 +13,7 @@ export interface RuntimeMcpListRequest {
   server?: string;
   includeTools?: boolean;
   startServers?: boolean;
+  traceId?: string;
 }
 
 export interface RuntimeMcpToolPolicyResult {
@@ -88,9 +89,16 @@ export interface RuntimeMcpAuditMetadata {
   decisionId?: string;
 }
 
+export type RuntimeMcpOtelSpanStatus = "UNSET" | "OK" | "ERROR";
+
 export interface RuntimeMcpOtelMetadata {
   spanName: string;
   attributes: Record<string, string | number | boolean>;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  status?: RuntimeMcpOtelSpanStatus;
+  durationMs?: number;
 }
 
 export interface RuntimeMcpToolSummary {
@@ -242,12 +250,22 @@ function isRuntimeMcpOtelAttribute(value: unknown): value is string | number | b
   return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
 }
 
+function isRuntimeMcpOtelSpanStatus(value: unknown): value is RuntimeMcpOtelSpanStatus {
+  return value === "UNSET" || value === "OK" || value === "ERROR";
+}
+
 function isRuntimeMcpOtelMetadata(value: unknown): value is RuntimeMcpOtelMetadata {
   return (
     isRecord(value) &&
     typeof value.spanName === "string" &&
     isRecord(value.attributes) &&
-    Object.values(value.attributes).every(isRuntimeMcpOtelAttribute)
+    Object.values(value.attributes).every(isRuntimeMcpOtelAttribute) &&
+    isOptionalString(value.traceId) &&
+    isOptionalString(value.spanId) &&
+    isOptionalString(value.parentSpanId) &&
+    (value.status === undefined || isRuntimeMcpOtelSpanStatus(value.status)) &&
+    (value.durationMs === undefined ||
+      (typeof value.durationMs === "number" && Number.isFinite(value.durationMs)))
   );
 }
 

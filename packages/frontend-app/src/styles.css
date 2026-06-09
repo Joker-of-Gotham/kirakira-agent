@@ -1831,6 +1831,175 @@ a:focus-visible {
   font-size: 0.8rem;
 }
 
+.kk-mcp-field-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kk-mcp-field-list span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  padding: 5px 7px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+  color: var(--kk-ink);
+  font-size: 0.76rem;
+}
+
+.kk-mcp-field-list small {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+}
+
+.kk-mcp-field-required {
+  border-color: rgb(11 131 165 / 36%);
+  background: rgb(11 131 165 / 7%);
+}
+
+.kk-mcp-metadata {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.kk-mcp-metadata h4 {
+  margin: 0;
+  color: var(--kk-ink);
+  font-size: 0.78rem;
+}
+
+.kk-mcp-metadata-rows {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.kk-mcp-metadata-rows div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.kk-mcp-metadata-rows dt,
+.kk-mcp-metadata-rows dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+
+.kk-mcp-metadata-rows dt {
+  color: var(--kk-text-muted);
+  text-transform: uppercase;
+}
+
+.kk-mcp-metadata-rows dd {
+  color: var(--kk-text);
+}
+
+.kk-mcp-metadata-success {
+  color: var(--kk-green) !important;
+}
+
+.kk-mcp-metadata-warning {
+  color: var(--kk-amber) !important;
+}
+
+.kk-mcp-metadata-danger {
+  color: var(--kk-red) !important;
+}
+
+.kk-mcp-arguments {
+  display: grid;
+  gap: 5px;
+}
+
+.kk-mcp-arguments span {
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.kk-mcp-arguments textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: #fbfcfc;
+  color: var(--kk-text);
+  padding: 9px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 0.72rem;
+  line-height: 1.42;
+}
+
+.kk-mcp-call-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.kk-mcp-call-actions .kk-icon-button {
+  flex: 1 1 92px;
+  justify-content: center;
+}
+
+.kk-mcp-call-button {
+  flex: 2 1 132px;
+  min-height: 36px;
+  justify-content: center;
+}
+
+.kk-mcp-call-result {
+  display: grid;
+  gap: 4px;
+  padding: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface-muted);
+}
+
+.kk-mcp-call-result-success {
+  border-color: rgb(22 131 90 / 34%);
+}
+
+.kk-mcp-call-result-error {
+  border-color: rgb(183 53 53 / 40%);
+}
+
+.kk-mcp-call-result strong,
+.kk-mcp-call-result small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.kk-mcp-call-result small {
+  color: var(--kk-text-muted);
+  font-size: 0.74rem;
+}
+
+.kk-mcp-schema {
+  display: grid;
+  gap: 6px;
+}
+
+.kk-mcp-schema summary {
+  cursor: pointer;
+  color: var(--kk-text-muted);
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
 .kk-mcp-tool-detail pre {
   max-height: 180px;
   overflow: auto;

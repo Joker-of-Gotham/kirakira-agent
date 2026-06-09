@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import {
   createMcpDirectoryView,
+  createMcpToolPlaygroundView,
   createEmptyRunDashboard,
   createRunInspector,
   createRunWorkstream,
@@ -30,7 +31,10 @@ import {
   type RuntimeArtifactContent,
   type RuntimeMcpDirectoryTool,
   type RuntimeMcpDirectoryView,
+  type RuntimeMcpMetadataRow,
   type RuntimeMcpListResult,
+  type RuntimeMcpToolCallResult,
+  type RuntimeMcpToolPlaygroundView,
   type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
@@ -78,6 +82,13 @@ interface ArtifactPreviewState {
 interface McpDirectoryState {
   status: "idle" | "loading" | "ready" | "error";
   result?: RuntimeMcpListResult;
+  message?: string;
+}
+
+interface McpToolCallState {
+  status: "idle" | "loading" | "ready" | "error";
+  toolId?: string;
+  result?: RuntimeMcpToolCallResult;
   message?: string;
 }
 
@@ -137,6 +148,8 @@ export function KirakiraWorkbench({
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeTransportStatus | undefined>();
   const [mcpDirectory, setMcpDirectory] = useState<McpDirectoryState>({ status: "idle" });
   const [selectedMcpToolId, setSelectedMcpToolId] = useState<string | undefined>();
+  const [mcpToolDrafts, setMcpToolDrafts] = useState<Record<string, string>>({});
+  const [mcpToolCall, setMcpToolCall] = useState<McpToolCallState>({ status: "idle" });
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
@@ -227,6 +240,8 @@ export function KirakiraWorkbench({
   useEffect(() => {
     setMcpDirectory({ status: "idle" });
     setSelectedMcpToolId(undefined);
+    setMcpToolDrafts({});
+    setMcpToolCall({ status: "idle" });
   }, [runtime]);
 
   const projection = useMemo(
@@ -244,6 +259,32 @@ export function KirakiraWorkbench({
   const inspector = useMemo(
     () => createRunInspector(projection, { selectedFocusId }),
     [projection, selectedFocusId],
+  );
+  const mcpDirectoryView = useMemo(
+    () => createMcpDirectoryView(mcpDirectory.result),
+    [mcpDirectory.result],
+  );
+  const selectedMcpTool = useMemo(
+    () =>
+      mcpDirectoryView.tools.find((tool) => tool.id === selectedMcpToolId) ??
+      mcpDirectoryView.tools[0],
+    [mcpDirectoryView.tools, selectedMcpToolId],
+  );
+  const selectedMcpToolDraft = selectedMcpTool
+    ? mcpToolDrafts[selectedMcpTool.id] ?? selectedMcpTool.argumentDraft
+    : "{}";
+  const selectedMcpToolCallResult =
+    selectedMcpTool && mcpToolCall.toolId === selectedMcpTool.id
+      ? mcpToolCall.result
+      : undefined;
+  const selectedMcpPlayground = useMemo(
+    () =>
+      createMcpToolPlaygroundView(
+        selectedMcpTool,
+        selectedMcpToolDraft,
+        selectedMcpToolCallResult,
+      ),
+    [selectedMcpTool, selectedMcpToolCallResult, selectedMcpToolDraft],
   );
 
   useEffect(() => {
@@ -315,21 +356,59 @@ export function KirakiraWorkbench({
     if (focusId) setSelectedFocusId(focusId);
   }, []);
 
+  const updateMcpArgumentDraft = useCallback((toolId: string, draft: string) => {
+    setMcpToolDrafts((drafts) => ({ ...drafts, [toolId]: draft }));
+  }, []);
+
   const topologyManifest = runtimeTransportOrchestration(runtimeStatus);
   const topology = useMemo(
     () => createSubagentTopologyView(projection, topologyManifest),
     [projection, topologyManifest],
   );
-  const mcpDirectoryView = useMemo(
-    () => createMcpDirectoryView(mcpDirectory.result),
-    [mcpDirectory.result],
-  );
-  const selectedMcpTool = useMemo(
-    () =>
-      mcpDirectoryView.tools.find((tool) => tool.id === selectedMcpToolId) ??
-      mcpDirectoryView.tools[0],
-    [mcpDirectoryView.tools, selectedMcpToolId],
-  );
+
+  useEffect(() => {
+    if (!selectedMcpTool) return;
+    setMcpToolDrafts((drafts) =>
+      drafts[selectedMcpTool.id] === undefined
+        ? { ...drafts, [selectedMcpTool.id]: selectedMcpTool.argumentDraft }
+        : drafts,
+    );
+    setMcpToolCall((state) =>
+      state.toolId === undefined || state.toolId === selectedMcpTool.id
+        ? state
+        : { status: "idle" },
+    );
+  }, [selectedMcpTool]);
+
+  const callSelectedMcpTool = useCallback(async () => {
+    if (!selectedMcpTool) return;
+    if (selectedMcpPlayground.draft.status !== "ready") {
+      setMcpToolCall({
+        status: "error",
+        toolId: selectedMcpTool.id,
+        message: selectedMcpPlayground.draft.error ?? "MCP arguments must be a JSON object",
+      });
+      return;
+    }
+
+    setMcpToolCall({ status: "loading", toolId: selectedMcpTool.id });
+    try {
+      const result = await runtime.callMcpTool({
+        server: selectedMcpTool.server,
+        tool: selectedMcpTool.name,
+        arguments: selectedMcpPlayground.draft.arguments ?? {},
+        ...(runId ? { runId } : {}),
+      });
+      setMcpToolCall({ status: "ready", toolId: selectedMcpTool.id, result });
+    } catch (err) {
+      setMcpToolCall({
+        status: "error",
+        toolId: selectedMcpTool.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }, [runId, runtime, selectedMcpPlayground.draft, selectedMcpTool]);
+
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
   const artifacts = Object.values(projection.artifactDetails).sort((a, b) =>
@@ -629,7 +708,11 @@ export function KirakiraWorkbench({
           view={mcpDirectoryView}
           selectedTool={selectedMcpTool}
           selectedToolId={selectedMcpTool?.id}
+          playground={selectedMcpPlayground}
+          callState={mcpToolCall}
           onSelectTool={setSelectedMcpToolId}
+          onArgumentDraftChange={updateMcpArgumentDraft}
+          onCallTool={() => void callSelectedMcpTool()}
           onRefresh={() => void refreshMcpDirectory(false)}
           onStartAndRefresh={() => void refreshMcpDirectory(true)}
         />
@@ -969,7 +1052,11 @@ function McpDirectoryPanel({
   view,
   selectedTool,
   selectedToolId,
+  playground,
+  callState,
   onSelectTool,
+  onArgumentDraftChange,
+  onCallTool,
   onRefresh,
   onStartAndRefresh,
 }: {
@@ -977,7 +1064,11 @@ function McpDirectoryPanel({
   view: RuntimeMcpDirectoryView;
   selectedTool?: RuntimeMcpDirectoryTool;
   selectedToolId?: string;
+  playground: RuntimeMcpToolPlaygroundView;
+  callState: McpToolCallState;
   onSelectTool: (id: string) => void;
+  onArgumentDraftChange: (toolId: string, draft: string) => void;
+  onCallTool: () => void;
   onRefresh: () => void;
   onStartAndRefresh: () => void;
 }) {
@@ -1070,17 +1161,38 @@ function McpDirectoryPanel({
             ))}
           </div>
 
-          <McpToolDetail tool={selectedTool} />
+          <McpToolDetail
+            tool={selectedTool}
+            playground={playground}
+            callState={callState}
+            onArgumentDraftChange={onArgumentDraftChange}
+            onCallTool={onCallTool}
+          />
         </div>
       )}
     </section>
   );
 }
 
-function McpToolDetail({ tool }: { tool?: RuntimeMcpDirectoryTool }) {
+function McpToolDetail({
+  tool,
+  playground,
+  callState,
+  onArgumentDraftChange,
+  onCallTool,
+}: {
+  tool?: RuntimeMcpDirectoryTool;
+  playground: RuntimeMcpToolPlaygroundView;
+  callState: McpToolCallState;
+  onArgumentDraftChange: (toolId: string, draft: string) => void;
+  onCallTool: () => void;
+}) {
   if (!tool) return <div className="kk-empty">No tools discovered</div>;
+  const activeCall = callState.toolId === tool.id ? callState : { status: "idle" as const };
+  const calling = activeCall.status === "loading";
+  const invalidDraft = playground.draft.status === "invalid";
   return (
-    <article className="kk-mcp-tool-detail">
+    <article className="kk-mcp-tool-detail" aria-busy={calling}>
       <header>
         <span>{tool.server}</span>
         <h3>{tool.title}</h3>
@@ -1097,9 +1209,99 @@ function McpToolDetail({ tool }: { tool?: RuntimeMcpDirectoryTool }) {
             {tool.inputPropertyCount} fields, {tool.requiredInputCount} required
           </dd>
         </div>
+        {tool.otel ? (
+          <div>
+            <dt>Span</dt>
+            <dd>{tool.otel.spanName}</dd>
+          </div>
+        ) : null}
       </dl>
-      <pre>{JSON.stringify(tool.inputSchema ?? { type: "object" }, null, 2)}</pre>
+      {tool.inputFields.length > 0 ? (
+        <div className="kk-mcp-field-list" aria-label="MCP input fields">
+          {tool.inputFields.map((field) => (
+            <span key={field.name} className={field.required ? "kk-mcp-field-required" : ""}>
+              {field.name}
+              <small>{field.type}{field.required ? " required" : ""}</small>
+            </span>
+          ))}
+        </div>
+      ) : null}
+      <McpMetadataSection title="Trust" rows={playground.trustRows} />
+      <McpMetadataSection title="Policy" rows={playground.policyRows} />
+      <McpMetadataSection title="Audit" rows={playground.auditRows} />
+      <label className="kk-mcp-arguments">
+        <span>Arguments JSON</span>
+        <textarea
+          rows={5}
+          value={playground.draft.text}
+          spellCheck={false}
+          onChange={(event) => onArgumentDraftChange(tool.id, event.target.value)}
+        />
+      </label>
+      <div className="kk-mcp-call-actions">
+        <button
+          type="button"
+          className="kk-icon-button"
+          onClick={() => onArgumentDraftChange(tool.id, tool.argumentDraft)}
+          disabled={calling}
+        >
+          <RefreshCw size={15} />
+          <span>Reset</span>
+        </button>
+        <button
+          type="button"
+          className="kk-submit kk-mcp-call-button"
+          onClick={onCallTool}
+          disabled={calling || invalidDraft}
+        >
+          <Play size={16} />
+          {calling ? "Calling" : "Call tool"}
+        </button>
+      </div>
+      {invalidDraft ? (
+        <div className="kk-empty kk-mcp-error" role="alert">
+          {playground.draft.error ?? "MCP arguments must be a JSON object"}
+        </div>
+      ) : null}
+      {activeCall.status === "error" ? (
+        <div className="kk-empty kk-mcp-error">{activeCall.message ?? "MCP call failed"}</div>
+      ) : null}
+      {activeCall.status === "ready" && playground.callSummary ? (
+        <div className={`kk-mcp-call-result kk-mcp-call-result-${playground.callSummary.status}`}>
+          <strong>{playground.callSummary.title}</strong>
+          <small>{playground.callSummary.detail}</small>
+          <McpMetadataRows rows={playground.callSummary.rows} />
+          <pre>{playground.callSummary.contentText}</pre>
+        </div>
+      ) : null}
+      <details className="kk-mcp-schema">
+        <summary>Input schema</summary>
+        <pre>{JSON.stringify(tool.inputSchema ?? { type: "object" }, null, 2)}</pre>
+      </details>
     </article>
+  );
+}
+
+function McpMetadataSection({ title, rows }: { title: string; rows: RuntimeMcpMetadataRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="kk-mcp-metadata" aria-label={`MCP ${title.toLowerCase()} metadata`}>
+      <h4>{title}</h4>
+      <McpMetadataRows rows={rows} />
+    </section>
+  );
+}
+
+function McpMetadataRows({ rows }: { rows: RuntimeMcpMetadataRow[] }) {
+  return (
+    <dl className="kk-mcp-metadata-rows">
+      {rows.map((row) => (
+        <div key={`${row.label}-${row.value}`}>
+          <dt>{row.label}</dt>
+          <dd className={`kk-mcp-metadata-${row.tone}`}>{row.value}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

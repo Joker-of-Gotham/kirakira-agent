@@ -580,6 +580,7 @@ export async function runWorkbenchSmokePlan(plan, options = {}) {
   const supervisor = options.supervisor ?? new WorkbenchProcessSupervisor(options.processes);
   const waitForChecks = options.waitForReadiness ?? waitForReadinessChecks;
   const runBlockingStep = options.runChecked ?? runChecked;
+  const runForegroundStep = options.runForeground ?? runForeground;
   const smokeChecks = plan.smoke?.checks ?? [];
   if (smokeChecks.length === 0) {
     throw new Error(`Workbench smoke plan "${plan.profile}/${plan.surface}" has no readiness checks`);
@@ -598,6 +599,10 @@ export async function runWorkbenchSmokePlan(plan, options = {}) {
       }
       if (step.mode === "run") {
         runBlockingStep(step);
+        continue;
+      }
+      if (step.mode === "foreground") {
+        await raceBackgroundFailure(supervisor, runForegroundStep(step));
         continue;
       }
       supervisor.spawnBackground(step);

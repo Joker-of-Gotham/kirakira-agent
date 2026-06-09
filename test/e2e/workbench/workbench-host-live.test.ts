@@ -59,4 +59,28 @@ describe.skipIf(!runLive)("workbench-host live smoke", () => {
     expect(result.signal).toBeNull();
     expect(result.code).toBe(0);
   });
+
+  it("starts the profile-defined desktop surface with a non-interactive Electron smoke", async () => {
+    const timeoutMs = Number(process.env.KIRAKIRA_WORKBENCH_E2E_TIMEOUT_MS ?? 210_000);
+    const result = await runCommand(
+      pnpmCommand(),
+      [
+        "e2e:workbench",
+        "--",
+        "--profile",
+        "workbench-host",
+        "--surface",
+        "desktop",
+        "--timeout-ms",
+        String(Math.max(1, timeoutMs - 30_000)),
+        "--live",
+      ],
+      timeoutMs,
+    );
+
+    expect(result.output).toContain("Electron smoke renderer loaded.");
+    expect(result.output).not.toContain("5173");
+    expect(result.signal).toBeNull();
+    expect(result.code).toBe(0);
+  });
 });

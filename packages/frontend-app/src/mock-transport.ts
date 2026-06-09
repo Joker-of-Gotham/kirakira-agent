@@ -419,18 +419,93 @@ export function createMockRuntimeTransport(): RuntimeTransport {
             name: "filesystem-core",
             health: "healthy",
             toolCount: 2,
+            trust: {
+              tier: "trusted",
+              source: "config",
+              trustedAnnotations: true,
+              firstUse: false,
+              transportKind: "stdio",
+              authMode: "none",
+            },
+            policy: {
+              decision: "not_evaluated",
+              source: "not-evaluated",
+              reasonCodes: [],
+              approvalRequired: false,
+              obligations: {
+                snapshotRequired: false,
+                dryRunRequired: false,
+                auditRequired: false,
+              },
+            },
+            audit: {
+              auditRequired: false,
+              eventKinds: ["mcp.discovery"],
+              ledger: "none",
+            },
+            otel: {
+              spanName: "mcp.tools/list",
+              attributes: {
+                "mcp.server.name": "filesystem-core",
+                "mcp.operation": "tools/list",
+                "mcp.trust.tier": "trusted",
+              },
+            },
             tools: [
               {
                 name: "read_file",
                 title: "Read file",
                 description: "Read workspace file content",
-                inputSchema: { type: "object", properties: { path: { type: "string" } } },
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    path: { type: "string", description: "Workspace-relative path" },
+                  },
+                  required: ["path"],
+                },
+                trust: {
+                  tier: "trusted",
+                  source: "config",
+                  trustedAnnotations: true,
+                  firstUse: false,
+                  transportKind: "stdio",
+                  authMode: "none",
+                },
+                policy: {
+                  decision: "allow",
+                  source: "gateway-default",
+                  reasonCodes: ["mcp_gateway_default_allow"],
+                  approvalRequired: false,
+                  obligations: {
+                    snapshotRequired: false,
+                    dryRunRequired: false,
+                    auditRequired: true,
+                  },
+                },
+                audit: {
+                  auditRequired: true,
+                  eventKinds: ["policy.decision", "tool.exec", "tool.result"],
+                  ledger: "mcp-audit-bridge",
+                },
+                otel: {
+                  spanName: "mcp.tools/call.read_file",
+                  attributes: {
+                    "mcp.server.name": "filesystem-core",
+                    "mcp.tool.name": "read_file",
+                    "gen_ai.operation.name": "tool.call",
+                  },
+                },
               },
               {
                 name: "list_directory",
                 title: "List directory",
                 description: "List workspace directory contents",
-                inputSchema: { type: "object", properties: { path: { type: "string" } } },
+                inputSchema: {
+                  type: "object",
+                  properties: {
+                    path: { type: "string", description: "Workspace-relative directory" },
+                  },
+                },
               },
             ],
           },
@@ -481,6 +556,27 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           reasonCodes: ["mock_runtime"],
           approvalRequired: false,
           traceId: request.traceId ?? `${request.runId ?? "mock"}-trace`,
+        },
+        trust: {
+          tier: "trusted",
+          source: "config",
+          trustedAnnotations: true,
+          firstUse: false,
+          transportKind: "stdio",
+          authMode: "none",
+        },
+        audit: {
+          auditRequired: true,
+          eventKinds: ["policy.decision", "tool.exec", "tool.result"],
+          ledger: "mcp-audit-bridge",
+        },
+        otel: {
+          spanName: `mcp.tools/call.${request.tool}`,
+          attributes: {
+            "mcp.server.name": request.server,
+            "mcp.tool.name": request.tool,
+            "gen_ai.operation.name": "tool.call",
+          },
         },
       };
     },

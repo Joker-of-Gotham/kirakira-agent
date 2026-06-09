@@ -25,6 +25,7 @@ export type {
   RuntimeMcpDiscoveryPolicyDecision,
   RuntimeMcpObligationMetadata,
   RuntimeMcpOtelMetadata,
+  RuntimeMcpOtelSpanStatus,
   RuntimeMcpPolicyMetadata,
   RuntimeMcpPolicySource,
   RuntimeMcpServerHealth,

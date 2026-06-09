@@ -339,14 +339,33 @@
         "args": ["-y", "@modelcontextprotocol/server-filesystem", { "value": "workspaceRoot" }],
         "env": {
           "NODE_NO_WARNINGS": "1"
-        }
+        },
+        "aliases": [
+          { "alias": "fs.read_text", "tool": "read_file", "description": "Read a text file", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.read_many", "tool": "read_multiple_files", "description": "Read multiple files at once", "riskLevel": "medium", "readOnly": true },
+          { "alias": "fs.list_dir", "tool": "list_directory", "description": "List directory contents", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.tree", "tool": "directory_tree", "description": "Recursive directory tree", "riskLevel": "medium", "readOnly": true },
+          { "alias": "fs.info", "tool": "get_file_info", "description": "File metadata", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.search_name", "tool": "search_files", "description": "Search files by name pattern", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.allowed_dirs", "tool": "list_allowed_directories", "description": "List allowed directories", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.write", "tool": "write_file", "description": "Create or overwrite a file", "riskLevel": "high", "readOnly": false },
+          { "alias": "fs.edit_preview", "tool": "edit_file", "description": "Preview file edit (dry-run)", "riskLevel": "medium", "readOnly": true },
+          { "alias": "fs.edit_apply", "tool": "edit_file", "description": "Apply file edit", "riskLevel": "high", "readOnly": false },
+          { "alias": "fs.mkdir", "tool": "create_directory", "description": "Create a directory", "riskLevel": "medium", "readOnly": false },
+          { "alias": "fs.move", "tool": "move_file", "description": "Move or rename a file", "riskLevel": "high", "readOnly": false }
+        ]
       },
       "filesystem-search": {
         "command": "npx",
         "args": ["-y", "mcp-ripgrep@latest"],
         "env": {
           "NODE_NO_WARNINGS": "1"
-        }
+        },
+        "aliases": [
+          { "alias": "fs.grep", "tool": "search", "description": "Full-text search with ripgrep", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.grep_count", "tool": "count_matches", "description": "Count matches", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.list_by_type", "tool": "list_files", "description": "List files by type", "riskLevel": "low", "readOnly": true }
+        ]
       },
       "filesystem-git": {
         "command": "npx",
@@ -354,7 +373,13 @@
         "env": {
           "NODE_NO_WARNINGS": "1",
           "NODE_ENV": "production"
-        }
+        },
+        "aliases": [
+          { "alias": "git.status", "tool": "git_status", "description": "Git status", "riskLevel": "low", "readOnly": true },
+          { "alias": "git.diff", "tool": "git_diff", "description": "Git diff", "riskLevel": "low", "readOnly": true },
+          { "alias": "git.log", "tool": "git_log", "description": "Git commit history", "riskLevel": "low", "readOnly": true },
+          { "alias": "git.show", "tool": "git_show", "description": "Show Git object", "riskLevel": "low", "readOnly": true }
+        ]
       },
       "filesystem-patch": {
         "command": "node",
@@ -362,6 +387,14 @@
           { "join": ["appRoot", "packages/mcp-filesystem-patch/dist/index.js"] },
           "--workspace",
           { "value": "workspaceRoot" }
+        ],
+        "aliases": [
+          { "alias": "fs.snapshot", "tool": "snapshot_create", "description": "Create file snapshot", "riskLevel": "low", "readOnly": false },
+          { "alias": "fs.snapshot_list", "tool": "snapshot_list", "description": "List snapshots", "riskLevel": "low", "readOnly": true },
+          { "alias": "fs.patch_preview", "tool": "patch_preview", "description": "Preview patch application", "riskLevel": "medium", "readOnly": true },
+          { "alias": "fs.patch_apply", "tool": "patch_apply", "description": "Apply patch", "riskLevel": "high", "readOnly": false },
+          { "alias": "fs.rollback", "tool": "rollback", "description": "Rollback to snapshot", "riskLevel": "high", "readOnly": false },
+          { "alias": "fs.diff_files", "tool": "diff_files", "description": "Diff two files", "riskLevel": "low", "readOnly": true }
         ]
       },
       "filesystem-artifact": {
@@ -370,6 +403,14 @@
           { "join": ["appRoot", "packages/mcp-filesystem-artifact/dist/index.js"] },
           "--workspace",
           { "value": "workspaceRoot" }
+        ],
+        "aliases": [
+          { "alias": "artifact.put", "tool": "artifact_put", "description": "Store artifact", "riskLevel": "medium", "readOnly": false },
+          { "alias": "artifact.summary", "tool": "artifact_get_summary", "description": "Get artifact summary", "riskLevel": "low", "readOnly": true },
+          { "alias": "artifact.list", "tool": "artifact_list", "description": "List artifacts", "riskLevel": "low", "readOnly": true },
+          { "alias": "artifact.hash", "tool": "content_hash", "description": "Hash file content", "riskLevel": "low", "readOnly": true },
+          { "alias": "artifact.inspect", "tool": "inspect_binary", "description": "Inspect binary file type", "riskLevel": "low", "readOnly": true },
+          { "alias": "artifact.preview", "tool": "preview_structured", "description": "Preview CSV/JSON data", "riskLevel": "low", "readOnly": true }
         ]
       },
       "memory": {

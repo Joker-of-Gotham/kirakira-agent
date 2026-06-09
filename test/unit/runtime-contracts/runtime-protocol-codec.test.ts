@@ -141,6 +141,7 @@ describe("runtime protocol codec", () => {
         server: "filesystem-core",
         includeTools: true,
         startServers: true,
+        traceId: "trace-list-1",
       }),
     ).toEqual({
       ok: true,
@@ -150,6 +151,7 @@ describe("runtime protocol codec", () => {
         server: "filesystem-core",
         includeTools: true,
         startServers: true,
+        traceId: "trace-list-1",
       },
     });
 
@@ -374,10 +376,14 @@ describe("RuntimeRequestTracker", () => {
               ledger: "none",
             },
             otel: {
-              spanName: "mcp.tools/list",
+              spanName: "tools/list",
+              traceId: "0123456789abcdef0123456789abcdef",
+              spanId: "0123456789abcdef",
+              status: "OK",
+              durationMs: 3,
               attributes: {
                 "mcp.server.name": "filesystem-core",
-                "mcp.operation": "tools/list",
+                "mcp.method.name": "tools/list",
                 "mcp.trust.tier": "unknown",
               },
             },
@@ -413,10 +419,11 @@ describe("RuntimeRequestTracker", () => {
                   ledger: "none",
                 },
                 otel: {
-                  spanName: "mcp.tools/list.read_file",
+                  spanName: "tools/list read_file",
                   attributes: {
                     "mcp.server.name": "filesystem-core",
-                    "mcp.tool.name": "read_file",
+                    "mcp.method.name": "tools/list",
+                    "gen_ai.tool.name": "read_file",
                     "mcp.trust.tier": "unknown",
                   },
                 },

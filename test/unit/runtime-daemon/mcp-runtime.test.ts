@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { McpAuth, McpServerConfig, McpTransport } from "@kirakira/core";
-import type { McpAuditBridge, McpClientManager } from "@kirakira/mcp-adapter";
+import {
+  ExportingMcpSpanRecorder,
+  InMemoryMcpSpanExporter,
+  type McpAuditBridge,
+  type McpClientManager,
+} from "@kirakira/mcp-adapter";
 import type { EnforcementResult, McpPep } from "@kirakira/policy-engine";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -307,12 +312,138 @@ describe("DaemonMcpRuntime", () => {
           ledger: "none",
         },
         otel: {
-          spanName: "mcp.tools/list.read_file",
+          spanName: "tools/list read_file",
           attributes: {
+            "mcp.method.name": "tools/list",
             "mcp.server.name": "filesystem-core",
-            "mcp.tool.name": "read_file",
+            "gen_ai.tool.name": "read_file",
             "mcp.trust.tier": "unknown",
           },
+        },
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("records exported spans and propagates trace metadata for mcp_list", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-list-span-"));
+    const traceId = "0123456789abcdef0123456789abcdef";
+    const exporter = new InMemoryMcpSpanExporter();
+    const manager = fakeManager({
+      tools: [
+        {
+          name: "read_file",
+          description: "Read file content",
+          inputSchema: { type: "object" },
+        },
+      ],
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      mcpSpanRecorder: new ExportingMcpSpanRecorder(exporter),
+    });
+
+    try {
+      const result = await runtime.listTools({
+        server: "filesystem-core",
+        includeTools: true,
+        startServers: true,
+        traceId,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {
+        _meta: {
+          traceparent: expect.stringMatching(
+            /^00-0123456789abcdef0123456789abcdef-[0-9a-f]{16}-01$/,
+          ),
+        },
+      });
+      expect(exporter.spans).toHaveLength(1);
+      expect(exporter.spans[0]).toMatchObject({
+        name: "tools/list",
+        kind: "CLIENT",
+        context: { traceId },
+        attributes: {
+          "mcp.method.name": "tools/list",
+          "mcp.server.name": "filesystem-core",
+          "kirakira.runtime.message.type": "mcp_list",
+        },
+        status: { code: "OK" },
+      });
+      expect(result.servers[0]?.otel).toMatchObject({
+        spanName: "tools/list",
+        traceId,
+        spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+        status: "OK",
+      });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("records exported spans and propagates trace metadata for mcp_call", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-call-span-"));
+    const traceId = "abcdef0123456789abcdef0123456789";
+    const exporter = new InMemoryMcpSpanExporter();
+    const manager = fakeManager({
+      content: [{ type: "text", text: "hello" }],
+      isError: false,
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+      mcpSpanRecorder: new ExportingMcpSpanRecorder(exporter),
+    });
+
+    try {
+      const result = await runtime.callTool({
+        server: "filesystem-core",
+        tool: "read_file",
+        arguments: { path: "README.md" },
+        runId: "run-1",
+        traceId,
+      });
+
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/call", {
+        name: "read_file",
+        arguments: { path: "README.md" },
+        _meta: {
+          traceparent: expect.stringMatching(
+            /^00-abcdef0123456789abcdef0123456789-[0-9a-f]{16}-01$/,
+          ),
+        },
+      });
+      expect(exporter.spans).toHaveLength(1);
+      expect(exporter.spans[0]).toMatchObject({
+        name: "tools/call read_file",
+        kind: "CLIENT",
+        context: { traceId },
+        attributes: {
+          "mcp.method.name": "tools/call",
+          "mcp.server.name": "filesystem-core",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "read_file",
+          "kirakira.runtime.message.type": "mcp_call",
+          "kirakira.run.id": "run-1",
+          "kirakira.policy.trace_id": "trace-1",
+        },
+        status: { code: "OK" },
+      });
+      expect(result.otel).toMatchObject({
+        spanName: "tools/call read_file",
+        traceId,
+        spanId: expect.stringMatching(/^[0-9a-f]{16}$/),
+        status: "OK",
+        attributes: {
+          "mcp.method.name": "tools/call",
+          "gen_ai.operation.name": "execute_tool",
+          "gen_ai.tool.name": "read_file",
         },
       });
     } finally {
@@ -449,7 +580,7 @@ describe("DaemonMcpRuntime", () => {
         otel: {
           attributes: {
             "mcp.server.name": "docs",
-            "mcp.tool.name": "search",
+            "gen_ai.tool.name": "search",
             "mcp.trust.tier": "verified",
           },
         },

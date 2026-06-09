@@ -56,12 +56,16 @@ shared runtime readiness plan rather than local port literals. The browser
 runtime gateway is `ws://127.0.0.1:17373/runtime`.
 
 Workbench smoke validation is exposed through `pnpm e2e:workbench -- --profile
-workbench-host --surface web --timeout-ms 120000`. By default that command
-reports the resolved smoke plan without starting Docker, daemon, or Vite
-dependencies. Live execution is a second opt-in: add `--live` or set
-`KIRAKIRA_LIVE_E2E=1` to start the same resolved workbench plan under
-supervision, wait on profile-declared readiness checks such as
-`presentation:web`, and then tear down local child processes.
+workbench-host --surface web --timeout-ms 120000` and the same command with
+`--surface desktop`. By default that command reports the resolved smoke plan
+without starting Docker, daemon, Vite, or Electron dependencies. Live execution
+is a second opt-in: add `--live` or set `KIRAKIRA_LIVE_E2E=1` to start the same
+resolved workbench plan under supervision, wait on profile-declared readiness
+checks such as `presentation:web` or `presentation:desktop`, and then tear down
+local child processes. Desktop live smoke injects
+`KIRAKIRA_WORKBENCH_ELECTRON_SMOKE=1` into the Electron shell so it opens a
+hidden window, exits after the renderer load completes, and fails non-zero on
+load failure or timeout.
 
 ## Runtime services
 
@@ -195,16 +199,27 @@ renderer on `5174`, and browser gateway on `17373/runtime`.
 
 The same profile now drives the opt-in live smoke gate:
 `pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms
-120000 --live`. The command uses `scripts/kirakira-workbench-smoke.mjs` to start
-the profile plan, wait for profile-rendered readiness checks, and tear down
-foreground workbench processes after the selected surface is reachable. Without
-`KIRAKIRA_LIVE_E2E=1` or `--live`, it reports the smoke plan and exits without
-starting Docker, daemon, Vite, or Electron.
+120000 --live` or `pnpm e2e:workbench -- --profile workbench-host --surface
+desktop --timeout-ms 120000 --live`. The command uses
+`scripts/kirakira-workbench-smoke.mjs` to start the profile plan, wait for
+profile-rendered readiness checks, and tear down foreground workbench processes
+after the selected surface is reachable. For desktop, the Electron shell runs as
+a foreground smoke assertion in hidden-window mode and exits only after the
+renderer reports `did-finish-load`. Without `KIRAKIRA_LIVE_E2E=1` or `--live`,
+it reports the smoke plan and exits without starting Docker, daemon, Vite, or
+Electron.
 
 The shared workbench MCP directory is rendered from runtime transport calls
 (`mcp_list`) and browser-safe view models in `@kirakira/frontend-core`. Web and
 Electron do not read local MCP config files directly; live server health and
 tool schemas come through the daemon/gateway contract.
+The same discovery result now feeds the workbench MCP argument playground:
+`@kirakira/frontend-core` derives editable JSON argument drafts, input-field
+summaries, and trust/policy/audit metadata rows from `runtime.listMcpTools()`.
+Workbench execution sends the selected server/tool and parsed arguments through
+`runtime.callMcpTool()` so web and Electron share the daemon-side PEP, audit,
+and transport behavior without embedding server names, paths, or endpoint
+literals in the UI.
 
 ## Policy transport
 

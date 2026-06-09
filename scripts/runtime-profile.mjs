@@ -919,6 +919,58 @@ function renderMcpServerDescriptor(serverName, descriptor, context) {
   };
 }
 
+const MCP_ALIAS_RISK_LEVELS = new Set(["low", "medium", "high"]);
+
+function renderMcpAliasEntry(entry, serverName, label) {
+  if (!isRecord(entry)) {
+    throw new Error(`MCP alias entry in ${label} must be an object`);
+  }
+  if (typeof entry.alias !== "string" || entry.alias.length === 0) {
+    throw new Error(`MCP alias entry in ${label} requires an alias`);
+  }
+  if (typeof entry.tool !== "string" || entry.tool.length === 0) {
+    throw new Error(`MCP alias "${entry.alias}" in ${label} requires a tool`);
+  }
+  const resolvedServer = typeof entry.server === "string" && entry.server.length > 0
+    ? entry.server
+    : serverName;
+  if (typeof resolvedServer !== "string" || resolvedServer.length === 0) {
+    throw new Error(`MCP alias "${entry.alias}" in ${label} requires a server`);
+  }
+  const riskLevel = typeof entry.riskLevel === "string" ? entry.riskLevel : "medium";
+  if (!MCP_ALIAS_RISK_LEVELS.has(riskLevel)) {
+    throw new Error(`MCP alias "${entry.alias}" in ${label} has invalid riskLevel "${riskLevel}"`);
+  }
+  return {
+    alias: entry.alias,
+    server: resolvedServer,
+    tool: entry.tool,
+    ...(typeof entry.description === "string" ? { description: entry.description } : {}),
+    riskLevel,
+    readOnly: entry.readOnly === true,
+  };
+}
+
+function renderMcpAliasEntries(entries, serverName, label) {
+  if (entries === undefined) return [];
+  if (!Array.isArray(entries)) {
+    throw new Error(`MCP aliases in ${label} must be an array`);
+  }
+  return entries.map((entry, index) =>
+    renderMcpAliasEntry(entry, serverName, `${label}[${index}]`),
+  );
+}
+
+function mergeMcpAliasEntries(aliasSets) {
+  const aliases = new Map();
+  for (const aliasSet of aliasSets) {
+    for (const alias of aliasSet) {
+      aliases.set(alias.alias, alias);
+    }
+  }
+  return [...aliases.values()];
+}
+
 export function renderMcpServers(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
   const serverNames = expandMcpServerRefs(options.serverRefs ?? mcpServerRefs(profile, config), config);
@@ -938,8 +990,34 @@ export function renderMcpServers(profile = resolveRuntimeProfile(), options = {}
   return rendered;
 }
 
+export function renderMcpAliasCatalog(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const serverNames = expandMcpServerRefs(options.serverRefs ?? mcpServerRefs(profile, config), config);
+  const mcpCatalog = runtimeMcpCatalog(config);
+  const catalog = runtimeMcpServerCatalog(config);
+  const overrides = isRecord(profile.mcp?.serverOverrides) ? profile.mcp.serverOverrides : {};
+  const aliasSets = [
+    renderMcpAliasEntries(mcpCatalog.aliases, undefined, "mcpCatalog.aliases"),
+  ];
+  for (const serverName of serverNames) {
+    const descriptor = catalog[serverName];
+    if (!isRecord(descriptor)) {
+      throw new Error(`MCP server "${serverName}" is missing a catalog descriptor`);
+    }
+    const override = overrides[serverName];
+    const merged = isRecord(override) ? mergeSpecRecord(descriptor, override) : descriptor;
+    aliasSets.push(renderMcpAliasEntries(merged.aliases, serverName, `server "${serverName}" aliases`));
+  }
+  aliasSets.push(renderMcpAliasEntries(profile.mcp?.aliases, undefined, "profile mcp.aliases"));
+  return mergeMcpAliasEntries(aliasSets);
+}
+
 export function renderMcpConfig(profile = resolveRuntimeProfile(), options = {}) {
-  return { mcpServers: renderMcpServers(profile, options) };
+  const rendered = { mcpServers: renderMcpServers(profile, options) };
+  if (options.includeAliases === true) {
+    rendered.mcpAliases = renderMcpAliasCatalog(profile, options);
+  }
+  return rendered;
 }
 
 function printEnv(env) {
@@ -963,6 +1041,9 @@ const PROFILE_ACTIONS = {
   },
   mcp(profile) {
     console.log(JSON.stringify(renderMcpConfig(profile), null, 2));
+  },
+  "mcp-aliases"(profile) {
+    console.log(JSON.stringify({ mcpAliases: renderMcpAliasCatalog(profile) }, null, 2));
   },
 };
 

@@ -414,6 +414,10 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           raw.startServers,
         );
       }
+      const traceId = optionalString(raw.traceId);
+      if (raw.traceId !== undefined && traceId === undefined) {
+        return error("invalid_message", "mcp_list traceId must be a string", raw, raw.traceId);
+      }
       return {
         ok: true,
         message: {
@@ -422,6 +426,7 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           ...(server !== undefined ? { server } : {}),
           ...(includeTools !== undefined ? { includeTools } : {}),
           ...(startServers !== undefined ? { startServers } : {}),
+          ...(traceId !== undefined ? { traceId } : {}),
         },
       };
     }

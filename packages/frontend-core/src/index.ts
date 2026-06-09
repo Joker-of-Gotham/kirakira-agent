@@ -39,14 +39,24 @@ export {
 } from "./runtime-capabilities.js";
 
 export { createMcpDirectoryView } from "./mcp-directory.js";
+export { createMcpToolPlaygroundView } from "./mcp-playground.js";
 
 export type {
   RuntimeMcpDirectoryServer,
   RuntimeMcpDirectorySummary,
+  RuntimeMcpDirectoryInputField,
   RuntimeMcpDirectoryTool,
   RuntimeMcpDirectoryView,
   RuntimeMcpHealthTone,
 } from "./mcp-directory.js";
+
+export type {
+  RuntimeMcpArgumentDraftState,
+  RuntimeMcpMetadataRow,
+  RuntimeMcpPlaygroundTone,
+  RuntimeMcpToolCallSummary,
+  RuntimeMcpToolPlaygroundView,
+} from "./mcp-playground.js";
 
 export { createSubagentTopologyView } from "./topology.js";
 

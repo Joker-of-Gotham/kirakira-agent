@@ -13,9 +13,11 @@ import {
   type ToolPolicyDecision,
   type ToolPolicyRule,
 } from "./gateway.js";
+import type { McpSpanAttributes } from "./otel-bridge.js";
 import { McpTrustEvaluator, type McpTrustTier } from "./trust-evaluator.js";
 
 export type McpGatewayOperation = "tools/list" | "tools/call" | "server/start";
+export const MCP_PROTOCOL_VERSION = "2025-11-25";
 
 export type McpGatewayTrustSource =
   | "config"
@@ -67,7 +69,7 @@ export interface McpGatewayAuditContext {
 
 export interface McpGatewayOtelContext {
   spanName: string;
-  attributes: Record<string, string | number | boolean>;
+  attributes: McpSpanAttributes;
 }
 
 export interface McpGatewayServerContext {
@@ -124,6 +126,17 @@ function hasPolicyRules(rules: ToolPolicyRule): boolean {
 
 export function qualifiedMcpToolName(server: string, tool: string): string {
   return `mcp.${server}.${tool}`;
+}
+
+function networkTransportFromKind(kind: McpTransportKind | undefined): string | undefined {
+  if (kind === "stdio") return "pipe";
+  if (kind === "http" || kind === "sse_legacy") return "tcp";
+  return undefined;
+}
+
+function networkProtocolFromKind(kind: McpTransportKind | undefined): string | undefined {
+  if (kind === "http" || kind === "sse_legacy") return "http";
+  return undefined;
 }
 
 export class McpGatewayContextFactory {
@@ -246,18 +259,23 @@ export class McpGatewayContextFactory {
     trust: McpGatewayTrustContext,
     toolName?: string,
   ): McpGatewayOtelContext {
+    const networkTransport = networkTransportFromKind(trust.transportKind);
+    const networkProtocol = networkProtocolFromKind(trust.transportKind);
     return {
-      spanName: toolName === undefined ? `mcp.${operation}` : `mcp.${operation}.${toolName}`,
+      spanName: toolName === undefined ? operation : `${operation} ${toolName}`,
       attributes: {
+        "mcp.method.name": operation,
+        "mcp.protocol.version": MCP_PROTOCOL_VERSION,
         "mcp.server.name": serverName,
-        "mcp.operation": operation,
         "mcp.trust.tier": trust.tier,
         "mcp.trust.source": trust.source,
         "mcp.annotations.trusted": trust.trustedAnnotations,
-        ...(trust.transportKind !== undefined ? { "mcp.transport": trust.transportKind } : {}),
+        ...(trust.transportKind !== undefined ? { "mcp.transport.kind": trust.transportKind } : {}),
+        ...(networkTransport !== undefined ? { "network.transport": networkTransport } : {}),
+        ...(networkProtocol !== undefined ? { "network.protocol.name": networkProtocol } : {}),
         ...(trust.authMode !== undefined ? { "mcp.auth.mode": trust.authMode } : {}),
-        ...(toolName !== undefined ? { "mcp.tool.name": toolName } : {}),
-        "gen_ai.operation.name": operation === "tools/call" ? "tool.call" : "tool.discovery",
+        ...(toolName !== undefined ? { "gen_ai.tool.name": toolName } : {}),
+        ...(operation === "tools/call" ? { "gen_ai.operation.name": "execute_tool" } : {}),
       },
     };
   }

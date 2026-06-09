@@ -81,6 +81,33 @@ describe("workbench smoke gate", () => {
     expect(JSON.stringify(smoke)).not.toContain("5173");
   });
 
+  it("keeps desktop Electron smoke non-interactive and profile-derived", () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "desktop",
+        skipInfra: true,
+      },
+      {},
+    );
+
+    expect(smoke.plan.steps.map((step) => [step.name, step.mode])).toEqual([
+      ["daemon", "background"],
+      ["desktop-renderer", "background"],
+      ["desktop-shell", "foreground"],
+    ]);
+    expect(
+      smoke.plan.steps.find((step) => step.name === "desktop-shell")?.env
+        .KIRAKIRA_WORKBENCH_ELECTRON_SMOKE,
+    ).toBe("1");
+    expect(smoke.checks).toEqual([
+      "daemon:socket",
+      "daemon:browser-gateway",
+      "presentation:desktop",
+    ]);
+    expect(JSON.stringify(smoke)).not.toContain("5173");
+  });
+
   it("runs foreground workbench steps as bounded smoke processes", async () => {
     const smoke = buildWorkbenchSmokeCommand(
       {
@@ -122,6 +149,58 @@ describe("workbench smoke gate", () => {
       "wait:daemon:browser-gateway:50",
       "spawn:web",
       "wait:daemon:browser-gateway,presentation:web:50",
+      "stop",
+    ]);
+  });
+
+  it("runs the desktop Electron smoke shell as a foreground assertion", async () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "desktop",
+        skipInfra: true,
+        timeoutMs: 75,
+      },
+      {},
+    );
+    const events: string[] = [];
+    const supervisor = {
+      assertHealthy() {
+        events.push("healthy");
+      },
+      waitForFailure() {
+        return new Promise<never>(() => {});
+      },
+      spawnBackground(step: { name: string }) {
+        events.push(`spawn:${step.name}`);
+        return fakeChild(step.name);
+      },
+      async stopAll() {
+        events.push("stop");
+      },
+    };
+
+    await runWorkbenchSmoke(smoke, {
+      supervisor,
+      runForeground: async (step: { name: string; env: Record<string, string> }) => {
+        events.push(
+          `foreground:${step.name}:${step.env.KIRAKIRA_WORKBENCH_ELECTRON_SMOKE}`,
+        );
+      },
+      waitForReadiness: async (_readiness, checks, options) => {
+        events.push(`wait:${checks.join(",")}:${options.timeoutMs}`);
+      },
+    });
+
+    expect(events).toEqual([
+      "healthy",
+      "spawn:daemon",
+      "healthy",
+      "spawn:desktop-renderer",
+      "healthy",
+      "wait:daemon:socket,daemon:browser-gateway,presentation:desktop:75",
+      "foreground:desktop-shell:1",
+      "wait:daemon:socket,daemon:browser-gateway,presentation:desktop:75",
       "stop",
     ]);
   });

@@ -32,4 +32,17 @@ describe("desktop main process security contract", () => {
     expect(source).toContain("event.senderFrame?.url");
     expect(source).toContain("isTrustedSender: isTrustedRuntimeSender");
   });
+
+  it("supports a hidden bounded Electron smoke mode without weakening renderer security", () => {
+    const source = mainSource();
+
+    expect(source).toContain("KIRAKIRA_WORKBENCH_ELECTRON_SMOKE");
+    expect(source).toContain("show: !smoke");
+    expect(source).toContain("did-finish-load");
+    expect(source).toContain("did-fail-load");
+    expect(source).toContain("Electron smoke timed out");
+    expect(source).toContain("contextIsolation: true");
+    expect(source).toContain("nodeIntegration: false");
+    expect(source).toContain("sandbox: true");
+  });
 });

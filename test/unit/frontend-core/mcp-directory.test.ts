@@ -19,10 +19,27 @@ describe("frontend-core MCP directory view", () => {
               inputSchema: {
                 type: "object",
                 properties: {
-                  query: { type: "string" },
+                  query: { type: "string", description: "Search query" },
                   limit: { type: "number" },
                 },
                 required: ["query"],
+              },
+              trust: {
+                tier: "trusted",
+                source: "config",
+                trustedAnnotations: true,
+                firstUse: false,
+              },
+              policy: {
+                decision: "allow",
+                source: "gateway-default",
+                reasonCodes: ["mcp_gateway_default_allow"],
+                approvalRequired: false,
+                obligations: {
+                  snapshotRequired: false,
+                  dryRunRequired: false,
+                  auditRequired: false,
+                },
               },
             },
           ],
@@ -55,7 +72,29 @@ describe("frontend-core MCP directory view", () => {
       title: "Search docs",
       inputPropertyCount: 2,
       requiredInputCount: 1,
+      argumentDraft: JSON.stringify({ query: "" }, null, 2),
+      trust: {
+        tier: "trusted",
+        source: "config",
+        trustedAnnotations: true,
+        firstUse: false,
+      },
     });
+    expect(view.tools[0]?.inputFields).toEqual([
+      {
+        name: "query",
+        required: true,
+        type: "string",
+        description: "Search query",
+        defaultValue: "",
+      },
+      {
+        name: "limit",
+        required: false,
+        type: "number",
+        defaultValue: 0,
+      },
+    ]);
   });
 
   it("returns an empty directory when discovery has not loaded", () => {
