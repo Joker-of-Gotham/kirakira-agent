@@ -525,9 +525,13 @@
             "package": "@kirakira/web",
             "script": "dev"
           },
-          "desktop": {
+          "desktop-renderer": {
             "package": "@kirakira/desktop",
             "script": "dev:renderer"
+          },
+          "desktop-shell": {
+            "package": "@kirakira/desktop",
+            "script": "dev:electron"
           }
         },
         "surfaces": {
@@ -555,7 +559,11 @@
               "skipWhen": "skipDaemon"
             },
             {
-              "package": "desktop",
+              "package": "desktop-renderer",
+              "mode": "background"
+            },
+            {
+              "package": "desktop-shell",
               "mode": "foreground"
             }
           ]

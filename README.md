@@ -104,13 +104,13 @@ That is the intended operating model: one command, one runtime path, one place t
 | `pnpm start -- mcp list` | Run another CLI command through the same Docker runtime | `container` |
 | `pnpm start:daemon` | Host daemon against Docker-published infra | `workbench-host` |
 | `pnpm start:web` | Host daemon plus web workbench at `http://127.0.0.1:5183` | `workbench-host` |
-| `pnpm start:desktop` | Host daemon plus desktop renderer at `http://127.0.0.1:5174` | `workbench-host` |
+| `pnpm start:desktop` | Host daemon, desktop renderer at `http://127.0.0.1:5174`, and the Electron shell | `workbench-host` |
 | `pnpm runtime:profile env workbench-host` | Print the workbench env contract, including gateway `ws://127.0.0.1:17373/runtime` | `workbench-host` |
 | `kirakira-agent runtime profile env workbench-host` | CLI-facing profile env view backed by the same runtime profile script | selected profile |
 | `pnpm runtime:doctor workbench-host --json` | Probe the selected profile's current runtime readiness without starting services | selected profile |
 | `kirakira-agent runtime doctor workbench-host --json --no-probe` | CLI-facing runtime doctor for the same profile readiness checks | selected profile |
 | `pnpm dev:web` | UI-only Vite shortcut; does not start infra or daemon | none |
-| `pnpm dev:desktop` | Desktop renderer-only shortcut; does not start infra or daemon | none |
+| `pnpm dev:desktop` | Desktop renderer plus Electron shell shortcut; does not start infra or daemon | `workbench-host` |
 
 The Kirakira web workbench default is port `5183`. A Vite server on `5173` is not this repo's default startup target.
 

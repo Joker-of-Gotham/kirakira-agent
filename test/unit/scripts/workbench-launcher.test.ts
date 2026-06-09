@@ -61,6 +61,67 @@ describe("workbench launcher plan", () => {
     expect(JSON.stringify(plan)).not.toContain("5173");
   });
 
+  it("plans daemon, renderer, and Electron shell for the desktop surface", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("workbench-host", config, {});
+    const plan = buildWorkbenchPlan(profile, "desktop");
+    const expectedInfraServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
+
+    expect(plan.profile).toBe("workbench-host");
+    expect(plan.surface).toBe("desktop");
+    expect(plan.steps.map((step) => step.name)).toEqual([
+      "infra",
+      "daemon",
+      "desktop-renderer",
+      "desktop-shell",
+    ]);
+    expect(plan.steps[0]).toMatchObject({
+      command: "docker",
+      args: [
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.ports.yml",
+        "up",
+        "-d",
+        "--wait",
+        ...expectedInfraServices,
+      ],
+    });
+    expect(plan.steps[1]).toMatchObject({
+      name: "daemon",
+      mode: "background",
+      args: ["--filter", "@kirakira/runtime-daemon", "start"],
+    });
+    expect(plan.steps[2]).toMatchObject({
+      name: "desktop-renderer",
+      mode: "background",
+      args: ["--filter", "@kirakira/desktop", "dev:renderer"],
+    });
+    expect(plan.steps[3]).toMatchObject({
+      name: "desktop-shell",
+      mode: "foreground",
+      args: ["--filter", "@kirakira/desktop", "dev:electron"],
+    });
+    expect(plan.env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
+    expect(plan.env.VITE_KIRAKIRA_GATEWAY_URL).toBe("ws://127.0.0.1:17373/runtime");
+    expect(JSON.stringify(plan)).not.toContain("5173");
+  });
+
+  it("keeps the desktop shell runnable without daemon ownership when explicitly skipped", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "desktop", { skipInfra: true, skipDaemon: true });
+
+    expect(plan.steps.map((step) => step.name)).toEqual([
+      "desktop-renderer",
+      "desktop-shell",
+    ]);
+    expect(plan.steps.map((step) => step.mode)).toEqual(["background", "foreground"]);
+    expect(plan.env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
+    expect(JSON.stringify(plan)).not.toContain("5173");
+  });
+
   it("can plan a daemon-only startup without UI or implicit infra", () => {
     const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const plan = buildWorkbenchPlan(profile, "daemon", { skipInfra: true });

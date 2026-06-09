@@ -50,8 +50,8 @@ Workbench startup uses [`scripts/kirakira-workbench.mjs`](../scripts/kirakira-wo
 and the `workbench-host` profile. `pnpm start:web` starts Docker-published infra,
 the host daemon, and the web workbench at `http://127.0.0.1:5183`.
 `pnpm start:desktop` uses the same daemon and the desktop renderer at
-`http://127.0.0.1:5174`. The browser runtime gateway is
-`ws://127.0.0.1:17373/runtime`.
+`http://127.0.0.1:5174`, then launches the Electron shell as the foreground
+process. The browser runtime gateway is `ws://127.0.0.1:17373/runtime`.
 
 ## Runtime services
 
@@ -77,7 +77,7 @@ the host daemon, and the web workbench at `http://127.0.0.1:5183`.
 | `packages/policy-engine` | PDP transport selection, fallback behavior, decision interface |
 | `packages/frontend-core` | browser-safe transport contract and run-event projection for future web/desktop surfaces |
 | `apps/web` | browser workbench shell for the runtime gateway |
-| `apps/desktop` | desktop renderer shell for the same runtime gateway |
+| `apps/desktop` | Electron shell plus desktop renderer for the same runtime gateway |
 | `policies/` | Rego policy and bundled data |
 
 ## Provider model
@@ -173,7 +173,7 @@ Kirakira now has a shared presentation contract plus early host-run shells:
 
 - [`packages/frontend-core`](../packages/frontend-core) defines the browser-safe runtime transport interface and projects `RunEvent` streams into a dashboard model.
 - [`apps/web`](../apps/web) is the Vite browser workbench, served by `pnpm start:web` on `http://127.0.0.1:5183`.
-- [`apps/desktop`](../apps/desktop) is the desktop renderer shell, served by `pnpm start:desktop` on `http://127.0.0.1:5174`.
+- [`apps/desktop`](../apps/desktop) is the Electron shell plus desktop renderer. `pnpm start:desktop` runs the daemon, serves the renderer on `http://127.0.0.1:5174`, and launches Electron in the foreground.
 
 Both presentation shells use the `workbench-host` profile and the browser runtime
 gateway rather than duplicating CLI-only chat state. A Vite server on `5173` is

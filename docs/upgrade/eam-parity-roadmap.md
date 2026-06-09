@@ -42,9 +42,9 @@ change, a validation command, and a pushed commit.
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
 | EAM mechanism parity | 50% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, topology PEP/audit context, and frontend topology view-model now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit/OTel closure; connect memory retain/reflect/checkpoint; add unknown-role topology warnings. |
-| Web and Electron presentation | 49% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, and the shared workbench now renders a swarm topology panel from manifest + graph + runtime projection. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed selected subagent activity, design-system docs, browser/desktop visual QA. |
+| Web and Electron presentation | 52% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, the shared workbench renders a swarm topology panel, and `pnpm start:desktop` now plans daemon + renderer + Electron shell. | Richer multi-view workbench, OpenHuman-informed selected subagent activity, design-system docs, full Electron smoke automation, and broader visual QA. |
 | Hardcoding, harness, SDK/API | 44% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, PEP execution context, and browser-safe topology selectors are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish shared gateway trust/audit/OTel context, and deduplicate runtime-profile/daemon manifest topology projection. |
-| Docker/local ecosystem | 46% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, profile-driven topology doctor checks, and mock/web/desktop topology consumption exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end, and add full Electron dev-shell launch. |
+| Docker/local ecosystem | 47% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, and profile-driven Electron shell startup exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, and verify Docker/local/desktop/web paths end-to-end with live services. |
 
 ## Gap Matrix
 
@@ -87,10 +87,19 @@ Latest four-lane audit intake on 2026-06-09:
   consumes that selector for Web and Electron renderer, and
   `packages/frontend-app/src/mock-transport.ts` publishes a mock topology
   manifest so local preview uses the same contract. Remaining risks from the
-  audit: unknown event-supplied roles still need explicit warnings, topology
+  audit: unknown event-supplied roles still need explicit warnings, and topology
   manifest projection is still split across runtime-profile and daemon
-  lifecycle helpers, and `pnpm start:desktop` starts the renderer profile but
-  does not yet launch the full Electron shell.
+  lifecycle helpers.
+- **2026-06-09 Electron launch slice:** `pnpm start:desktop` now resolves the
+  `workbench-host` profile into daemon background, desktop renderer background,
+  and Electron shell foreground steps. The Electron main/preload security model
+  remains aligned with Electron's official guidance: context isolation, renderer
+  sandboxing, no Node integration in the renderer, and explicit sender-origin
+  checks for IPC. Remaining risks: full GUI smoke automation still needs a
+  non-interactive Electron harness, the workbench launcher still needs
+  ProcessManager-style child supervision plus surface-aware readiness waits, and
+  live Docker/daemon readiness needs a slower end-to-end gate outside focused
+  unit tests.
 - **Runtime ecosystem:** `test/helpers/memory-env.ts` now derives the
   `test-host` memory stack fallback values from runtime profiles instead of
   local literals. Remaining work is direct daemon startup coverage and Compose
@@ -149,8 +158,12 @@ Latest four-lane audit intake on 2026-06-09:
    settings. First topology slice is now wired through frontend-core. Next
    data-model slice: selected subagent activity, tool timeline entries,
    citation ledger, and artifact cards.
-6. **Electron full launch:** make `start:desktop` run daemon plus renderer plus
-   Electron main, with context-isolated preload and smoke validation.
+6. **Electron full launch:** `start:desktop` now runs daemon plus renderer plus
+   Electron main. Remaining work is automated GUI smoke validation and broader
+   desktop IA polish.
+7. **Workbench launcher supervisor:** add declarative `waitFor` gates and
+   process-tree cleanup semantics so background daemon/renderer failures cannot
+   race or orphan the Electron foreground process.
 
 ## Validation Gates
 

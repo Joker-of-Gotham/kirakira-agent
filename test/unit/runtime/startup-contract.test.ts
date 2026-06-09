@@ -19,15 +19,25 @@ describe("startup contract", () => {
     expect(pkg.scripts["start:web"]).toBe("node scripts/kirakira-workbench.mjs web");
     expect(pkg.scripts["start:desktop"]).toBe("node scripts/kirakira-workbench.mjs desktop");
     expect(pkg.scripts["dev:web"]).toBe("pnpm --filter @kirakira/web dev");
-    expect(pkg.scripts["dev:desktop"]).toBe("pnpm --filter @kirakira/desktop dev:renderer");
+    expect(pkg.scripts["dev:desktop"]).toBe(
+      "node scripts/kirakira-workbench.mjs desktop --skip-infra --skip-daemon",
+    );
     expect(pkg.scripts["runtime:profile"]).toBe("node scripts/runtime-profile.mjs");
     expect(pkg.scripts["runtime:doctor"]).toBe("node scripts/runtime-doctor.mjs");
+
+    const desktopPkg = JSON.parse(
+      readFileSync(resolve(repoRoot, "apps/desktop/package.json"), "utf8"),
+    );
+    expect(desktopPkg.scripts["dev:renderer"]).toBe("vite --config vite.renderer.config.ts");
+    expect(desktopPkg.scripts["dev:electron"]).toBe("pnpm run build:main && electron .");
+    expect(desktopPkg.scripts["build:main"]).toBe("tsc -p tsconfig.main.json");
   });
 
   it("keeps workbench web, desktop, and gateway ports in the runtime profile", () => {
     const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
     const env = renderRuntimeEnv(profile);
     const plan = buildWorkbenchPlan(profile, "web");
+    const desktopPlan = buildWorkbenchPlan(profile, "desktop");
 
     expect(env.KIRAKIRA_WEB_URL).toBe("http://127.0.0.1:5183");
     expect(env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
@@ -37,6 +47,17 @@ describe("startup contract", () => {
       "http://127.0.0.1:5183,http://127.0.0.1:5174",
     );
     expect(plan.steps.map((step) => step.name)).toEqual(["infra", "daemon", "web"]);
+    expect(desktopPlan.steps.map((step) => step.name)).toEqual([
+      "infra",
+      "daemon",
+      "desktop-renderer",
+      "desktop-shell",
+    ]);
+    expect(desktopPlan.steps.at(-1)).toMatchObject({
+      name: "desktop-shell",
+      mode: "foreground",
+      args: ["--filter", "@kirakira/desktop", "dev:electron"],
+    });
     expect(plan.readiness.checks).toContainEqual(
       expect.objectContaining({
         name: "daemon:browser-gateway",

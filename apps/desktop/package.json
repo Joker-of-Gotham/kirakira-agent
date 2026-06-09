@@ -6,7 +6,10 @@
   "type": "module",
   "main": "./dist/main/main.js",
   "scripts": {
-    "build": "vite build --config vite.renderer.config.ts && tsc -p tsconfig.main.json",
+    "build": "pnpm run build:renderer && pnpm run build:main",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "vite build --config vite.renderer.config.ts",
+    "dev:electron": "pnpm run build:main && electron .",
     "dev:renderer": "vite --config vite.renderer.config.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.main.json"
   },
