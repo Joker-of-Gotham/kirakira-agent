@@ -25,6 +25,15 @@ export const RUN_EVENT_KINDS = [
   "research.limit.reached",
   "research.completed",
   "research.failed",
+  "memory.recall.started",
+  "memory.recall.completed",
+  "memory.recall.failed",
+  "memory.retain.started",
+  "memory.retain.completed",
+  "memory.retain.failed",
+  "memory.checkpoint.saved",
+  "memory.checkpoint.restored",
+  "memory.checkpoint.failed",
   "tool.search.requested",
   "tool.selected",
   "tool.call.started",
@@ -151,6 +160,7 @@ export interface ResearchTaskRecord {
   question?: string;
   depth?: number;
   sourceKinds?: string[];
+  memoryRecallIds?: string[];
   startedAt?: string;
   completedAt?: string;
   evidenceCount?: number;
@@ -201,6 +211,8 @@ export interface ResearchRunRecord {
   subagentId?: string;
   limits?: Record<string, unknown>;
   citationSchema?: Record<string, unknown>;
+  memoryRecallIds?: string[];
+  memoryCheckpointIds?: string[];
   tasks: Record<string, ResearchTaskRecord>;
   evidence: Record<string, ResearchEvidenceRecord>;
   citations: Record<string, ResearchCitationRecord>;
@@ -210,6 +222,90 @@ export interface ResearchRunRecord {
   updatedAt: string;
   completedAt?: string;
   error?: string;
+}
+
+export type MemoryOperationStatus = "started" | "completed" | "failed";
+export type MemoryCheckpointStatus = "saved" | "restored" | "failed";
+
+export interface MemoryRecallRecord {
+  id: string;
+  status: MemoryOperationStatus;
+  tenantId?: string;
+  workspaceId?: string;
+  namespace?: string;
+  kinds?: string[];
+  runId?: string;
+  sessionId?: string;
+  researchRunId?: string;
+  researchTaskId?: string;
+  parentTaskId?: string;
+  nodeId?: string;
+  traceId?: string;
+  queryHash?: string;
+  queryPreview?: string;
+  level?: string;
+  tokenBudget?: number;
+  limit?: number;
+  includeRedacted?: boolean;
+  bundleId?: string;
+  queryId?: string;
+  retrievalTraceId?: string;
+  routeNames?: string[];
+  selectedRecordIds?: string[];
+  recordIds?: string[];
+  totalTokens?: number;
+  budgetLevel?: string;
+  budgetDegradationReason?: string;
+  routeCount?: number;
+  candidateCount?: number;
+  evidenceCount?: number;
+  citationCount?: number;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryRetainRecord {
+  id: string;
+  status: MemoryOperationStatus;
+  tenantId?: string;
+  workspaceId?: string;
+  namespace?: string;
+  sourceType?: string;
+  runId?: string;
+  sessionId?: string;
+  episodeId?: string;
+  memoryRecordIds?: string[];
+  factIds?: string[];
+  outboxEventId?: string;
+  retainedAt?: string;
+  startedAt?: string;
+  completedAt?: string;
+  durationMs?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryCheckpointRecord {
+  id: string;
+  status: MemoryCheckpointStatus;
+  checkpointId?: string;
+  checkpointRunId?: string;
+  version?: string;
+  checkpointCreatedAt?: string;
+  savedAt?: string;
+  restoredAt?: string;
+  durationMs?: number;
+  error?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface MemoryState {
+  recalls: Record<string, MemoryRecallRecord>;
+  retains: Record<string, MemoryRetainRecord>;
+  checkpoints: Record<string, MemoryCheckpointRecord>;
 }
 
 export interface SkillRecord {
@@ -277,6 +373,7 @@ export interface RunState {
   artifacts: Record<string, ArtifactRecord>;
   subagents: Record<string, SubagentRecord>;
   researchRuns: Record<string, ResearchRunRecord>;
+  memory: MemoryState;
   skills: Record<string, SkillRecord>;
   tools: Record<string, ToolInvocationRecord>;
   modelTranscript: Array<{

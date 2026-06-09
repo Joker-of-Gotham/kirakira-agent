@@ -2,6 +2,11 @@ import type {
   RunEvent,
   RunEventKind,
   RunState,
+  MemoryCheckpointRecord,
+  MemoryCheckpointStatus,
+  MemoryOperationStatus,
+  MemoryRecallRecord,
+  MemoryRetainRecord,
   ResearchCitationRecord,
   ResearchRunRecord,
   ResearchTaskRecord,
@@ -20,6 +25,11 @@ export function createEmptyRunState(runId: string): RunState {
     artifacts: {},
     subagents: {},
     researchRuns: {},
+    memory: {
+      recalls: {},
+      retains: {},
+      checkpoints: {},
+    },
     skills: {},
     tools: {},
     modelTranscript: [],
@@ -48,6 +58,11 @@ function readStringArray(p: Record<string, unknown>, key: string): string[] | un
 function readNumber(p: Record<string, unknown>, key: string): number | undefined {
   const value = p[key];
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function readBoolean(p: Record<string, unknown>, key: string): boolean | undefined {
+  const value = p[key];
+  return typeof value === "boolean" ? value : undefined;
 }
 
 function readObject(p: Record<string, unknown>, key: string): Record<string, unknown> | undefined {
@@ -158,6 +173,19 @@ function researchRunId(p: Record<string, unknown>, fallback: string): string {
 
 function researchTaskId(p: Record<string, unknown>): string | undefined {
   return readString(p, "researchTaskId") ?? readString(p, "taskId") ?? readString(p, "id");
+}
+
+function appendUnique(value: string[] | undefined, item: string): string[] {
+  return value?.includes(item) ? value : [...(value ?? []), item];
+}
+
+function memoryOperationId(p: Record<string, unknown>, fallback: string): string {
+  return readString(p, "memoryOperationId") ??
+    readString(p, "operationId") ??
+    readString(p, "recallId") ??
+    readString(p, "retainId") ??
+    readString(p, "checkpointId") ??
+    fallback;
 }
 
 function researchRunMetadata(p: Record<string, unknown>): Partial<ResearchRunRecord> {
@@ -271,6 +299,10 @@ export class RunStateProjector {
 
   private normalizeState(state: RunState): void {
     state.researchRuns ??= {};
+    state.memory ??= { recalls: {}, retains: {}, checkpoints: {} };
+    state.memory.recalls ??= {};
+    state.memory.retains ??= {};
+    state.memory.checkpoints ??= {};
   }
 
   private dispatch(next: RunState, kind: RunEventKind, event: RunEvent): void {
@@ -409,6 +441,33 @@ export class RunStateProjector {
         break;
       case "research.failed":
         this.applyResearchDone(next, p, "failed", event.timestamp);
+        break;
+      case "memory.recall.started":
+        this.applyMemoryRecall(next, p, "started", event.timestamp);
+        break;
+      case "memory.recall.completed":
+        this.applyMemoryRecall(next, p, "completed", event.timestamp);
+        break;
+      case "memory.recall.failed":
+        this.applyMemoryRecall(next, p, "failed", event.timestamp);
+        break;
+      case "memory.retain.started":
+        this.applyMemoryRetain(next, p, "started", event.timestamp);
+        break;
+      case "memory.retain.completed":
+        this.applyMemoryRetain(next, p, "completed", event.timestamp);
+        break;
+      case "memory.retain.failed":
+        this.applyMemoryRetain(next, p, "failed", event.timestamp);
+        break;
+      case "memory.checkpoint.saved":
+        this.applyMemoryCheckpoint(next, p, "saved", event.timestamp);
+        break;
+      case "memory.checkpoint.restored":
+        this.applyMemoryCheckpoint(next, p, "restored", event.timestamp);
+        break;
+      case "memory.checkpoint.failed":
+        this.applyMemoryCheckpoint(next, p, "failed", event.timestamp);
         break;
       case "tool.search.requested":
       case "tool.selected":
@@ -689,6 +748,214 @@ export class RunStateProjector {
     run.updatedAt = at;
     if (status === "failed") {
       run.error = readString(p, "error") ?? readString(p, "message") ?? "research failed";
+    }
+  }
+
+  private memoryRecallMetadata(p: Record<string, unknown>): Partial<MemoryRecallRecord> {
+    return {
+      ...(readString(p, "tenantId") !== undefined ? { tenantId: readString(p, "tenantId") } : {}),
+      ...(readString(p, "workspaceId") !== undefined ? { workspaceId: readString(p, "workspaceId") } : {}),
+      ...(readString(p, "namespace") !== undefined ? { namespace: readString(p, "namespace") } : {}),
+      ...(readStringArray(p, "kinds") !== undefined ? { kinds: readStringArray(p, "kinds") } : {}),
+      ...(readString(p, "runId") !== undefined ? { runId: readString(p, "runId") } : {}),
+      ...(readString(p, "sessionId") !== undefined ? { sessionId: readString(p, "sessionId") } : {}),
+      ...(readString(p, "researchRunId") !== undefined
+        ? { researchRunId: readString(p, "researchRunId") }
+        : {}),
+      ...(readString(p, "researchTaskId") !== undefined
+        ? { researchTaskId: readString(p, "researchTaskId") }
+        : {}),
+      ...(readString(p, "parentTaskId") !== undefined
+        ? { parentTaskId: readString(p, "parentTaskId") }
+        : {}),
+      ...(readString(p, "nodeId") !== undefined ? { nodeId: readString(p, "nodeId") } : {}),
+      ...(readString(p, "traceId") !== undefined ? { traceId: readString(p, "traceId") } : {}),
+      ...(readString(p, "queryHash") !== undefined ? { queryHash: readString(p, "queryHash") } : {}),
+      ...(readString(p, "queryPreview") !== undefined
+        ? { queryPreview: readString(p, "queryPreview") }
+        : {}),
+      ...(readString(p, "level") !== undefined ? { level: readString(p, "level") } : {}),
+      ...(readNumber(p, "tokenBudget") !== undefined
+        ? { tokenBudget: readNumber(p, "tokenBudget") }
+        : {}),
+      ...(readNumber(p, "limit") !== undefined ? { limit: readNumber(p, "limit") } : {}),
+      ...(readBoolean(p, "includeRedacted") !== undefined
+        ? { includeRedacted: readBoolean(p, "includeRedacted") }
+        : {}),
+      ...(readString(p, "bundleId") !== undefined ? { bundleId: readString(p, "bundleId") } : {}),
+      ...(readString(p, "queryId") !== undefined ? { queryId: readString(p, "queryId") } : {}),
+      ...(readString(p, "retrievalTraceId") !== undefined
+        ? { retrievalTraceId: readString(p, "retrievalTraceId") }
+        : {}),
+      ...(readStringArray(p, "routeNames") !== undefined
+        ? { routeNames: readStringArray(p, "routeNames") }
+        : {}),
+      ...(readStringArray(p, "selectedRecordIds") !== undefined
+        ? { selectedRecordIds: readStringArray(p, "selectedRecordIds") }
+        : {}),
+      ...(readStringArray(p, "recordIds") !== undefined
+        ? { recordIds: readStringArray(p, "recordIds") }
+        : {}),
+      ...(readNumber(p, "totalTokens") !== undefined
+        ? { totalTokens: readNumber(p, "totalTokens") }
+        : {}),
+      ...(readString(p, "budgetLevel") !== undefined
+        ? { budgetLevel: readString(p, "budgetLevel") }
+        : {}),
+      ...(readString(p, "budgetDegradationReason") !== undefined
+        ? { budgetDegradationReason: readString(p, "budgetDegradationReason") }
+        : {}),
+      ...(readNumber(p, "routeCount") !== undefined
+        ? { routeCount: readNumber(p, "routeCount") }
+        : {}),
+      ...(readNumber(p, "candidateCount") !== undefined
+        ? { candidateCount: readNumber(p, "candidateCount") }
+        : {}),
+      ...(readNumber(p, "evidenceCount") !== undefined
+        ? { evidenceCount: readNumber(p, "evidenceCount") }
+        : {}),
+      ...(readNumber(p, "citationCount") !== undefined
+        ? { citationCount: readNumber(p, "citationCount") }
+        : {}),
+      ...(readNumber(p, "durationMs") !== undefined
+        ? { durationMs: readNumber(p, "durationMs") }
+        : {}),
+      ...(readObject(p, "metadata") !== undefined ? { metadata: readObject(p, "metadata") } : {}),
+    };
+  }
+
+  private applyMemoryRecall(
+    next: RunState,
+    p: Record<string, unknown>,
+    status: MemoryOperationStatus,
+    at: string,
+  ): void {
+    const id = memoryOperationId(p, `memory-recall-${at}`);
+    const existing = next.memory.recalls[id];
+    next.memory.recalls[id] = {
+      ...existing,
+      id,
+      status,
+      ...this.memoryRecallMetadata(p),
+      startedAt: status === "started" ? existing?.startedAt ?? at : existing?.startedAt,
+      completedAt: status === "completed" || status === "failed" ? at : existing?.completedAt,
+      error: status === "failed"
+        ? readString(p, "error") ?? readString(p, "message") ?? "memory recall failed"
+        : existing?.error,
+    };
+    this.linkMemoryRecallToResearch(next, p, id, at);
+  }
+
+  private linkMemoryRecallToResearch(
+    next: RunState,
+    p: Record<string, unknown>,
+    memoryRecallId: string,
+    at: string,
+  ): void {
+    if (!readString(p, "researchRunId")) return;
+    const run = this.ensureResearchRun(next, p, at);
+    run.memoryRecallIds = appendUnique(run.memoryRecallIds, memoryRecallId);
+    const taskId = researchTaskId(p);
+    if (!taskId) return;
+    const existing = run.tasks[taskId];
+    run.tasks[taskId] = {
+      ...existing,
+      id: taskId,
+      status: existing?.status ?? "running",
+      memoryRecallIds: appendUnique(existing?.memoryRecallIds, memoryRecallId),
+      startedAt: existing?.startedAt ?? at,
+    };
+  }
+
+  private memoryRetainMetadata(p: Record<string, unknown>): Partial<MemoryRetainRecord> {
+    return {
+      ...(readString(p, "tenantId") !== undefined ? { tenantId: readString(p, "tenantId") } : {}),
+      ...(readString(p, "workspaceId") !== undefined ? { workspaceId: readString(p, "workspaceId") } : {}),
+      ...(readString(p, "namespace") !== undefined ? { namespace: readString(p, "namespace") } : {}),
+      ...(readString(p, "sourceType") !== undefined ? { sourceType: readString(p, "sourceType") } : {}),
+      ...(readString(p, "runId") !== undefined ? { runId: readString(p, "runId") } : {}),
+      ...(readString(p, "sessionId") !== undefined ? { sessionId: readString(p, "sessionId") } : {}),
+      ...(readString(p, "episodeId") !== undefined ? { episodeId: readString(p, "episodeId") } : {}),
+      ...(readStringArray(p, "memoryRecordIds") !== undefined
+        ? { memoryRecordIds: readStringArray(p, "memoryRecordIds") }
+        : {}),
+      ...(readStringArray(p, "factIds") !== undefined ? { factIds: readStringArray(p, "factIds") } : {}),
+      ...(readString(p, "outboxEventId") !== undefined
+        ? { outboxEventId: readString(p, "outboxEventId") }
+        : {}),
+      ...(readString(p, "retainedAt") !== undefined ? { retainedAt: readString(p, "retainedAt") } : {}),
+      ...(readNumber(p, "durationMs") !== undefined
+        ? { durationMs: readNumber(p, "durationMs") }
+        : {}),
+      ...(readObject(p, "metadata") !== undefined ? { metadata: readObject(p, "metadata") } : {}),
+    };
+  }
+
+  private applyMemoryRetain(
+    next: RunState,
+    p: Record<string, unknown>,
+    status: MemoryOperationStatus,
+    at: string,
+  ): void {
+    const id = memoryOperationId(p, `memory-retain-${at}`);
+    const existing = next.memory.retains[id];
+    next.memory.retains[id] = {
+      ...existing,
+      id,
+      status,
+      ...this.memoryRetainMetadata(p),
+      startedAt: status === "started" ? existing?.startedAt ?? at : existing?.startedAt,
+      completedAt: status === "completed" || status === "failed" ? at : existing?.completedAt,
+      error: status === "failed"
+        ? readString(p, "error") ?? readString(p, "message") ?? "memory retain failed"
+        : existing?.error,
+    };
+  }
+
+  private memoryCheckpointMetadata(p: Record<string, unknown>): Partial<MemoryCheckpointRecord> {
+    return {
+      ...(readString(p, "checkpointId") !== undefined
+        ? { checkpointId: readString(p, "checkpointId") }
+        : {}),
+      ...(readString(p, "checkpointRunId") !== undefined
+        ? { checkpointRunId: readString(p, "checkpointRunId") }
+        : readString(p, "runId") !== undefined
+          ? { checkpointRunId: readString(p, "runId") }
+          : {}),
+      ...(readString(p, "version") !== undefined ? { version: readString(p, "version") } : {}),
+      ...(readString(p, "checkpointCreatedAt") !== undefined
+        ? { checkpointCreatedAt: readString(p, "checkpointCreatedAt") }
+        : {}),
+      ...(readNumber(p, "durationMs") !== undefined
+        ? { durationMs: readNumber(p, "durationMs") }
+        : {}),
+      ...(readObject(p, "metadata") !== undefined ? { metadata: readObject(p, "metadata") } : {}),
+    };
+  }
+
+  private applyMemoryCheckpoint(
+    next: RunState,
+    p: Record<string, unknown>,
+    status: MemoryCheckpointStatus,
+    at: string,
+  ): void {
+    const id = memoryOperationId(p, `memory-checkpoint-${at}`);
+    const existing = next.memory.checkpoints[id];
+    next.memory.checkpoints[id] = {
+      ...existing,
+      id,
+      status,
+      ...this.memoryCheckpointMetadata(p),
+      savedAt: status === "saved" ? at : existing?.savedAt,
+      restoredAt: status === "restored" ? at : existing?.restoredAt,
+      error: status === "failed"
+        ? readString(p, "error") ?? readString(p, "message") ?? "memory checkpoint failed"
+        : existing?.error,
+    };
+    const researchRunId = readString(p, "researchRunId");
+    if (researchRunId) {
+      const run = this.ensureResearchRun(next, p, at);
+      run.memoryCheckpointIds = appendUnique(run.memoryCheckpointIds, id);
     }
   }
 

@@ -30,6 +30,7 @@ describe("EAM parity audit", () => {
     expect(audit.summary).toMatchObject({
       exact: 1,
       equivalent: 2,
+      drift: 0,
       missing: 0,
     });
     expect(audit.sections[0].rows).toContainEqual(
@@ -69,6 +70,10 @@ describe("EAM parity audit", () => {
       "reference",
       "--format",
       "json",
+      "--depth",
+      "files",
+      "--sample-size",
+      "3",
       "--write",
       "audit.json",
       "--fail-on-missing",
@@ -79,10 +84,57 @@ describe("EAM parity audit", () => {
     ]);
 
     expect(options.format).toBe("json");
+    expect(options.depth).toBe("files");
+    expect(options.sampleSize).toBe(3);
     expect(options.failOnMissing).toBe(true);
     expect(options.nameAliases.eamd).toBe("kirakirad");
     expect(options.prefixAliases["eam-agent"]).toBe("kirakira-agent");
     expect(options.writePath).toMatch(/audit\.json$/);
+  });
+
+  it("detects file-level drift when requested", () => {
+    const root = mkdtempSync(join(tmpdir(), "kirakira-parity-"));
+    const reference = join(root, "reference");
+    const workspace = join(root, "workspace");
+
+    createPackage(reference, "memory-service");
+    createPackage(workspace, "memory-service");
+    writeFileSync(
+      join(reference, "packages", "memory-service", "src", "retain.ts"),
+      "export const retain = true;\n",
+      "utf8",
+    );
+    writeFileSync(
+      join(workspace, "packages", "memory-service", "src", "local-only.ts"),
+      "export const local = true;\n",
+      "utf8",
+    );
+    mkdirSync(join(reference, "docs", "plane"), { recursive: true });
+    mkdirSync(join(workspace, "docs", "plane"), { recursive: true });
+
+    const audit = buildEamParityAudit({
+      referenceRoot: reference,
+      workspaceRoot: workspace,
+      depth: "files",
+      sampleSize: 1,
+    });
+    const packageRow = audit.sections[0].rows.find(
+      (row) => row.sourceName === "memory-service",
+    );
+    const markdown = renderEamParityAudit(audit, "markdown");
+
+    expect(audit.summary.drift).toBe(1);
+    expect(packageRow).toMatchObject({
+      status: "drift",
+      fileAudit: {
+        missing: 1,
+        extra: 1,
+        missingSamples: ["src/retain.ts"],
+        extraSamples: ["src/local-only.ts"],
+      },
+    });
+    expect(markdown).toContain("1 missing");
+    expect(markdown).toContain("src/retain.ts");
   });
 });
 

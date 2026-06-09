@@ -15,12 +15,21 @@ const DEFAULT_PREFIX_ALIASES = {
 
 const PACKAGE_SENTINELS = ["package.json", "tsconfig.json", "src"];
 const DOC_SENTINELS = ["README.md"];
+const DEFAULT_FILE_EXCLUDES = new Set([
+  ".git",
+  ".turbo",
+  "coverage",
+  "dist",
+  "node_modules",
+]);
 
 export function normalizeAuditArgs(argv = []) {
   const options = {
     workspaceRoot: DEFAULT_WORKSPACE,
     referenceRoot: join(DEFAULT_WORKSPACE, "reference_project", "eam-agent"),
     format: "markdown",
+    depth: "entries",
+    sampleSize: 8,
     writePath: undefined,
     failOnMissing: false,
     nameAliases: { ...DEFAULT_NAME_ALIASES },
@@ -43,6 +52,20 @@ export function normalizeAuditArgs(argv = []) {
         throw new Error(`Unsupported --format value: ${value}`);
       }
       options.format = value;
+      index += 1;
+    } else if (arg === "--depth") {
+      const value = readRequiredValue(argv, index);
+      if (value !== "entries" && value !== "files") {
+        throw new Error(`Unsupported --depth value: ${value}`);
+      }
+      options.depth = value;
+      index += 1;
+    } else if (arg === "--sample-size") {
+      const value = Number(readRequiredValue(argv, index));
+      if (!Number.isInteger(value) || value < 0) {
+        throw new Error(`--sample-size must be a non-negative integer`);
+      }
+      options.sampleSize = value;
       index += 1;
     } else if (arg === "--write") {
       options.writePath = resolve(readRequiredValue(argv, index));
@@ -76,6 +99,8 @@ export function buildEamParityAudit(options = {}) {
   );
   const nameAliases = { ...DEFAULT_NAME_ALIASES, ...(options.nameAliases ?? {}) };
   const prefixAliases = { ...DEFAULT_PREFIX_ALIASES, ...(options.prefixAliases ?? {}) };
+  const depth = options.depth ?? "entries";
+  const sampleSize = options.sampleSize ?? 8;
 
   const packages = compareNamedChildren({
     kind: "package",
@@ -83,6 +108,8 @@ export function buildEamParityAudit(options = {}) {
     targetRoot: join(workspaceRoot, "packages"),
     nameAliases,
     sentinels: PACKAGE_SENTINELS,
+    depth,
+    sampleSize,
   });
   const docs = compareNamedChildren({
     kind: "docs-plane",
@@ -90,10 +117,13 @@ export function buildEamParityAudit(options = {}) {
     targetRoot: join(workspaceRoot, "docs", "plane"),
     nameAliases: prefixAliases,
     sentinels: DOC_SENTINELS,
+    depth,
+    sampleSize,
   });
 
   return {
     generatedAt: new Date().toISOString(),
+    depth,
     workspaceRoot,
     referenceRoot,
     summary: summarize([packages, docs]),
@@ -109,6 +139,7 @@ export function renderEamParityAudit(audit, format = "markdown") {
     "# EAM Parity Audit",
     "",
     `Generated: ${audit.generatedAt}`,
+    `Depth: \`${audit.depth}\``,
     `Reference: \`${toPosixPath(audit.referenceRoot)}\``,
     `Workspace: \`${toPosixPath(audit.workspaceRoot)}\``,
     "",
@@ -116,6 +147,7 @@ export function renderEamParityAudit(audit, format = "markdown") {
     "",
     `- Exact: ${audit.summary.exact}`,
     `- Equivalent: ${audit.summary.equivalent}`,
+    `- Drift: ${audit.summary.drift}`,
     `- Missing: ${audit.summary.missing}`,
     `- Extra: ${audit.summary.extra}`,
     "",
@@ -123,11 +155,11 @@ export function renderEamParityAudit(audit, format = "markdown") {
 
   for (const section of audit.sections) {
     lines.push(`## ${section.title}`, "");
-    lines.push("| Source | Target | Status | Evidence |");
-    lines.push("| --- | --- | --- | --- |");
+    lines.push("| Source | Target | Status | Evidence | Files |");
+    lines.push("| --- | --- | --- | --- | --- |");
     for (const row of section.rows) {
       lines.push(
-        `| \`${row.sourceName ?? "-"}\` | \`${row.targetName ?? "-"}\` | ${row.status} | ${escapeTableCell(row.evidence)} |`,
+        `| \`${row.sourceName ?? "-"}\` | \`${row.targetName ?? "-"}\` | ${row.status} | ${escapeTableCell(row.evidence)} | ${escapeTableCell(fileEvidence(row.fileAudit))} |`,
       );
     }
     if (section.extras.length > 0) {
@@ -143,7 +175,15 @@ export function renderEamParityAudit(audit, format = "markdown") {
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
-function compareNamedChildren({ kind, sourceRoot, targetRoot, nameAliases, sentinels }) {
+function compareNamedChildren({
+  kind,
+  sourceRoot,
+  targetRoot,
+  nameAliases,
+  sentinels,
+  depth,
+  sampleSize,
+}) {
   const sourceEntries = listChildDirectories(sourceRoot);
   const targetEntries = listChildDirectories(targetRoot);
   const targetByName = new Map(targetEntries.map((entry) => [entry.name, entry]));
@@ -155,13 +195,23 @@ function compareNamedChildren({ kind, sourceRoot, targetRoot, nameAliases, senti
     const target = targetByName.get(expectedName);
     if (target) {
       usedTargets.add(target.name);
-      const status = expectedName === source.name ? "exact" : "equivalent";
+      const fileAudit =
+        depth === "files"
+          ? compareFileInventory(source.path, target.path, sampleSize)
+          : undefined;
+      const hasFileDrift = fileAudit && (fileAudit.missing > 0 || fileAudit.extra > 0);
+      const status = hasFileDrift
+        ? "drift"
+        : expectedName === source.name
+          ? "exact"
+          : "equivalent";
       rows.push({
         kind,
         sourceName: source.name,
         targetName: target.name,
         status,
         evidence: sentinelEvidence(target.path, sentinels),
+        ...(fileAudit ? { fileAudit } : {}),
       });
     } else {
       rows.push({
@@ -192,7 +242,7 @@ function compareNamedChildren({ kind, sourceRoot, targetRoot, nameAliases, senti
 }
 
 function summarize(sections) {
-  const summary = { exact: 0, equivalent: 0, missing: 0, extra: 0 };
+  const summary = { exact: 0, equivalent: 0, drift: 0, missing: 0, extra: 0 };
   for (const section of sections) {
     for (const row of section.rows) {
       summary[row.status] += 1;
@@ -200,6 +250,43 @@ function summarize(sections) {
     summary.extra += section.extras.length;
   }
   return summary;
+}
+
+function compareFileInventory(sourceRoot, targetRoot, sampleSize) {
+  const sourceFiles = listRelativeFiles(sourceRoot);
+  const targetFiles = listRelativeFiles(targetRoot);
+  const targetSet = new Set(targetFiles);
+  const sourceSet = new Set(sourceFiles);
+  const missing = sourceFiles.filter((file) => !targetSet.has(file));
+  const extra = targetFiles.filter((file) => !sourceSet.has(file));
+  return {
+    source: sourceFiles.length,
+    target: targetFiles.length,
+    matched: sourceFiles.length - missing.length,
+    missing: missing.length,
+    extra: extra.length,
+    missingSamples: missing.slice(0, sampleSize),
+    extraSamples: extra.slice(0, sampleSize),
+  };
+}
+
+function listRelativeFiles(root) {
+  if (!existsSync(root)) return [];
+  const files = [];
+  visitFiles(root, root, files);
+  return files.sort((left, right) => left.localeCompare(right));
+}
+
+function visitFiles(root, current, files) {
+  for (const entry of readdirSync(current, { withFileTypes: true })) {
+    if (entry.isDirectory() && DEFAULT_FILE_EXCLUDES.has(entry.name)) continue;
+    const fullPath = join(current, entry.name);
+    if (entry.isDirectory()) {
+      visitFiles(root, fullPath, files);
+    } else if (entry.isFile()) {
+      files.push(toPosixPath(relative(root, fullPath)));
+    }
+  }
 }
 
 function listChildDirectories(root) {
@@ -252,6 +339,22 @@ function escapeTableCell(value) {
   return value.replaceAll("|", "\\|");
 }
 
+function fileEvidence(fileAudit) {
+  if (!fileAudit) return "not checked";
+  const parts = [
+    `${fileAudit.matched}/${fileAudit.source} source files matched`,
+    `${fileAudit.missing} missing`,
+    `${fileAudit.extra} extra`,
+  ];
+  if (fileAudit.missingSamples.length > 0) {
+    parts.push(`missing: ${fileAudit.missingSamples.join(", ")}`);
+  }
+  if (fileAudit.extraSamples.length > 0) {
+    parts.push(`extra: ${fileAudit.extraSamples.join(", ")}`);
+  }
+  return parts.join("; ");
+}
+
 function toPosixPath(path) {
   return path.replaceAll("\\", "/");
 }
@@ -263,6 +366,8 @@ Options:
   --workspace <path>       Target Kirakira workspace root.
   --reference <path>       EAM reference root. Defaults to reference_project/eam-agent.
   --format <json|markdown> Output format. Defaults to markdown.
+  --depth <entries|files>  Compare directories only, or include file inventories.
+  --sample-size <number>   File drift sample size for each row. Defaults to 8.
   --write <path>           Write output to a file instead of stdout only.
   --fail-on-missing        Exit non-zero when any source package/docs plane is missing.
   --alias <from=to>        Add a package directory alias.
@@ -283,7 +388,7 @@ async function main() {
     writeFileSync(options.writePath, output, "utf8");
   }
   process.stdout.write(output);
-  if (options.failOnMissing && audit.summary.missing > 0) {
+  if (options.failOnMissing && (audit.summary.missing > 0 || audit.summary.drift > 0)) {
     process.exitCode = 1;
   }
 }

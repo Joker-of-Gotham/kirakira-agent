@@ -26,6 +26,7 @@ import {
   createRunInspector,
   createRunWorkstream,
   createSubagentTopologyView,
+  createWorkbenchInspectorView,
   projectRunDashboard,
   runtimeTransportOrchestration,
   runtimeTransportSupportsArtifactContent,
@@ -39,10 +40,10 @@ import {
   type RunActivityRailMcpTool,
   type RunActivityRailSelection,
   type RunActivityRailView,
-  type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
   type RunInspectorProjection,
+  type RunDashboardArtifact,
   type RunDashboardProjection,
   type RunDashboardStatus,
   type RunWorkstreamActivity,
@@ -55,6 +56,8 @@ import {
   type RuntimeTransportEvent,
   type RuntimeTransportStatus,
   type SubagentTopologyView,
+  type WorkbenchInspectorView,
+  type WorkbenchInspectorViewId,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -156,6 +159,7 @@ export function KirakiraWorkbench({
   const [selectedMcpToolId, setSelectedMcpToolId] = useState<string | undefined>();
   const [mcpToolDrafts, setMcpToolDrafts] = useState<Record<string, string>>({});
   const [mcpToolCall, setMcpToolCall] = useState<McpToolCallState>({ status: "idle" });
+  const [inspectorViewId, setInspectorViewId] = useState<WorkbenchInspectorViewId>("mcp");
   const [isSubmitting, setSubmitting] = useState(false);
   const [history, setHistory] = useState<RunHistoryItem[]>([]);
   const [selectedFocusId, setSelectedFocusId] = useState<string | undefined>();
@@ -291,6 +295,30 @@ export function KirakiraWorkbench({
         selectedMcpToolCallResult,
       ),
     [selectedMcpTool, selectedMcpToolCallResult, selectedMcpToolDraft],
+  );
+  const workbenchInspector = useMemo(
+    () =>
+      createWorkbenchInspectorView({
+        projection,
+        runtimeStatus,
+        mcpDirectory: mcpDirectoryView,
+        mcpState: {
+          status: mcpDirectory.status,
+          ...(mcpDirectory.message ? { message: mcpDirectory.message } : {}),
+        },
+        activeView: inspectorViewId,
+        selectedMcpToolId: selectedMcpTool?.id ?? selectedMcpToolId,
+      }),
+    [
+      inspectorViewId,
+      mcpDirectory.message,
+      mcpDirectory.status,
+      mcpDirectoryView,
+      projection,
+      runtimeStatus,
+      selectedMcpTool?.id,
+      selectedMcpToolId,
+    ],
   );
   const activityRail = useMemo(
     () =>
@@ -632,6 +660,13 @@ export function KirakiraWorkbench({
       </section>
 
       <aside className="kk-right-rail" aria-label="Run intelligence">
+        <SystemInspectorPanel
+          view={workbenchInspector}
+          onViewChange={setInspectorViewId}
+          onSelectFocus={setSelectedFocusId}
+          onSelectMcpTool={setSelectedMcpToolId}
+        />
+
         <ActivityRailPanel
           view={activityRail}
           onSelectItem={selectWorkstreamItem}
@@ -1068,6 +1103,172 @@ function WorkstreamDetailDrawer({ detail }: { detail?: RunWorkstreamDetailDrawer
       ) : null}
     </aside>
   );
+}
+
+function SystemInspectorPanel({
+  view,
+  onViewChange,
+  onSelectFocus,
+  onSelectMcpTool,
+}: {
+  view: WorkbenchInspectorView;
+  onViewChange: (id: WorkbenchInspectorViewId) => void;
+  onSelectFocus: (id: string) => void;
+  onSelectMcpTool: (id: string) => void;
+}) {
+  const panel = view.panel;
+  return (
+    <section
+      className={`kk-rail-section kk-system-inspector kk-system-inspector-${panel.statusTone}`}
+      aria-label="Runtime systems inspector"
+    >
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">{panel.kicker}</p>
+          <h2>{panel.title}</h2>
+        </div>
+        <span className={`kk-system-status kk-system-status-${panel.statusTone}`}>
+          {panel.statusLabel}
+        </span>
+      </div>
+
+      <div className="kk-system-tabs" role="tablist" aria-label="Runtime system views">
+        {view.tabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={tab.id === view.activeView}
+            className={
+              tab.id === view.activeView
+                ? `kk-system-tab kk-system-tab-active kk-system-tab-${tab.tone}`
+                : `kk-system-tab kk-system-tab-${tab.tone}`
+            }
+            onClick={() => onViewChange(tab.id)}
+          >
+            <span>{tab.label}</span>
+            <small>{tab.count}</small>
+          </button>
+        ))}
+      </div>
+
+      <p className="kk-system-summary">{panel.summary}</p>
+
+      <dl className="kk-system-metrics">
+        {panel.metrics.map((metric) => (
+          <div key={`${panel.id}-${metric.label}`} className={`kk-system-metric kk-system-${metric.tone}`}>
+            <dt>{metric.label}</dt>
+            <dd>{metric.value}</dd>
+          </div>
+        ))}
+      </dl>
+
+      {panel.errorMessage ? (
+        <div className="kk-empty kk-system-error" role="alert">
+          {panel.errorMessage}
+        </div>
+      ) : null}
+
+      {panel.mcpServers ? (
+        <div className="kk-system-mcp-list">
+          {panel.mcpServers.map((server) => (
+            <article key={server.name} className={`kk-system-mcp-server kk-system-${server.tone}`}>
+              <header>
+                <span className={`kk-dot kk-dot-${server.tone}`} />
+                <span>
+                  <strong>{server.name}</strong>
+                  <small>{server.health}</small>
+                </span>
+                <em>{server.discoveredToolCount}</em>
+              </header>
+              {server.error ? <p>{server.error}</p> : null}
+              {server.tools.length > 0 ? (
+                <div className="kk-system-tool-list">
+                  {server.tools.slice(0, 4).map((tool) => (
+                    <button
+                      key={tool.id}
+                      type="button"
+                      className={
+                        tool.selected
+                          ? `kk-system-row kk-system-row-active kk-system-${tool.tone}`
+                          : `kk-system-row kk-system-${tool.tone}`
+                      }
+                      onClick={() => {
+                        onSelectMcpTool(tool.id);
+                        onViewChange("mcp");
+                      }}
+                    >
+                      <Wrench size={14} />
+                      <span>
+                        <strong>{tool.title}</strong>
+                        <small>{tool.detail}</small>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="kk-system-rows">
+          {panel.rows.length === 0 ? (
+            <div className="kk-empty">{panel.emptyMessage ?? "No system records yet"}</div>
+          ) : (
+            panel.rows.slice(0, 6).map((row) => (
+              <SystemInspectorRow key={row.id} row={row} onSelectFocus={onSelectFocus} />
+            ))
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SystemInspectorRow({
+  row,
+  onSelectFocus,
+}: {
+  row: WorkbenchInspectorView["panel"]["rows"][number];
+  onSelectFocus: (id: string) => void;
+}) {
+  const content = (
+    <>
+      <span className={`kk-dot kk-dot-${row.tone}`} />
+      <span>
+        <strong>{row.title}</strong>
+        <small>{row.detail ?? row.meta ?? row.id}</small>
+      </span>
+      {row.meta ? <em>{row.meta}</em> : null}
+    </>
+  );
+
+  if (row.href) {
+    return (
+      <a
+        className={`kk-system-row kk-system-${row.tone}`}
+        href={row.href}
+        target="_blank"
+        rel="noreferrer"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  if (row.focusId) {
+    return (
+      <button
+        type="button"
+        className={`kk-system-row kk-system-${row.tone}`}
+        onClick={() => onSelectFocus(row.focusId!)}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`kk-system-row kk-system-${row.tone}`}>{content}</div>;
 }
 
 function ActivityRailPanel({

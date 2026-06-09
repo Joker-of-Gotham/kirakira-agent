@@ -252,6 +252,17 @@ const DEFAULT_CAPABILITIES: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>
     id: "memory",
     state: "available",
     summary: "Attach durable memory recall and retain planes through injected runtime services.",
+    eventKinds: [
+      "memory.recall.started",
+      "memory.recall.completed",
+      "memory.recall.failed",
+      "memory.retain.started",
+      "memory.retain.completed",
+      "memory.retain.failed",
+      "memory.checkpoint.saved",
+      "memory.checkpoint.restored",
+      "memory.checkpoint.failed",
+    ],
   },
   mcp: {
     id: "mcp",

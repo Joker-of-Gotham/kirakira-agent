@@ -112,6 +112,22 @@ export type {
   RunActivityRailView,
 } from "./activity-rail.js";
 
+export { createWorkbenchInspectorView } from "./workbench-inspector.js";
+
+export type {
+  WorkbenchInspectorInput,
+  WorkbenchInspectorMcpServer,
+  WorkbenchInspectorMcpState,
+  WorkbenchInspectorMcpTool,
+  WorkbenchInspectorMetric,
+  WorkbenchInspectorPanel,
+  WorkbenchInspectorRow,
+  WorkbenchInspectorTab,
+  WorkbenchInspectorTone,
+  WorkbenchInspectorView,
+  WorkbenchInspectorViewId,
+} from "./workbench-inspector.js";
+
 export {
   createEmptyRunDashboard,
   projectRunDashboard,

@@ -179,11 +179,23 @@ describe("resolved runtime state", () => {
 
     const projection = buildResolvedRuntimeProfileProjection(resolved.runtimeState, "container");
     const memoryServices = resolved.runtimeState.service_catalog?.groups?.["memory-stack"] ?? [];
+    const runtimeServices = resolved.runtimeState.service_catalog?.groups?.["runtime-stack"] ?? [];
 
     expect(projection.fragments.mcpConfig.config.mcpServers["filesystem-core"].args?.at(-1))
       .toBe("/workspace");
     expect(projection.fragments.mcpConfig.config.mcpServers["filesystem-patch"].args?.[0])
       .toBe("/app/packages/mcp-filesystem-patch/dist/index.js");
+    expect(projection.fragments.readiness.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "--profile",
+      "cli",
+      "up",
+      "-d",
+      "--wait",
+      ...runtimeServices,
+    ]);
     expect(projection.fragments.memoryStack.compose?.args).toEqual([
       "compose",
       "-f",
@@ -197,6 +209,42 @@ describe("resolved runtime state", () => {
     ]);
     expect(projection.fragments.memoryStack.services.map((service) => service.name))
       .toEqual(memoryServices);
+    expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
+      composeService: "postgres",
+      sources: ["services", "readiness", "memory-stack"],
+      endpoint: {
+        urlEnv: "DATABASE_URL",
+      },
+      readiness: {
+        name: "service:postgres",
+        type: "compose-service",
+        urlEnv: "DATABASE_URL",
+      },
+      memoryStack: {
+        enabled: true,
+        urlEnv: "DATABASE_URL",
+        env: ["DATABASE_URL"],
+      },
+    });
+    expect(projection.services.find((service) => service.name === "kirakirad")).toMatchObject({
+      sources: ["services", "readiness"],
+      readiness: {
+        name: "service:kirakirad",
+        type: "compose-service",
+        urlEnv: "KIRAKIRA_PDP_ENDPOINT",
+      },
+    });
+    expect(projection.services.find((service) => service.name === "kirakirad")?.memoryStack)
+      .toBeUndefined();
+    expect(projection.mcp.servers).toContainEqual(
+      expect.objectContaining({
+        name: "filesystem-core",
+        command: "npx",
+        args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+      }),
+    );
+    expect(projection.mcp.config.mcpServers["filesystem-core"].args?.at(-1))
+      .toBe("/workspace");
     expect(JSON.stringify(projection)).not.toContain(".mcp.json");
     expect(JSON.stringify(projection)).not.toContain("kirakira:kirakira");
   });
@@ -216,7 +264,19 @@ describe("resolved runtime state", () => {
 
     expect(profile.name).toBe("host");
     expect(projection.profile).toBe("host");
+    expect(projection.fragments.readiness.compose).toBeUndefined();
     expect(projection.fragments.memoryStack.compose).toBeUndefined();
+    expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
+      composeService: "postgres",
+      readiness: {
+        type: "external-service",
+        urlEnv: "DATABASE_URL",
+      },
+      memoryStack: {
+        enabled: true,
+        urlEnv: "DATABASE_URL",
+      },
+    });
     expect(projection.fragments.memoryStack.env).toContainEqual({
       name: "DATABASE_URL",
       generated: false,

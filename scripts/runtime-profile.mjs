@@ -16,6 +16,94 @@ const ROOT_OVERRIDE_ENV_KEYS = [
   "KIRAKIRA_MCP_WORKSPACE_ROOT",
   "KIRAKIRA_MCP_APP_ROOT",
 ];
+export const RUNTIME_READINESS_CHECK_TYPES = Object.freeze({
+  http: "http",
+  httpHealth: "http-health",
+  socket: "socket",
+  composeService: "compose-service",
+  externalService: "external-service",
+  orchestrationTopology: "orchestration-topology",
+});
+export const RUNTIME_READINESS_HEALTH_SCHEMAS = Object.freeze({
+  browserGateway: "browser-gateway-health",
+});
+export const RUNTIME_READINESS_CHECKS = Object.freeze({
+  daemonSocket: "daemon:socket",
+  daemonBrowserGateway: "daemon:browser-gateway",
+  orchestrationTopology: "orchestration:topology",
+});
+export const RUNTIME_PRESENTATION_READINESS_CHECKS = Object.freeze({
+  web: "presentation:web",
+  desktop: "presentation:desktop",
+});
+export const RUNTIME_DAEMON_READINESS_CHECKS = Object.freeze([
+  RUNTIME_READINESS_CHECKS.daemonSocket,
+  RUNTIME_READINESS_CHECKS.daemonBrowserGateway,
+]);
+export const RUNTIME_SURFACE_READINESS_CHECKS = Object.freeze({
+  daemon: RUNTIME_DAEMON_READINESS_CHECKS,
+  web: Object.freeze([RUNTIME_PRESENTATION_READINESS_CHECKS.web]),
+  desktop: Object.freeze([RUNTIME_PRESENTATION_READINESS_CHECKS.desktop]),
+});
+export const RUNTIME_ORCHESTRATION_TOPOLOGY_CONTRACT = Object.freeze({
+  laneNames: Object.freeze(["foreground", "queued", "background", "delegated"]),
+  modes: Object.freeze(["tool", "supervisor", "swarm"]),
+  contextModes: Object.freeze(["isolated", "filtered", "inherit"]),
+});
+
+const RUNTIME_READINESS_HEALTH_SCHEMA_BY_CHECK = Object.freeze({
+  [RUNTIME_READINESS_CHECKS.daemonBrowserGateway]: RUNTIME_READINESS_HEALTH_SCHEMAS.browserGateway,
+});
+const RUNTIME_TOPOLOGY_LANE_NAMES = new Set(RUNTIME_ORCHESTRATION_TOPOLOGY_CONTRACT.laneNames);
+const RUNTIME_TOPOLOGY_MODES = new Set(RUNTIME_ORCHESTRATION_TOPOLOGY_CONTRACT.modes);
+const RUNTIME_TOPOLOGY_CONTEXT_MODES = new Set(RUNTIME_ORCHESTRATION_TOPOLOGY_CONTRACT.contextModes);
+
+export function runtimePresentationCheckName(surface) {
+  return RUNTIME_PRESENTATION_READINESS_CHECKS[surface] ?? `presentation:${surface}`;
+}
+
+export function uniqueRuntimeReadinessCheckNames(checkNames = []) {
+  return [
+    ...new Set(checkNames.filter((check) => typeof check === "string" && check.length > 0)),
+  ];
+}
+
+export function runtimeReadinessCheckMap(readiness) {
+  return new Map((readiness?.checks ?? [])
+    .filter((check) => isRecord(check) && typeof check.name === "string")
+    .map((check) => [check.name, check]));
+}
+
+export function runtimeReadinessHasCheck(readiness, checkName) {
+  return runtimeReadinessCheckMap(readiness).has(checkName);
+}
+
+export function runtimeSurfaceReadinessCheckNames(readiness, surface) {
+  const declared = RUNTIME_SURFACE_READINESS_CHECKS[surface] ?? [runtimePresentationCheckName(surface)];
+  const available = runtimeReadinessCheckMap(readiness);
+  return uniqueRuntimeReadinessCheckNames(declared).filter((checkName) => available.has(checkName));
+}
+
+export function selectRuntimeReadinessPlan(readiness, checkNames) {
+  const wanted = new Set(uniqueRuntimeReadinessCheckNames(checkNames));
+  const checks = (readiness?.checks ?? []).filter((check) => wanted.has(check.name));
+  const found = new Set(checks.map((check) => check.name));
+  const missing = [...wanted].filter((name) => !found.has(name));
+  if (missing.length > 0) {
+    throw new Error(`Readiness checks not found: ${missing.join(", ")}`);
+  }
+  return {
+    ...readiness,
+    checks,
+  };
+}
+
+export function runtimeReadinessHealthSchema(check) {
+  if (!isRecord(check)) return undefined;
+  return typeof check.responseSchema === "string"
+    ? check.responseSchema
+    : RUNTIME_READINESS_HEALTH_SCHEMA_BY_CHECK[check.name];
+}
 
 function browserGatewayEndpoint(gateway) {
   if (!gateway || gateway.enabled === false) return undefined;
@@ -546,6 +634,16 @@ function browserGatewayHealthUrl(endpoint) {
   }
 }
 
+function runtimeComposeReadiness(composeArgs, composeServiceNames) {
+  if (composeArgs.length === 0 || composeServiceNames.length === 0) return undefined;
+  return {
+    command: "docker",
+    args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
+    services: composeServiceNames,
+    wait: "running|healthy",
+  };
+}
+
 const SENSITIVE_ENV_NAME = /(?:PASSWORD|SECRET|API_KEY|ACCESS_KEY|PRIVATE|CREDENTIAL|(?:^|_)TOKEN(?:_|$))/iu;
 
 function sanitizedPlanEnvValue(name, value) {
@@ -611,7 +709,8 @@ export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options 
   const composeServiceNames = uniqueStrings(
     serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
   );
-  const composeEnabled = composeArgs.length > 0 && composeServiceNames.length > 0;
+  const compose = runtimeComposeReadiness(composeArgs, composeServiceNames);
+  const composeEnabled = Boolean(compose);
   return {
     schemaVersion: 1,
     profile: profile.name,
@@ -619,14 +718,7 @@ export function buildMemoryStackPlan(profile = resolveRuntimeProfile(), options 
     source: "runtime-profile.memory",
     enabled: isRecord(profile.memory) && profile.memory.enabled !== false,
     services: serviceNames.map((serviceName) => memoryStackServicePlan(config, profile, serviceName)),
-    compose: composeEnabled
-      ? {
-          command: "docker",
-          args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
-          services: composeServiceNames,
-          wait: "running|healthy",
-        }
-      : undefined,
+    compose,
     checks: serviceNames.map((serviceName) =>
       serviceReadinessCheck(config, profile, serviceName, composeEnabled),
     ),
@@ -653,28 +745,150 @@ export function buildMcpConfigPlan(profile = resolveRuntimeProfile(), options = 
   };
 }
 
+function checksByService(checks = []) {
+  const byService = new Map();
+  for (const check of checks) {
+    if (typeof check.service === "string" && check.service.length > 0) {
+      byService.set(check.service, check);
+    }
+  }
+  return byService;
+}
+
+function servicesByName(services = []) {
+  const byName = new Map();
+  for (const service of services) {
+    if (typeof service.name === "string" && service.name.length > 0) {
+      byName.set(service.name, service);
+    }
+  }
+  return byName;
+}
+
+function serviceEndpointProjection(profile, serviceName) {
+  const target = sanitizedReadinessUrl(profile.services?.[serviceName]);
+  const env = envNames(profile.envBindings?.services?.[serviceName]);
+  if (!target && env.length === 0) return undefined;
+  return {
+    ...(env.length > 0 ? { env } : {}),
+    ...(target ? { target } : {}),
+  };
+}
+
+function serviceReadinessProjection(check) {
+  if (!isRecord(check)) return undefined;
+  return {
+    name: check.name,
+    type: check.type,
+    source: check.source,
+    required: check.required !== false,
+    ...(typeof check.target === "string" ? { target: check.target } : {}),
+    ...(typeof check.endpoint === "string" ? { endpoint: check.endpoint } : {}),
+  };
+}
+
+function serviceMemoryStackProjection(service, memoryStackPlan) {
+  if (!isRecord(service)) return undefined;
+  return {
+    enabled: memoryStackPlan.enabled !== false,
+    source: service.source ?? "memory.services",
+    required: service.required !== false,
+    ...(Array.isArray(service.env) && service.env.length > 0 ? { env: service.env } : {}),
+    ...(typeof service.target === "string" ? { target: service.target } : {}),
+    ...(typeof service.primaryPort === "string" ? { primaryPort: service.primaryPort } : {}),
+  };
+}
+
+function runtimeServiceProjection(config, profile, serviceName, readinessCheck, memoryService, memoryStackPlan) {
+  const endpoint = serviceEndpointProjection(profile, serviceName);
+  const readiness = serviceReadinessProjection(readinessCheck);
+  const memoryStack = serviceMemoryStackProjection(memoryService, memoryStackPlan);
+  const sources = uniqueStrings([
+    endpoint ? "services" : undefined,
+    readiness ? "readiness" : undefined,
+    memoryStack ? "memory-stack" : undefined,
+  ]);
+  return {
+    name: serviceName,
+    composeService: runtimeComposeServiceName(config, serviceName),
+    required: readiness?.required ?? memoryStack?.required ?? true,
+    ...(sources.length > 0 ? { sources } : {}),
+    ...(endpoint ? { endpoint } : {}),
+    ...(readiness ? { readiness } : {}),
+    ...(memoryStack ? { memoryStack } : {}),
+  };
+}
+
+export function buildRuntimeServiceProjection(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const readinessPlan = options.readinessPlan ?? buildRuntimeReadinessPlan(profile, { ...options, config });
+  const memoryStackPlan = options.memoryStackPlan ?? buildMemoryStackPlan(profile, { ...options, config });
+  const readinessByService = checksByService(readinessPlan.checks);
+  const memoryByService = servicesByName(memoryStackPlan.services);
+  const serviceNames = uniqueStrings([
+    ...Object.keys(profile.services ?? {}),
+    ...readinessByService.keys(),
+    ...memoryByService.keys(),
+  ]);
+  return serviceNames.map((serviceName) =>
+    runtimeServiceProjection(
+      config,
+      profile,
+      serviceName,
+      readinessByService.get(serviceName),
+      memoryByService.get(serviceName),
+      memoryStackPlan,
+    ),
+  );
+}
+
+export function buildRuntimeMcpProjection(mcpConfigPlan) {
+  const mcpServers = mcpConfigPlan.config?.mcpServers ?? {};
+  return {
+    roots: mcpConfigPlan.roots,
+    serverRefs: mcpConfigPlan.serverRefs,
+    servers: mcpConfigPlan.servers.map((serverName) => ({
+      name: serverName,
+      ...mcpServers[serverName],
+    })),
+    config: mcpConfigPlan.config,
+  };
+}
+
 export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(), options = {}) {
+  const config = runtimeConfigForProfile(profile, options);
+  const readiness = buildRuntimeReadinessPlan(profile, { ...options, config });
+  const mcpConfig = buildMcpConfigPlan(profile, { ...options, config });
+  const memoryStack = buildMemoryStackPlan(profile, { ...options, config });
   return {
     schemaVersion: 1,
     profile: profile.name,
     mode: profile.mode,
+    services: buildRuntimeServiceProjection(profile, {
+      ...options,
+      config,
+      readinessPlan: readiness,
+      memoryStackPlan: memoryStack,
+    }),
+    mcp: buildRuntimeMcpProjection(mcpConfig),
     fragments: {
-      mcpConfig: buildMcpConfigPlan(profile, options),
-      memoryStack: buildMemoryStackPlan(profile, options),
+      readiness,
+      mcpConfig,
+      memoryStack,
     },
   };
 }
 
-const ORCHESTRATION_LANE_NAMES = ["foreground", "queued", "background", "delegated"];
-const ORCHESTRATION_MODES = ["tool", "supervisor", "swarm"];
-const ORCHESTRATION_CONTEXT_MODES = ["isolated", "filtered", "inherit"];
+function allowedTopologyValue(values, value) {
+  return typeof value === "string" && values.has(value);
+}
 
-function publicTopologySummary(topology) {
+export function projectRuntimeTopologySummary(topology) {
   if (!isRecord(topology)) return undefined;
   const lanes = isRecord(topology.lanes)
     ? Object.fromEntries(
         Object.entries(topology.lanes)
-          .filter(([lane, value]) => ORCHESTRATION_LANE_NAMES.includes(lane) && isRecord(value))
+          .filter(([lane, value]) => allowedTopologyValue(RUNTIME_TOPOLOGY_LANE_NAMES, lane) && isRecord(value))
           .map(([lane, value]) => [
             lane,
             {
@@ -691,8 +905,8 @@ function publicTopologySummary(topology) {
         .map((role) => ({
           id: role.id,
           ...(typeof role.description === "string" ? { description: role.description } : {}),
-          ...(ORCHESTRATION_LANE_NAMES.includes(role.lane) ? { lane: role.lane } : {}),
-          ...(ORCHESTRATION_CONTEXT_MODES.includes(role.context) ? { context: role.context } : {}),
+          ...(allowedTopologyValue(RUNTIME_TOPOLOGY_LANE_NAMES, role.lane) ? { lane: role.lane } : {}),
+          ...(allowedTopologyValue(RUNTIME_TOPOLOGY_CONTEXT_MODES, role.context) ? { context: role.context } : {}),
           ...(typeof role.model === "string" ? { model: role.model } : {}),
           ...(Number.isInteger(role.maxTurns ?? role.max_turns) && (role.maxTurns ?? role.max_turns) > 0
             ? { maxTurns: role.maxTurns ?? role.max_turns }
@@ -719,7 +933,7 @@ function publicTopologySummary(topology) {
         .map((handoff) => ({
           from: handoff.from,
           to: handoff.to,
-          ...(ORCHESTRATION_MODES.includes(handoff.mode) ? { mode: handoff.mode } : {}),
+          ...(allowedTopologyValue(RUNTIME_TOPOLOGY_MODES, handoff.mode) ? { mode: handoff.mode } : {}),
           ...(typeof (handoff.inputFilter ?? handoff.input_filter) === "string"
             ? { inputFilter: handoff.inputFilter ?? handoff.input_filter }
             : {}),
@@ -730,7 +944,7 @@ function publicTopologySummary(topology) {
         }))
     : undefined;
   return {
-    ...(ORCHESTRATION_MODES.includes(topology.mode) ? { handoffMode: topology.mode } : {}),
+    ...(allowedTopologyValue(RUNTIME_TOPOLOGY_MODES, topology.mode) ? { handoffMode: topology.mode } : {}),
     ...(typeof (topology.defaultRole ?? topology.default_role) === "string"
       ? { defaultRole: topology.defaultRole ?? topology.default_role }
       : {}),
@@ -740,18 +954,155 @@ function publicTopologySummary(topology) {
   };
 }
 
+export function runtimeTopologyIssues(topology) {
+  const issues = [];
+  if (!isRecord(topology)) return ["Topology summary is missing"];
+  const lanes = isRecord(topology.lanes) ? topology.lanes : {};
+  for (const [lane, value] of Object.entries(lanes)) {
+    if (!RUNTIME_TOPOLOGY_LANE_NAMES.has(lane)) {
+      issues.push(`Unknown lane ${lane}`);
+      continue;
+    }
+    if (
+      isRecord(value) &&
+      value.capacity !== undefined &&
+      (!Number.isInteger(value.capacity) || value.capacity < 0)
+    ) {
+      issues.push(`Lane ${lane} capacity must be a non-negative integer`);
+    }
+  }
+  if (topology.handoffMode !== undefined && !RUNTIME_TOPOLOGY_MODES.has(topology.handoffMode)) {
+    issues.push(`Unknown handoff mode ${topology.handoffMode}`);
+  }
+  const roles = Array.isArray(topology.roles) ? topology.roles.filter(isRecord) : [];
+  const roleIds = new Set();
+  for (const role of roles) {
+    if (typeof role.id !== "string" || role.id.length === 0) {
+      issues.push("Role id must be a non-empty string");
+      continue;
+    }
+    if (roleIds.has(role.id)) {
+      issues.push(`Duplicate role ${role.id}`);
+    }
+    roleIds.add(role.id);
+    if (role.lane !== undefined && !RUNTIME_TOPOLOGY_LANE_NAMES.has(role.lane)) {
+      issues.push(`Role ${role.id} references unknown lane ${role.lane}`);
+    }
+    if (role.context !== undefined && !RUNTIME_TOPOLOGY_CONTEXT_MODES.has(role.context)) {
+      issues.push(`Role ${role.id} has invalid context ${role.context}`);
+    }
+  }
+  if (
+    typeof topology.defaultRole === "string" &&
+    roles.length > 0 &&
+    !roleIds.has(topology.defaultRole)
+  ) {
+    issues.push(`Default role ${topology.defaultRole} is not declared`);
+  }
+  const handoffs = Array.isArray(topology.handoffs) ? topology.handoffs.filter(isRecord) : [];
+  for (const handoff of handoffs) {
+    if (typeof handoff.from !== "string" || !roleIds.has(handoff.from)) {
+      issues.push(`Handoff references unknown source role ${String(handoff.from)}`);
+    }
+    if (typeof handoff.to !== "string" || !roleIds.has(handoff.to)) {
+      issues.push(`Handoff references unknown target role ${String(handoff.to)}`);
+    }
+    if (handoff.mode !== undefined && !RUNTIME_TOPOLOGY_MODES.has(handoff.mode)) {
+      issues.push(`Handoff ${String(handoff.from)} -> ${String(handoff.to)} has invalid mode ${handoff.mode}`);
+    }
+  }
+  return issues;
+}
+
 function serviceReadinessCheck(config, profile, serviceName, composeEnabled) {
   const target = sanitizedReadinessUrl(profile.services?.[serviceName]);
   const composeService = runtimeComposeServiceName(config, serviceName);
   return {
     name: `service:${serviceName}`,
-    type: composeEnabled ? "compose-service" : "external-service",
+    type: composeEnabled
+      ? RUNTIME_READINESS_CHECK_TYPES.composeService
+      : RUNTIME_READINESS_CHECK_TYPES.externalService,
     service: serviceName,
     composeService,
     source: "services",
     required: true,
     ...(target ? { target } : {}),
   };
+}
+
+const PRESENTATION_READINESS_TARGETS = Object.freeze([
+  Object.freeze({
+    checkName: RUNTIME_PRESENTATION_READINESS_CHECKS.web,
+    type: RUNTIME_READINESS_CHECK_TYPES.http,
+    source: "presentation.web.url",
+    targetPath: "presentation.web.url",
+  }),
+  Object.freeze({
+    checkName: RUNTIME_PRESENTATION_READINESS_CHECKS.desktop,
+    type: RUNTIME_READINESS_CHECK_TYPES.http,
+    source: "presentation.desktop.rendererUrl",
+    targetPath: "presentation.desktop.rendererUrl",
+  }),
+]);
+
+const PROFILE_READINESS_CHECK_BUILDERS = Object.freeze([
+  ({ profile, env }) => {
+    const daemonSocket = env.KIRAKIRA_DAEMON_SOCKET;
+    if (
+      pathValue(profile, "daemon.socketPath") === undefined ||
+      typeof daemonSocket !== "string" ||
+      daemonSocket.length === 0
+    ) {
+      return [];
+    }
+    return [{
+      name: RUNTIME_READINESS_CHECKS.daemonSocket,
+      type: RUNTIME_READINESS_CHECK_TYPES.socket,
+      source: "daemon.socketPath",
+      target: daemonSocket,
+      required: true,
+    }];
+  },
+  ({ profile }) => {
+    const gatewayEndpoint = browserGatewayEndpoint(profile.daemon?.browserGateway);
+    const gatewayHealth = browserGatewayHealthUrl(gatewayEndpoint);
+    if (!gatewayHealth) return [];
+    return [{
+      name: RUNTIME_READINESS_CHECKS.daemonBrowserGateway,
+      type: RUNTIME_READINESS_CHECK_TYPES.httpHealth,
+      source: "daemon.browserGateway",
+      target: gatewayHealth,
+      endpoint: sanitizedReadinessUrl(gatewayEndpoint),
+      responseSchema: RUNTIME_READINESS_HEALTH_SCHEMAS.browserGateway,
+      required: true,
+    }];
+  },
+  ({ profile }) => PRESENTATION_READINESS_TARGETS.flatMap((descriptor) => {
+    const target = sanitizedReadinessUrl(pathValue(profile, descriptor.targetPath));
+    if (!target) return [];
+    return [{
+      name: descriptor.checkName,
+      type: descriptor.type,
+      source: descriptor.source,
+      target,
+      required: true,
+    }];
+  }),
+  ({ profile }) => {
+    const topology = projectRuntimeTopologySummary(profile.orchestration?.topology);
+    if (!topology || Object.keys(topology).length === 0) return [];
+    return [{
+      name: RUNTIME_READINESS_CHECKS.orchestrationTopology,
+      type: RUNTIME_READINESS_CHECK_TYPES.orchestrationTopology,
+      source: "orchestration.topology",
+      required: true,
+      topology,
+    }];
+  },
+]);
+
+function profileReadinessChecks(context) {
+  return PROFILE_READINESS_CHECK_BUILDERS.flatMap((builder) => builder(context));
 }
 
 export function buildRuntimeReadinessPlan(profile = resolveRuntimeProfile(), options = {}) {
@@ -763,84 +1114,19 @@ export function buildRuntimeReadinessPlan(profile = resolveRuntimeProfile(), opt
   const composeServiceNames = uniqueStrings(
     serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
   );
-  const composeEnabled = composeArgs.length > 0 && composeServiceNames.length > 0;
+  const compose = runtimeComposeReadiness(composeArgs, composeServiceNames);
+  const composeEnabled = Boolean(compose);
+  const env = renderRuntimeEnv(profile);
   const checks = serviceNames.map((serviceName) =>
     serviceReadinessCheck(config, profile, serviceName, composeEnabled),
   );
-  const env = renderRuntimeEnv(profile);
-  const daemonSocket = env.KIRAKIRA_DAEMON_SOCKET;
-  if (
-    pathValue(profile, "daemon.socketPath") !== undefined
-    && typeof daemonSocket === "string"
-    && daemonSocket.length > 0
-  ) {
-    checks.push({
-      name: "daemon:socket",
-      type: "socket",
-      source: "daemon.socketPath",
-      target: daemonSocket,
-      required: true,
-    });
-  }
-
-  const gatewayEndpoint = browserGatewayEndpoint(profile.daemon?.browserGateway);
-  const gatewayHealth = browserGatewayHealthUrl(gatewayEndpoint);
-  if (gatewayHealth) {
-    checks.push({
-      name: "daemon:browser-gateway",
-      type: "http-health",
-      source: "daemon.browserGateway",
-      target: gatewayHealth,
-      endpoint: sanitizedReadinessUrl(gatewayEndpoint),
-      required: true,
-    });
-  }
-
-  const webUrl = sanitizedReadinessUrl(profile.presentation?.web?.url);
-  if (webUrl) {
-    checks.push({
-      name: "presentation:web",
-      type: "http",
-      source: "presentation.web.url",
-      target: webUrl,
-      required: true,
-    });
-  }
-
-  const desktopUrl = sanitizedReadinessUrl(profile.presentation?.desktop?.rendererUrl);
-  if (desktopUrl) {
-    checks.push({
-      name: "presentation:desktop",
-      type: "http",
-      source: "presentation.desktop.rendererUrl",
-      target: desktopUrl,
-      required: true,
-    });
-  }
-
-  const topology = publicTopologySummary(profile.orchestration?.topology);
-  if (topology && Object.keys(topology).length > 0) {
-    checks.push({
-      name: "orchestration:topology",
-      type: "orchestration-topology",
-      source: "orchestration.topology",
-      required: true,
-      topology,
-    });
-  }
+  checks.push(...profileReadinessChecks({ config, profile, env }));
 
   return {
     schemaVersion: 1,
     profile: profile.name,
     mode: profile.mode,
-    compose: composeEnabled
-      ? {
-          command: "docker",
-          args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
-          services: composeServiceNames,
-          wait: "running|healthy",
-        }
-      : undefined,
+    compose,
     checks,
   };
 }

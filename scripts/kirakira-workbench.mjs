@@ -11,8 +11,11 @@ import {
   loadRuntimeProfiles,
   renderComposeArgs,
   renderRuntimeEnv,
+  runtimeSurfaceReadinessCheckNames,
+  selectRuntimeReadinessPlan,
   runtimeProfileEnv,
   resolveRuntimeProfile,
+  uniqueRuntimeReadinessCheckNames,
 } from "./runtime-profile.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,6 +35,8 @@ const DEFAULT_SMOKE_STEP_OVERRIDES = [
     },
   },
 ];
+
+export const readinessPlanForCheckNames = selectRuntimeReadinessPlan;
 
 function pnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -251,29 +256,13 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
   };
 }
 
-function uniqueCheckNames(checks) {
-  return [...new Set(checks.filter((check) => typeof check === "string" && check.length > 0))];
-}
-
-function readinessHasCheck(readiness, checkName) {
-  return (readiness.checks ?? []).some((check) => check.name === checkName);
-}
-
 function derivedSmokeChecks(plan) {
   const checks = [];
   for (const step of plan.steps) {
     checks.push(...(step.waitFor ?? []));
   }
-  const presentationCheck = `presentation:${plan.surface}`;
-  if (readinessHasCheck(plan.readiness, presentationCheck)) {
-    checks.push(presentationCheck);
-  }
-  if (plan.surface === "daemon") {
-    for (const check of ["daemon:socket", "daemon:browser-gateway"]) {
-      if (readinessHasCheck(plan.readiness, check)) checks.push(check);
-    }
-  }
-  return uniqueCheckNames(checks);
+  checks.push(...runtimeSurfaceReadinessCheckNames(plan.readiness, plan.surface));
+  return uniqueRuntimeReadinessCheckNames(checks);
 }
 
 function resolveSmokeChecks(profile, plan, options = {}) {
@@ -285,7 +274,7 @@ function resolveSmokeChecks(profile, plan, options = {}) {
     throw new Error(`Workbench smoke surface "${plan.surface}" has no readiness checks`);
   }
   readinessPlanForCheckNames(plan.readiness, checks);
-  return uniqueCheckNames(checks);
+  return uniqueRuntimeReadinessCheckNames(checks);
 }
 
 function resolveSmokeStepOverrides(plan) {
@@ -496,20 +485,6 @@ export class WorkbenchProcessSupervisor {
       await Promise.race([closed, this.#sleep(250)]);
     }
   }
-}
-
-export function readinessPlanForCheckNames(readiness, checkNames) {
-  const wanted = new Set(checkNames ?? []);
-  const checks = (readiness.checks ?? []).filter((check) => wanted.has(check.name));
-  const found = new Set(checks.map((check) => check.name));
-  const missing = [...wanted].filter((name) => !found.has(name));
-  if (missing.length > 0) {
-    throw new Error(`Readiness checks not found: ${missing.join(", ")}`);
-  }
-  return {
-    ...readiness,
-    checks,
-  };
 }
 
 function reportReady(report) {

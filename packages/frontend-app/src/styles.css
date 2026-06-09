@@ -212,6 +212,22 @@ a:focus-visible {
   background: var(--kk-amber);
 }
 
+.kk-dot-active {
+  background: var(--kk-cyan);
+}
+
+.kk-dot-success {
+  background: var(--kk-green);
+}
+
+.kk-dot-danger {
+  background: var(--kk-red);
+}
+
+.kk-dot-neutral {
+  background: var(--kk-border-strong);
+}
+
 .kk-dot-failed {
   background: var(--kk-red);
 }
@@ -1621,6 +1637,221 @@ a:focus-visible {
 
 .kk-rail-section {
   box-shadow: none;
+}
+
+.kk-system-inspector {
+  display: grid;
+  gap: 10px;
+}
+
+.kk-system-status {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--kk-border);
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.kk-system-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.kk-system-tab {
+  min-width: 0;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 5px 7px;
+  color: var(--kk-text);
+  background: var(--kk-surface);
+  cursor: pointer;
+}
+
+.kk-system-tab span,
+.kk-system-tab small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-system-tab span {
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.kk-system-tab small {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+}
+
+.kk-system-tab-active {
+  border-color: var(--kk-border-strong);
+  background: var(--kk-surface-muted);
+}
+
+.kk-system-summary {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.kk-system-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.kk-system-metric {
+  min-width: 0;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-system-metric dt,
+.kk-system-metric dd {
+  margin: 0;
+}
+
+.kk-system-metric dt {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+}
+
+.kk-system-metric dd {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--kk-ink);
+  font-weight: 750;
+}
+
+.kk-system-rows,
+.kk-system-mcp-list,
+.kk-system-tool-list {
+  display: grid;
+  gap: 7px;
+}
+
+.kk-system-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 8px;
+  color: var(--kk-text);
+  background: var(--kk-surface);
+  text-align: left;
+  text-decoration: none;
+}
+
+button.kk-system-row {
+  cursor: pointer;
+}
+
+button.kk-system-row:hover,
+a.kk-system-row:hover,
+.kk-system-row-active {
+  border-color: var(--kk-border-strong);
+  background: var(--kk-surface-muted);
+}
+
+.kk-system-row > span:nth-child(2),
+.kk-system-mcp-server header > span:nth-child(2) {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.kk-system-row strong,
+.kk-system-row small,
+.kk-system-mcp-server strong,
+.kk-system-mcp-server small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-system-row strong,
+.kk-system-mcp-server strong {
+  color: var(--kk-ink);
+  font-size: 0.82rem;
+}
+
+.kk-system-row small,
+.kk-system-row em,
+.kk-system-mcp-server small,
+.kk-system-mcp-server em,
+.kk-system-mcp-server p {
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.kk-system-mcp-server {
+  display: grid;
+  gap: 7px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfc;
+}
+
+.kk-system-mcp-server header {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kk-system-mcp-server p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.kk-system-success,
+.kk-system-status-success {
+  border-color: rgb(22 131 90 / 35%);
+}
+
+.kk-system-active,
+.kk-system-status-active {
+  border-color: rgb(11 131 165 / 35%);
+}
+
+.kk-system-warning,
+.kk-system-status-warning {
+  border-color: rgb(163 95 0 / 38%);
+}
+
+.kk-system-danger,
+.kk-system-status-danger {
+  border-color: rgb(183 53 53 / 40%);
+}
+
+.kk-system-error {
+  border-color: rgb(183 53 53 / 38%);
 }
 
 .kk-graph {

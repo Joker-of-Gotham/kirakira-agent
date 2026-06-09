@@ -6,6 +6,7 @@ import {
   buildMemoryStackPlan,
   buildRuntimeProfileProjection,
   buildRuntimeReadinessPlan,
+  buildRuntimeServiceProjection,
   expandMcpServerRefs,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
@@ -139,6 +140,45 @@ describe("runtime profile rendering", () => {
     expect(projection.fragments.mcpConfig).toEqual(buildMcpConfigPlan(profile, { config }));
     expect(projection.fragments.mcpConfig.config).toEqual(renderMcpConfig(profile));
     expect(projection.fragments.memoryStack).toEqual(buildMemoryStackPlan(profile, { config }));
+    expect(projection.fragments.readiness).toEqual(buildRuntimeReadinessPlan(profile, { config }));
+    expect(projection.services).toEqual(buildRuntimeServiceProjection(profile, { config }));
+    expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
+      composeService: "postgres",
+      sources: ["services", "readiness", "memory-stack"],
+      endpoint: {
+        env: ["DATABASE_URL"],
+        target: "postgres://postgres:5432/kirakira",
+      },
+      readiness: {
+        name: "service:postgres",
+        type: "compose-service",
+      },
+      memoryStack: {
+        enabled: true,
+        env: ["DATABASE_URL"],
+      },
+    });
+    expect(projection.services.find((service) => service.name === "kirakirad")).toMatchObject({
+      composeService: "kirakirad",
+      sources: ["services", "readiness"],
+      readiness: {
+        name: "service:kirakirad",
+        type: "compose-service",
+      },
+    });
+    expect(projection.mcp).toMatchObject({
+      roots: {
+        workspaceRoot: "/workspace",
+        appRoot: "/app",
+      },
+      servers: expect.arrayContaining([
+        expect.objectContaining({
+          name: "filesystem-core",
+          command: "npx",
+          args: ["-y", "@modelcontextprotocol/server-filesystem", "/workspace"],
+        }),
+      ]),
+    });
     expect(projection.fragments.memoryStack.compose?.args).toEqual([
       "compose",
       "-f",
@@ -707,6 +747,19 @@ describe("runtime profile rendering", () => {
     const projection = JSON.parse(projectionResult.stdout);
 
     expect(projectionResult.status).toBe(0);
+    expect(projection.fragments.readiness.compose.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.test.yml",
+      "up",
+      "-d",
+      "--wait",
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+    ]);
     expect(projection.fragments.memoryStack.compose.args).toEqual([
       "compose",
       "-f",
@@ -720,6 +773,17 @@ describe("runtime profile rendering", () => {
       "neo4j",
       "minio",
     ]);
+    expect(projection.services.find((service) => service.name === "postgres")).toMatchObject({
+      composeService: "postgres",
+      readiness: {
+        type: "compose-service",
+      },
+      memoryStack: {
+        enabled: true,
+        env: ["DATABASE_URL"],
+      },
+    });
+    expect(projection.mcp.config.mcpServers["filesystem-core"].args.at(-1)).toBe(".");
     expect(JSON.stringify(projection)).not.toContain(".mcp.json");
 
     const readinessResult = spawnSync(

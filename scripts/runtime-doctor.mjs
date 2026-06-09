@@ -7,6 +7,10 @@ import { pathToFileURL } from "node:url";
 import {
   buildRuntimeReadinessPlan,
   loadRuntimeProfiles,
+  RUNTIME_READINESS_CHECK_TYPES,
+  RUNTIME_READINESS_HEALTH_SCHEMAS,
+  runtimeReadinessHealthSchema,
+  runtimeTopologyIssues,
   resolveRuntimeProfile,
 } from "./runtime-profile.mjs";
 
@@ -64,9 +68,12 @@ function isRuntimeBrowserGatewayHealth(value) {
     && typeof value.tokenRequired === "boolean";
 }
 
-const ORCHESTRATION_LANE_NAMES = new Set(["foreground", "queued", "background", "delegated"]);
-const ORCHESTRATION_MODES = new Set(["tool", "supervisor", "swarm"]);
-const ORCHESTRATION_CONTEXT_MODES = new Set(["isolated", "filtered", "inherit"]);
+const HTTP_HEALTH_RESPONSE_CONTRACTS = Object.freeze({
+  [RUNTIME_READINESS_HEALTH_SCHEMAS.browserGateway]: Object.freeze({
+    validate: isRuntimeBrowserGatewayHealth,
+    invalidDetail: "Runtime gateway health response is invalid",
+  }),
+});
 
 function hostReachableFromProfile(plan, url) {
   if (plan.mode !== "container") return true;
@@ -98,10 +105,11 @@ async function defaultHttpProbe(url, timeoutMs, fetcher = globalThis.fetch, cont
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
-  if (context.check?.type === "http-health" && context.check?.name === "daemon:browser-gateway") {
+  const healthContract = HTTP_HEALTH_RESPONSE_CONTRACTS[runtimeReadinessHealthSchema(context.check)];
+  if (healthContract) {
     const payload = await response.json();
-    if (!isRuntimeBrowserGatewayHealth(payload)) {
-      throw new Error("Runtime gateway health response is invalid");
+    if (!healthContract.validate(payload)) {
+      throw new Error(healthContract.invalidDetail);
     }
   }
 }
@@ -210,75 +218,28 @@ async function probeServiceCheck(plan, check, options) {
   }
 }
 
-function topologyIssues(topology) {
-  const issues = [];
-  if (!isRecord(topology)) return ["Topology summary is missing"];
-  const lanes = isRecord(topology.lanes) ? topology.lanes : {};
-  for (const [lane, value] of Object.entries(lanes)) {
-    if (!ORCHESTRATION_LANE_NAMES.has(lane)) {
-      issues.push(`Unknown lane ${lane}`);
-      continue;
-    }
-    if (
-      isRecord(value) &&
-      value.capacity !== undefined &&
-      (!Number.isInteger(value.capacity) || value.capacity < 0)
-    ) {
-      issues.push(`Lane ${lane} capacity must be a non-negative integer`);
-    }
-  }
-  if (topology.handoffMode !== undefined && !ORCHESTRATION_MODES.has(topology.handoffMode)) {
-    issues.push(`Unknown handoff mode ${topology.handoffMode}`);
-  }
-  const roles = Array.isArray(topology.roles) ? topology.roles.filter(isRecord) : [];
-  const roleIds = new Set();
-  for (const role of roles) {
-    if (typeof role.id !== "string" || role.id.length === 0) {
-      issues.push("Role id must be a non-empty string");
-      continue;
-    }
-    if (roleIds.has(role.id)) {
-      issues.push(`Duplicate role ${role.id}`);
-    }
-    roleIds.add(role.id);
-    if (role.lane !== undefined && !ORCHESTRATION_LANE_NAMES.has(role.lane)) {
-      issues.push(`Role ${role.id} references unknown lane ${role.lane}`);
-    }
-    if (role.context !== undefined && !ORCHESTRATION_CONTEXT_MODES.has(role.context)) {
-      issues.push(`Role ${role.id} has invalid context ${role.context}`);
-    }
-  }
-  if (
-    typeof topology.defaultRole === "string" &&
-    roles.length > 0 &&
-    !roleIds.has(topology.defaultRole)
-  ) {
-    issues.push(`Default role ${topology.defaultRole} is not declared`);
-  }
-  const handoffs = Array.isArray(topology.handoffs) ? topology.handoffs.filter(isRecord) : [];
-  for (const handoff of handoffs) {
-    if (typeof handoff.from !== "string" || !roleIds.has(handoff.from)) {
-      issues.push(`Handoff references unknown source role ${String(handoff.from)}`);
-    }
-    if (typeof handoff.to !== "string" || !roleIds.has(handoff.to)) {
-      issues.push(`Handoff references unknown target role ${String(handoff.to)}`);
-    }
-    if (handoff.mode !== undefined && !ORCHESTRATION_MODES.has(handoff.mode)) {
-      issues.push(`Handoff ${String(handoff.from)} -> ${String(handoff.to)} has invalid mode ${handoff.mode}`);
-    }
-  }
-  return issues;
-}
-
-async function probeTopologyCheck(check, options) {
+async function probeTopologyCheck(_plan, check, options) {
   const start = performance.now();
   if (options.probe === false) {
     return resultFor(check, "skipped", start, "Live probes disabled");
   }
-  const issues = topologyIssues(check.topology);
+  const issues = runtimeTopologyIssues(check.topology);
   if (issues.length === 0) return resultFor(check, "ok", start);
   return resultFor(check, statusForFailure(check), start, issues.join("; "));
 }
+
+async function probeUnknownCheck(_plan, check) {
+  return resultFor(check, statusForFailure(check), performance.now(), "Unknown check type");
+}
+
+const READINESS_PROBE_BY_TYPE = Object.freeze({
+  [RUNTIME_READINESS_CHECK_TYPES.http]: probeHttpCheck,
+  [RUNTIME_READINESS_CHECK_TYPES.httpHealth]: probeHttpCheck,
+  [RUNTIME_READINESS_CHECK_TYPES.socket]: probeSocketCheck,
+  [RUNTIME_READINESS_CHECK_TYPES.composeService]: probeServiceCheck,
+  [RUNTIME_READINESS_CHECK_TYPES.externalService]: probeServiceCheck,
+  [RUNTIME_READINESS_CHECK_TYPES.orchestrationTopology]: probeTopologyCheck,
+});
 
 export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
   const started = performance.now();
@@ -291,23 +252,8 @@ export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
   const checks = [];
   for (const check of plan.checks ?? []) {
     if (!isRecord(check)) continue;
-    if (check.type === "http" || check.type === "http-health") {
-      checks.push(await probeHttpCheck(plan, check, normalizedOptions));
-      continue;
-    }
-    if (check.type === "socket") {
-      checks.push(await probeSocketCheck(plan, check, normalizedOptions));
-      continue;
-    }
-    if (check.type === "compose-service" || check.type === "external-service") {
-      checks.push(await probeServiceCheck(plan, check, normalizedOptions));
-      continue;
-    }
-    if (check.type === "orchestration-topology") {
-      checks.push(await probeTopologyCheck(check, normalizedOptions));
-      continue;
-    }
-    checks.push(resultFor(check, statusForFailure(check), performance.now(), "Unknown check type"));
+    const probe = READINESS_PROBE_BY_TYPE[check.type] ?? probeUnknownCheck;
+    checks.push(await probe(plan, check, normalizedOptions));
   }
   const failed = checks.filter((check) => check.status === "fail").length;
   const warned = checks.filter((check) => check.status === "warn").length;

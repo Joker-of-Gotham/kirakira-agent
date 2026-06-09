@@ -24,11 +24,55 @@ export interface RuntimeProjectionMcpConfigPlan {
   };
 }
 
+export interface RuntimeProjectionMcpServerPlan {
+  name: string;
+  command: string;
+  args?: string[];
+  env?: Record<string, string>;
+}
+
+export interface RuntimeProjectionMcpPlan {
+  roots: RuntimeProjectionMcpConfigPlan["roots"];
+  servers: RuntimeProjectionMcpServerPlan[];
+  config: RuntimeProjectionMcpConfigPlan["config"];
+}
+
+export interface RuntimeProjectionReadinessCheck {
+  name: string;
+  type: string;
+  source: string;
+  required: boolean;
+  service?: string;
+  composeService?: string;
+  target?: string;
+  endpoint?: string;
+  urlEnv?: string;
+  topology?: unknown;
+}
+
+export interface RuntimeProjectionReadinessPlan {
+  schemaVersion: 1;
+  profile: string;
+  mode: ResolvedRuntimeProfileState["mode"];
+  source: "resolved-runtime-state.readiness";
+  compose?: {
+    command: "docker";
+    args: string[];
+    services: string[];
+    wait: "running|healthy";
+  };
+  checks: RuntimeProjectionReadinessCheck[];
+}
+
 export interface RuntimeProjectionMemoryStackService {
   name: string;
   composeService?: string;
+  source?: "memory.services";
   required: boolean;
   urlEnv?: string;
+  env?: string[];
+  target?: string;
+  primaryPort?: string;
 }
 
 export interface RuntimeProjectionMemoryStackPlan {
@@ -50,11 +94,35 @@ export interface RuntimeProjectionMemoryStackPlan {
   }>;
 }
 
+export interface RuntimeProjectionServicePlan {
+  name: string;
+  composeService?: string;
+  required: boolean;
+  sources?: string[];
+  endpoint?: {
+    urlEnv?: string;
+    target?: string;
+  };
+  readiness?: Omit<RuntimeProjectionReadinessCheck, "service" | "composeService">;
+  memoryStack?: {
+    enabled: boolean;
+    source: "memory.services";
+    required: boolean;
+    urlEnv?: string;
+    env?: string[];
+    target?: string;
+    primaryPort?: string;
+  };
+}
+
 export interface RuntimeProfileProjection {
   schemaVersion: 1;
   profile: string;
   mode: ResolvedRuntimeProfileState["mode"];
+  services: RuntimeProjectionServicePlan[];
+  mcp: RuntimeProjectionMcpPlan;
   fragments: {
+    readiness: RuntimeProjectionReadinessPlan;
     mcpConfig: RuntimeProjectionMcpConfigPlan;
     memoryStack: RuntimeProjectionMemoryStackPlan;
   };
@@ -75,6 +143,10 @@ function runtimeComposeArgs(profile: ResolvedRuntimeProfileState): string[] {
   return args;
 }
 
+function serviceStateMap(profile: ResolvedRuntimeProfileState): Map<string, ResolvedRuntimeServiceState> {
+  return new Map((profile.services ?? []).map((service) => [service.name, service]));
+}
+
 function mcpConfigServer(server: ResolvedRuntimeMcpServerState) {
   return {
     command: server.command,
@@ -93,6 +165,79 @@ function memoryEnvNames(services: ResolvedRuntimeServiceState[]): Array<{ name: 
   return uniqueStrings(services.map((service) => service.url_env))
     .sort()
     .map((name) => ({ name, generated: false }));
+}
+
+function sanitizedUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function browserGatewayHealthUrl(endpoint: string | undefined): string | undefined {
+  if (!endpoint) return undefined;
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") return undefined;
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = "/healthz";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function readinessServiceNames(profile: ResolvedRuntimeProfileState): string[] {
+  return uniqueStrings([
+    ...(profile.services ?? []).map((service) => service.name),
+    ...(profile.runtime_services ?? []),
+    ...(profile.workbench_infra_services ?? []),
+  ]);
+}
+
+function composeServiceName(
+  serviceName: string,
+  servicesByName: Map<string, ResolvedRuntimeServiceState>,
+): string {
+  return servicesByName.get(serviceName)?.compose_service ?? serviceName;
+}
+
+function serviceReadinessCheck(
+  serviceName: string,
+  composeEnabled: boolean,
+  servicesByName: Map<string, ResolvedRuntimeServiceState>,
+): RuntimeProjectionReadinessCheck {
+  const service = servicesByName.get(serviceName);
+  return {
+    name: `service:${serviceName}`,
+    type: composeEnabled ? "compose-service" : "external-service",
+    service: serviceName,
+    composeService: composeServiceName(serviceName, servicesByName),
+    source: "services",
+    required: service?.required !== false,
+    ...(service?.url_env !== undefined ? { urlEnv: service.url_env } : {}),
+  };
+}
+
+function topologySummary(profile: ResolvedRuntimeProfileState): unknown | undefined {
+  const topology = profile.orchestration;
+  if (!topology) return undefined;
+  return {
+    ...(topology.handoff_mode !== undefined ? { handoffMode: topology.handoff_mode } : {}),
+    ...(topology.default_role !== undefined ? { defaultRole: topology.default_role } : {}),
+    ...(topology.lanes !== undefined ? { lanes: topology.lanes } : {}),
+    ...(topology.roles !== undefined ? { roles: topology.roles } : {}),
+    ...(topology.handoffs !== undefined ? { handoffs: topology.handoffs } : {}),
+  };
 }
 
 export function selectResolvedRuntimeProfile(
@@ -134,6 +279,99 @@ export function buildResolvedMcpConfigPlan(
   };
 }
 
+export function buildResolvedRuntimeMcpProjection(
+  profile: ResolvedRuntimeProfileState,
+): RuntimeProjectionMcpPlan {
+  const configPlan = buildResolvedMcpConfigPlan(profile);
+  return {
+    roots: configPlan.roots,
+    servers: (profile.mcp_servers ?? []).map((server) => ({
+      name: server.name,
+      ...mcpConfigServer(server),
+    })),
+    config: configPlan.config,
+  };
+}
+
+export function buildResolvedRuntimeReadinessPlan(
+  profile: ResolvedRuntimeProfileState,
+): RuntimeProjectionReadinessPlan {
+  const servicesByName = serviceStateMap(profile);
+  const serviceNames = readinessServiceNames(profile);
+  const composeArgs = runtimeComposeArgs(profile);
+  const composeServices = uniqueStrings(
+    serviceNames.map((serviceName) => composeServiceName(serviceName, servicesByName)),
+  );
+  const composeEnabled = composeArgs.length > 0 && composeServices.length > 0;
+  const checks = serviceNames.map((serviceName) =>
+    serviceReadinessCheck(serviceName, composeEnabled, servicesByName),
+  );
+
+  const browserGatewayEndpoint = sanitizedUrl(profile.browser_gateway?.endpoint);
+  const browserGatewayHealth = browserGatewayHealthUrl(browserGatewayEndpoint);
+  if (browserGatewayHealth) {
+    checks.push({
+      name: "daemon:browser-gateway",
+      type: "http-health",
+      source: "browser_gateway",
+      target: browserGatewayHealth,
+      ...(browserGatewayEndpoint ? { endpoint: browserGatewayEndpoint } : {}),
+      required: true,
+    });
+  }
+
+  const webUrl = sanitizedUrl(profile.presentation?.web?.url);
+  if (webUrl) {
+    checks.push({
+      name: "presentation:web",
+      type: "http",
+      source: "presentation.web.url",
+      target: webUrl,
+      required: true,
+    });
+  }
+
+  const desktopUrl = sanitizedUrl(profile.presentation?.desktop?.renderer_url);
+  if (desktopUrl) {
+    checks.push({
+      name: "presentation:desktop",
+      type: "http",
+      source: "presentation.desktop.renderer_url",
+      target: desktopUrl,
+      required: true,
+    });
+  }
+
+  const topology = topologySummary(profile);
+  if (topology && typeof topology === "object" && Object.keys(topology).length > 0) {
+    checks.push({
+      name: "orchestration:topology",
+      type: "orchestration-topology",
+      source: "orchestration",
+      required: true,
+      topology,
+    });
+  }
+
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    source: "resolved-runtime-state.readiness",
+    ...(composeEnabled
+      ? {
+          compose: {
+            command: "docker",
+            args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServices],
+            services: composeServices,
+            wait: "running|healthy",
+          },
+        }
+      : {}),
+    checks,
+  };
+}
+
 export function buildResolvedMemoryStackPlan(
   profile: ResolvedRuntimeProfileState,
 ): RuntimeProjectionMemoryStackPlan {
@@ -150,8 +388,10 @@ export function buildResolvedMemoryStackPlan(
     services: services.map((service) => ({
       name: service.name,
       ...(service.compose_service !== undefined ? { composeService: service.compose_service } : {}),
+      source: "memory.services",
       required: service.required !== false,
       ...(service.url_env !== undefined ? { urlEnv: service.url_env } : {}),
+      ...(service.url_env !== undefined ? { env: [service.url_env] } : {}),
     })),
     ...(composeEnabled
       ? {
@@ -167,18 +407,125 @@ export function buildResolvedMemoryStackPlan(
   };
 }
 
+function checksByService(checks: RuntimeProjectionReadinessCheck[]): Map<string, RuntimeProjectionReadinessCheck> {
+  return new Map(
+    checks
+      .filter((check) => check.service !== undefined)
+      .map((check) => [check.service as string, check]),
+  );
+}
+
+function memoryServicesByName(
+  services: RuntimeProjectionMemoryStackService[],
+): Map<string, RuntimeProjectionMemoryStackService> {
+  return new Map(services.map((service) => [service.name, service]));
+}
+
+function serviceEndpointProjection(
+  service: ResolvedRuntimeServiceState | undefined,
+): RuntimeProjectionServicePlan["endpoint"] | undefined {
+  if (!service?.url_env) return undefined;
+  return { urlEnv: service.url_env };
+}
+
+function serviceReadinessProjection(
+  check: RuntimeProjectionReadinessCheck | undefined,
+): RuntimeProjectionServicePlan["readiness"] | undefined {
+  if (!check) return undefined;
+  return {
+    name: check.name,
+    type: check.type,
+    source: check.source,
+    required: check.required,
+    ...(check.target !== undefined ? { target: check.target } : {}),
+    ...(check.endpoint !== undefined ? { endpoint: check.endpoint } : {}),
+    ...(check.urlEnv !== undefined ? { urlEnv: check.urlEnv } : {}),
+    ...(check.topology !== undefined ? { topology: check.topology } : {}),
+  };
+}
+
+function serviceMemoryStackProjection(
+  service: RuntimeProjectionMemoryStackService | undefined,
+  memoryStackPlan: RuntimeProjectionMemoryStackPlan,
+): RuntimeProjectionServicePlan["memoryStack"] | undefined {
+  if (!service) return undefined;
+  return {
+    enabled: memoryStackPlan.enabled,
+    source: service.source ?? "memory.services",
+    required: service.required,
+    ...(service.urlEnv !== undefined ? { urlEnv: service.urlEnv } : {}),
+    ...(service.env !== undefined ? { env: service.env } : {}),
+    ...(service.target !== undefined ? { target: service.target } : {}),
+    ...(service.primaryPort !== undefined ? { primaryPort: service.primaryPort } : {}),
+  };
+}
+
+export function buildResolvedRuntimeServiceProjection(
+  profile: ResolvedRuntimeProfileState,
+  options: {
+    readinessPlan?: RuntimeProjectionReadinessPlan;
+    memoryStackPlan?: RuntimeProjectionMemoryStackPlan;
+  } = {},
+): RuntimeProjectionServicePlan[] {
+  const servicesByName = serviceStateMap(profile);
+  const readinessPlan = options.readinessPlan ?? buildResolvedRuntimeReadinessPlan(profile);
+  const memoryStackPlan = options.memoryStackPlan ?? buildResolvedMemoryStackPlan(profile);
+  const readinessByService = checksByService(readinessPlan.checks);
+  const memoryByService = memoryServicesByName(memoryStackPlan.services);
+  const serviceNames = uniqueStrings([
+    ...servicesByName.keys(),
+    ...readinessByService.keys(),
+    ...memoryByService.keys(),
+  ]);
+
+  return serviceNames.map((serviceName) => {
+    const service = servicesByName.get(serviceName);
+    const readiness = serviceReadinessProjection(readinessByService.get(serviceName));
+    const memoryStack = serviceMemoryStackProjection(memoryByService.get(serviceName), memoryStackPlan);
+    const endpoint = serviceEndpointProjection(service);
+    const sources = uniqueStrings([
+      endpoint ? "services" : undefined,
+      readiness ? "readiness" : undefined,
+      memoryStack ? "memory-stack" : undefined,
+    ]);
+    const required = readiness?.required ?? memoryStack?.required ?? (service?.required !== false);
+    return {
+      name: serviceName,
+      composeService: composeServiceName(serviceName, servicesByName),
+      required,
+      ...(sources.length > 0 ? { sources } : {}),
+      ...(endpoint ? { endpoint } : {}),
+      ...(readiness ? { readiness } : {}),
+      ...(memoryStack ? { memoryStack } : {}),
+    };
+  });
+}
+
 export function buildResolvedRuntimeProfileProjection(
   runtimeState: ResolvedRuntimeState,
   profileName?: string,
 ): RuntimeProfileProjection {
   const profile = selectResolvedRuntimeProfile(runtimeState, profileName);
+  const readiness = buildResolvedRuntimeReadinessPlan(profile);
+  const mcpConfig = buildResolvedMcpConfigPlan(profile);
+  const memoryStack = buildResolvedMemoryStackPlan(profile);
   return {
     schemaVersion: 1,
     profile: profile.name,
     mode: profile.mode,
+    services: buildResolvedRuntimeServiceProjection(profile, { readinessPlan: readiness, memoryStackPlan: memoryStack }),
+    mcp: {
+      roots: mcpConfig.roots,
+      servers: (profile.mcp_servers ?? []).map((server) => ({
+        name: server.name,
+        ...mcpConfigServer(server),
+      })),
+      config: mcpConfig.config,
+    },
     fragments: {
-      mcpConfig: buildResolvedMcpConfigPlan(profile),
-      memoryStack: buildResolvedMemoryStackPlan(profile),
+      readiness,
+      mcpConfig,
+      memoryStack,
     },
   };
 }
