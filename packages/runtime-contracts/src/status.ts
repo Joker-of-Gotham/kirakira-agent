@@ -1,5 +1,9 @@
 import type { RuntimeEndpointParts } from "./endpoint.js";
 import type { RunEventKind } from "./events.js";
+import {
+  DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
+  RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
+} from "./artifact-content.js";
 
 export type RuntimeHealthState = "healthy" | "unavailable" | "disabled";
 export type RuntimeCapabilityState = "enabled" | "available" | "disabled";
@@ -22,6 +26,7 @@ export interface RuntimeCapabilityRecord {
   summary: string;
   eventKinds?: RunEventKind[];
   clientMessageTypes?: string[];
+  limits?: Record<string, string | number | boolean>;
 }
 
 export interface RuntimeManifest {
@@ -139,8 +144,13 @@ const DEFAULT_CAPABILITIES: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>
   artifacts: {
     id: "artifacts",
     state: "available",
-    summary: "Expose generated artifacts and updates through typed runtime events.",
+    summary: "Expose generated artifact metadata and bounded content previews.",
     eventKinds: ["artifact.created", "artifact.updated"],
+    clientMessageTypes: ["get_artifact"],
+    limits: {
+      defaultPreviewBytes: DEFAULT_RUNTIME_ARTIFACT_CONTENT_MAX_BYTES,
+      hardMaxPreviewBytes: RUNTIME_ARTIFACT_CONTENT_HARD_MAX_BYTES,
+    },
   },
   checkpoints: {
     id: "checkpoints",
@@ -371,6 +381,17 @@ function sanitizeRuntimeCapability(
           ),
         }
       : {}),
+    ...(capability.limits !== undefined
+      ? {
+          limits: Object.fromEntries(
+            Object.entries(capability.limits).filter(([, value]) =>
+              typeof value === "string" ||
+              typeof value === "number" ||
+              typeof value === "boolean",
+            ),
+          ),
+        }
+      : {}),
   };
 }
 
@@ -486,7 +507,14 @@ const isRuntimeCapabilityRecord = (
         value.eventKinds.every((kind) => typeof kind === "string"))) &&
     (value.clientMessageTypes === undefined ||
       (Array.isArray(value.clientMessageTypes) &&
-        value.clientMessageTypes.every((messageType) => typeof messageType === "string")))
+        value.clientMessageTypes.every((messageType) => typeof messageType === "string"))) &&
+    (value.limits === undefined ||
+      (isRecord(value.limits) &&
+        Object.values(value.limits).every((limit) =>
+          typeof limit === "string" ||
+          typeof limit === "number" ||
+          typeof limit === "boolean",
+        )))
   );
 };
 

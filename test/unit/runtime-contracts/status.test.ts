@@ -78,6 +78,9 @@ describe("runtime status contract", () => {
     );
     expect(sanitized.capabilities.subagents.state).toBe("enabled");
     expect(sanitized.capabilities.deep_research.eventKinds).toContain("research.completed");
+    expect(sanitized.capabilities.artifacts.clientMessageTypes).toContain("get_artifact");
+    expect(sanitized.capabilities.artifacts.limits?.defaultPreviewBytes).toBe(65_536);
+    expect(sanitized.capabilities.artifacts.limits?.hardMaxPreviewBytes).toBe(524_288);
     expect(sanitized.security.explicitToolConsentRequired).toBe(true);
     expect(JSON.stringify(sanitized)).not.toContain("secret-token");
     expect(collectKeys(sanitized)).not.toContain("token");

@@ -70,6 +70,9 @@ function daemonCapabilityOverrides(
     memory: {
       state: hasDeepResearchMemory(options) ? "enabled" : "available",
     },
+    artifacts: {
+      state: "enabled",
+    },
     mcp: {
       state: hasMcpRuntime(options) ? "enabled" : "available",
     },

@@ -24,6 +24,10 @@ describe("DaemonLifecycle health", () => {
     expect(health.services.browserGateway.state).toBe("disabled");
     expect(isRuntimeManifest(health.details.manifest)).toBe(true);
     expect(health.details.manifest.capabilities.subagents.state).toBe("available");
+    expect(health.details.manifest.capabilities.artifacts.state).toBe("available");
+    expect(health.details.manifest.capabilities.artifacts.clientMessageTypes).toContain(
+      "get_artifact",
+    );
   });
 
   it("reports configured daemon runtime capabilities in the public manifest", async () => {
@@ -56,6 +60,7 @@ describe("DaemonLifecycle health", () => {
         "\\\\.\\pipe\\kirakira-agent-manifest-test",
       );
       expect(health.details.manifest.capabilities.subagents.state).toBe("disabled");
+      expect(health.details.manifest.capabilities.artifacts.state).toBe("enabled");
       expect(health.details.manifest.capabilities.deep_research.state).toBe("enabled");
       expect(health.details.manifest.capabilities.memory.state).toBe("available");
       expect(JSON.stringify(health)).not.toContain("secret-token");
