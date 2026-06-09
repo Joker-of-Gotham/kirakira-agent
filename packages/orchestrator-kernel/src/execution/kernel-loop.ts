@@ -9,6 +9,8 @@ import type { BackpressureController } from "../scheduler/backpressure.js";
 import type { LaneRouter } from "../scheduler/lane-router.js";
 import type { SuperstepManager } from "./superstep.js";
 import type {
+  LaneCapacities,
+  LaneType,
   ResourceBudgets,
   RunEvent,
   RunPlan,
@@ -17,9 +19,31 @@ import type {
   TaskExecutor,
 } from "../types.js";
 
-function initialScheduler(budgets: ResourceBudgets): SchedulerState {
-  const q = (capacity: number) => ({
-    capacity,
+const DEFAULT_LANE_CAPACITIES: LaneCapacities = {
+  foreground: 4,
+  queued: 16,
+  background: 8,
+  delegated: 8,
+};
+
+type TaskExecutionOutcome =
+  | { status: "completed"; nodeId: string; result: Awaited<ReturnType<TaskExecutor["execute"]>> }
+  | { status: "failed"; nodeId: string; error: string };
+
+function laneCapacity(
+  lane: LaneType,
+  overrides: Partial<LaneCapacities> | undefined,
+): number {
+  const value = overrides?.[lane] ?? DEFAULT_LANE_CAPACITIES[lane];
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function initialScheduler(
+  budgets: ResourceBudgets,
+  capacities?: Partial<LaneCapacities>,
+): SchedulerState {
+  const q = (lane: LaneType) => ({
+    capacity: laneCapacity(lane, capacities),
     active: 0,
     pending: [] as string[],
   });
@@ -28,12 +52,80 @@ function initialScheduler(budgets: ResourceBudgets): SchedulerState {
     runningTasks: new Map(),
     budgets,
     lanes: {
-      foreground: q(4),
-      queued: q(16),
-      background: q(8),
-      delegated: q(8),
+      foreground: q("foreground"),
+      queued: q("queued"),
+      background: q("background"),
+      delegated: q("delegated"),
     },
     backpressure: { isThrottled: false },
+  };
+}
+
+function resetLanePending(scheduler: SchedulerState): void {
+  for (const lane of Object.keys(scheduler.lanes) as LaneType[]) {
+    scheduler.lanes[lane].pending = [];
+  }
+}
+
+function hasLaneCapacity(scheduler: SchedulerState, lane: LaneType): boolean {
+  const state = scheduler.lanes[lane];
+  return state.active < state.capacity;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function taskOutcome(
+  executor: TaskExecutor,
+  nodeId: string,
+  node: Parameters<TaskExecutor["execute"]>[0],
+  lane: LaneType,
+): Promise<TaskExecutionOutcome> {
+  return Promise.resolve()
+    .then(() => executor.execute(node, lane))
+    .then(
+      (result) => ({ status: "completed", nodeId, result }),
+      (error) => ({ status: "failed", nodeId, error: errorMessage(error) }),
+    );
+}
+
+type KernelGraph = ReturnType<PlanNormalizer["normalize"]>;
+
+function incompleteNodes(graph: KernelGraph) {
+  return [...graph.nodes.values()].filter(
+    (n) => n.status !== "completed" && n.status !== "failed" && n.status !== "cancelled",
+  );
+}
+
+function approvalBlockedNodes(graph: KernelGraph) {
+  return incompleteNodes(graph).filter(
+    (n) =>
+      n.status === "pending" &&
+      graph.edges.some(
+        (e) => e.kind === "blocks_on_approval" && e.from === n.id && e.to === n.id,
+      ) &&
+      !n.spec.approvalCleared,
+  );
+}
+
+function stalledEvent(runId: string, graph: KernelGraph): RunEvent | undefined {
+  const pending = incompleteNodes(graph);
+  if (pending.length === 0) return undefined;
+  const blocked = approvalBlockedNodes(graph);
+  if (blocked.length > 0) {
+    return {
+      kind: "run_failed",
+      runId,
+      code: "AWAITING_APPROVAL",
+      message: "Graph blocked on approval",
+    };
+  }
+  return {
+    kind: "run_failed",
+    runId,
+    code: "STALL",
+    message: "No runnable tasks while graph incomplete",
   };
 }
 
@@ -49,6 +141,7 @@ export interface KernelLoopDeps {
   superstep: SuperstepManager;
   drain: DrainController;
   routingContext: RoutingContext;
+  laneCapacities?: Partial<LaneCapacities>;
 }
 
 export class KernelLoop {
@@ -59,7 +152,8 @@ export class KernelLoop {
     let graph = this.deps.normalizer.normalize(plan, runId);
     graph = this.deps.resolver.resolve(graph);
     yield { kind: "graph_normalized", graph };
-    let scheduler = initialScheduler(this.deps.budgetManager.snapshot());
+    let scheduler = initialScheduler(this.deps.budgetManager.snapshot(), this.deps.laneCapacities);
+    const inFlight = new Map<string, Promise<TaskExecutionOutcome>>();
     let terminate = false;
     const kernelState = () => ({
       runId,
@@ -98,7 +192,7 @@ export class KernelLoop {
     };
     while (!terminate) {
       processControl();
-      if (terminate) break;
+      if (terminate && inFlight.size === 0) break;
       graph = this.deps.resolver.resolve(graph);
       scheduler.budgets = this.deps.budgetManager.snapshot();
       this.deps.backpressure.check(scheduler);
@@ -114,65 +208,56 @@ export class KernelLoop {
       const readyNodes = this.deps.resolver
         .getReadyNodes(graph)
         .sort((a, b) => priority(b) - priority(a));
-      const nextNode = readyNodes[0];
-      if (!nextNode) {
-        const pending = [...graph.nodes.values()].filter(
-          (n) => n.status !== "completed" && n.status !== "failed" && n.status !== "cancelled",
-        );
-        if (pending.length === 0) break;
-        const blocked = pending.filter(
-          (n) =>
-            n.status === "pending" &&
-            graph.edges.some(
-              (e) => e.kind === "blocks_on_approval" && e.from === n.id && e.to === n.id,
-            ) &&
-            !n.spec.approvalCleared,
-        );
-        if (blocked.length > 0) {
-          yield {
-            kind: "run_failed",
-            runId,
-            code: "AWAITING_APPROVAL",
-            message: "Graph blocked on approval",
-          };
-          return;
+      scheduler.readyQueue = [];
+      resetLanePending(scheduler);
+
+      for (const node of readyNodes) {
+        const id = node.id;
+        if (inFlight.has(id)) continue;
+        const preferred = this.deps.laneRouter.route(node, this.deps.routingContext);
+        const chosen = this.deps.laneRouter.getAvailableLane(preferred, scheduler.lanes);
+        if (!hasLaneCapacity(scheduler, chosen)) {
+          scheduler.readyQueue.push(id);
+          scheduler.lanes[preferred].pending.push(id);
+          continue;
         }
-        yield {
-          kind: "run_failed",
-          runId,
-          code: "STALL",
-          message: "No runnable tasks while graph incomplete",
-        };
+
+        this.deps.superstep.notifyDispatched(1);
+        const workerId = ulid();
+        graph = this.deps.resolver.markRunning(graph, id, workerId);
+        scheduler.runningTasks.set(id, {
+          nodeId: id,
+          workerId,
+          startedAt: new Date().toISOString(),
+          lane: chosen,
+        });
+        scheduler.lanes[chosen].active += 1;
+        this.deps.superstep.notifyStarted();
+        inFlight.set(id, taskOutcome(this.deps.executor, id, node, chosen));
+        yield { kind: "task_started", nodeId: id, lane: chosen, workerId };
+      }
+
+      if (inFlight.size === 0) {
+        const stalled = stalledEvent(runId, graph);
+        if (!stalled) break;
+        yield stalled;
         return;
       }
-      const id = nextNode.id;
-      const node = nextNode;
-      this.deps.superstep.notifyDispatched(1);
-      const workerId = ulid();
-      const lane = this.deps.laneRouter.route(node, this.deps.routingContext);
-      const chosen = this.deps.laneRouter.getAvailableLane(lane, scheduler.lanes);
-      graph = this.deps.resolver.markRunning(graph, id, workerId);
-      scheduler.runningTasks.set(id, {
-        nodeId: id,
-        workerId,
-        startedAt: new Date().toISOString(),
-        lane: chosen,
-      });
-      scheduler.lanes[chosen].active += 1;
-      this.deps.superstep.notifyStarted();
-      yield { kind: "task_started", nodeId: id, lane: chosen, workerId };
-      try {
-        const result = await this.deps.executor.execute(node, chosen);
-        graph = this.deps.resolver.markCompleted(graph, id, result);
-        yield { kind: "task_completed", nodeId: id, result };
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        graph = this.deps.resolver.markFailed(graph, id, message);
-        yield { kind: "task_failed", nodeId: id, error: message };
-      } finally {
-        scheduler.runningTasks.delete(id);
-        scheduler.lanes[chosen].active = Math.max(0, scheduler.lanes[chosen].active - 1);
-        this.deps.superstep.notifyFinished();
+
+      const outcome = await Promise.race(inFlight.values());
+      inFlight.delete(outcome.nodeId);
+      const running = scheduler.runningTasks.get(outcome.nodeId);
+      if (running) {
+        scheduler.runningTasks.delete(outcome.nodeId);
+        scheduler.lanes[running.lane].active = Math.max(0, scheduler.lanes[running.lane].active - 1);
+      }
+      this.deps.superstep.notifyFinished();
+      if (outcome.status === "completed") {
+        graph = this.deps.resolver.markCompleted(graph, outcome.nodeId, outcome.result);
+        yield { kind: "task_completed", nodeId: outcome.nodeId, result: outcome.result };
+      } else {
+        graph = this.deps.resolver.markFailed(graph, outcome.nodeId, outcome.error);
+        yield { kind: "task_failed", nodeId: outcome.nodeId, error: outcome.error };
       }
       const superstepBoundary = this.deps.superstep.detectBoundary(graph);
       if (superstepBoundary) {

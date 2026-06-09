@@ -17,6 +17,7 @@ import type {
   RuntimeSubagentBridgeRequest,
   RunPlan,
   TaskExecutor,
+  TaskResult,
 } from "../../../packages/orchestrator-kernel/src/index.js";
 
 const context: PlanContext = {
@@ -140,6 +141,57 @@ function parallelPlan(): RunPlan {
       },
     ],
   });
+}
+
+function parallelSubagentPlan(): RunPlan {
+  return basePlan({
+    requiresSubagents: true,
+    steps: [
+      {
+        id: "step-a",
+        kind: "subagent",
+        description: "Inspect contracts",
+        dependsOn: [],
+        canParallelize: true,
+        toolScope: ["repo.read"],
+        subagent: { taskBrief: "Inspect contracts" },
+      },
+      {
+        id: "step-b",
+        kind: "subagent",
+        description: "Inspect runtime",
+        dependsOn: [],
+        canParallelize: true,
+        toolScope: ["repo.read"],
+        subagent: { taskBrief: "Inspect runtime" },
+      },
+    ],
+  });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function sleep(ms: number): Promise<"timeout"> {
+  return new Promise((resolve) => setTimeout(() => resolve("timeout"), ms));
+}
+
+async function nextEventWithin(
+  iterator: AsyncIterator<unknown>,
+  ms = 500,
+): Promise<IteratorResult<unknown>> {
+  const event = await Promise.race([iterator.next(), sleep(ms)]);
+  if (event === "timeout") {
+    throw new Error(`Timed out waiting for kernel event after ${ms}ms`);
+  }
+  return event;
 }
 
 describe("orchestrator task executor", () => {
@@ -340,6 +392,75 @@ describe("orchestrator task executor", () => {
       },
     });
     expect(events.at(-1)).toMatchObject({ kind: "run_completed", runId: "run-1" });
+  });
+
+  it("starts ready parallel subagent tasks before awaiting child completion", async () => {
+    const pending = new Map<string, ReturnType<typeof deferred<TaskResult>>>();
+    const bridgeRequests: RuntimeSubagentBridgeRequest[] = [];
+    const executor = new SubagentTaskExecutor({
+      bridge: {
+        async run(request) {
+          bridgeRequests.push(request);
+          const gate = deferred<TaskResult>();
+          pending.set(request.parentTaskId, gate);
+          return gate.promise;
+        },
+      },
+      getContext: () => ({
+        runId: "run-1",
+        parentWorkerId: "worker-parent",
+        parentConfig: parentConfig(),
+        workspaceRoot: "C:/workspace",
+      }),
+      fallback: fallbackExecutor(),
+    });
+    const loop = new KernelLoop({
+      ...kernelExecutorDeps(executor),
+      laneCapacities: { delegated: 2 },
+    });
+    const iterator = loop.run("run-1", parallelSubagentPlan())[Symbol.asyncIterator]();
+    const events = [];
+
+    while (events.filter((event) =>
+      event.kind === "task_started" && ["step-a", "step-b"].includes(event.nodeId)
+    ).length < 2) {
+      const next = await nextEventWithin(iterator);
+      if (next.done) throw new Error("kernel completed before starting both subagents");
+      events.push(next.value as { kind: string; nodeId?: string });
+    }
+
+    const subagentStarts = events.filter((event) =>
+      event.kind === "task_started" && ["step-a", "step-b"].includes(event.nodeId ?? "")
+    );
+    expect(subagentStarts.map((event) => event.nodeId).sort()).toEqual(["step-a", "step-b"]);
+    expect(
+      events.some((event) =>
+        event.kind === "task_completed" && ["step-a", "step-b"].includes(event.nodeId ?? "")
+      ),
+    ).toBe(false);
+
+    await Promise.resolve();
+    expect(bridgeRequests.map((request) => request.parentTaskId).sort()).toEqual([
+      "step-a",
+      "step-b",
+    ]);
+
+    pending.get("step-a")?.resolve({ output: "a" });
+    pending.get("step-b")?.resolve({ output: "b" });
+    for await (const event of { [Symbol.asyncIterator]: () => iterator }) {
+      events.push(event as { kind: string; nodeId?: string });
+      if ((event as { kind: string }).kind === "run_completed") break;
+    }
+    expect(events).toContainEqual({
+      kind: "task_completed",
+      nodeId: "step-a",
+      result: { output: "a" },
+    });
+    expect(events).toContainEqual({
+      kind: "task_completed",
+      nodeId: "step-b",
+      result: { output: "b" },
+    });
   });
 
   it("saves async checkpoints at superstep boundaries", async () => {

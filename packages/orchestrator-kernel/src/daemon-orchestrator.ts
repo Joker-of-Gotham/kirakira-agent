@@ -28,6 +28,7 @@ import type {
   DurabilityLevel,
   KernelGraphSnapshot,
   KernelState,
+  LaneCapacities,
   LaneType,
   PlanContext,
   RoutingContext,
@@ -84,6 +85,7 @@ export interface OrchestratorKernelOptions {
   checkpointRepository?: CheckpointRepository;
   checkpointDurability?: DurabilityLevel;
   budgets?: Partial<BudgetConfig>;
+  laneCapacities?: Partial<LaneCapacities>;
   routingContext?: Partial<RoutingContext>;
   parentWorkerConfig?: (input: {
     runId: string;
@@ -354,6 +356,7 @@ export class OrchestratorKernel {
         interactive: false,
         ...(this.options.routingContext ?? {}),
       },
+      laneCapacities: this.options.laneCapacities,
     });
   }
 

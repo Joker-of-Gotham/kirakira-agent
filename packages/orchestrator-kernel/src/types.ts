@@ -172,6 +172,8 @@ export interface LaneState {
   delegated: LaneQueue;
 }
 
+export type LaneCapacities = Record<LaneType, number>;
+
 export interface BackpressureState {
   isThrottled: boolean;
   reason?: string;
