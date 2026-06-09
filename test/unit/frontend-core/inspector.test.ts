@@ -114,6 +114,46 @@ describe("frontend-core run inspector projection", () => {
     expect(inspector.selectedFocus?.kind).toBe("run");
   });
 
+  it("surfaces artifact details as selectable focus records", () => {
+    const dashboard = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "artifact.created",
+        {
+          artifactId: "artifact-a",
+          path: "artifacts/report.md",
+          kind: "markdown",
+          title: "Research report",
+          summary: "Compiled research output",
+          metadata: { bytes: 512, reviewed: false, nested: { drop: true } },
+        },
+        1,
+      ),
+    ]);
+
+    const inspector = createRunInspector(dashboard, {
+      selectedFocusId: "artifact:artifact-a",
+    });
+
+    expect(inspector.lanes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: "artifacts", count: 1, activeCount: 1 }),
+      ]),
+    );
+    expect(inspector.selectedFocus).toMatchObject({
+      id: "artifact:artifact-a",
+      kind: "artifact",
+      label: "Research report",
+      phase: "created",
+      summary: "Compiled research output",
+    });
+    expect(inspector.selectedFocus?.details).toEqual(
+      expect.arrayContaining([
+        { label: "Path", value: "artifacts/report.md" },
+        { label: "Metadata", value: "bytes=512, reviewed=false" },
+      ]),
+    );
+  });
+
   it("keeps the empty state explicit before the first runtime event", () => {
     const inspector = createRunInspector(createEmptyRunDashboard());
 

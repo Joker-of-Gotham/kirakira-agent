@@ -43,6 +43,7 @@ export {
 export type {
   EntityPhase,
   ProjectionOptions,
+  RunDashboardArtifact,
   RunDashboardEntityMaps,
   RunDashboardGraph,
   RunDashboardGraphEdge,

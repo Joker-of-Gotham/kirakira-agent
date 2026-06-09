@@ -20,6 +20,7 @@ import {
   createEmptyRunDashboard,
   createRunInspector,
   projectRunDashboard,
+  type RunDashboardArtifact,
   type RunInspectorFocus,
   type RunInspectorLane,
   type RunInspectorProjection,
@@ -224,6 +225,9 @@ export function KirakiraWorkbench({
   const subagents = Object.values(projection.subagentDetails);
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
+  const artifacts = Object.values(projection.artifactDetails).sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
   const pendingApproval = projection.pendingApprovalIds[0];
   const graph = projection.graph;
   const graphNodes = Object.values(graph.nodes).sort((a, b) => {
@@ -463,6 +467,11 @@ export function KirakiraWorkbench({
           )}
         </section>
 
+        <OutputArtifactsPanel
+          artifacts={artifacts}
+          onSelectArtifact={(id) => setSelectedFocusId(`artifact:${id}`)}
+        />
+
         <section className="kk-rail-section">
           <div className="kk-pane-header">
             <div>
@@ -553,6 +562,47 @@ export function KirakiraWorkbench({
         </section>
       </aside>
     </main>
+  );
+}
+
+function OutputArtifactsPanel({
+  artifacts,
+  onSelectArtifact,
+}: {
+  artifacts: RunDashboardArtifact[];
+  onSelectArtifact: (id: string) => void;
+}) {
+  return (
+    <section className="kk-rail-section" aria-label="Run outputs">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Outputs</p>
+          <h2>Artifacts</h2>
+        </div>
+        <FileSearch size={18} />
+      </div>
+      {artifacts.length === 0 ? (
+        <div className="kk-empty">No artifacts yet</div>
+      ) : (
+        <div className="kk-artifact-list">
+          {artifacts.slice(0, 4).map((artifact) => (
+            <button
+              key={artifact.id}
+              type="button"
+              className="kk-artifact-row"
+              onClick={() => onSelectArtifact(artifact.id)}
+            >
+              <span className={`kk-dot kk-dot-${artifact.phase}`} />
+              <span>
+                <strong>{artifact.title ?? artifact.path ?? artifact.id}</strong>
+                <small>{artifact.kind ?? artifact.phase}</small>
+              </span>
+              <span className={`kk-pill kk-pill-${artifact.phase}`}>{artifact.phase}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

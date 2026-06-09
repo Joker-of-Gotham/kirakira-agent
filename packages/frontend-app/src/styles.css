@@ -853,6 +853,7 @@ a:focus-visible {
 }
 
 .kk-research,
+.kk-artifact-list,
 .kk-approval,
 .kk-runtime-list {
   display: grid;
@@ -868,6 +869,47 @@ a:focus-visible {
 .kk-research a {
   color: var(--kk-blue);
   overflow-wrap: anywhere;
+}
+
+.kk-artifact-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: var(--kk-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.kk-artifact-row:hover {
+  background: var(--kk-surface-muted);
+  border-color: var(--kk-border-strong);
+}
+
+.kk-artifact-row > span:nth-child(2) {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  gap: 2px;
+}
+
+.kk-artifact-row strong,
+.kk-artifact-row small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-artifact-row small {
+  color: var(--kk-text-muted);
+  font-size: 0.78rem;
 }
 
 .kk-approval {
@@ -926,7 +968,7 @@ a:focus-visible {
 .kk-runtime-detail {
   display: block;
   margin-top: 2px;
-  color: var(--kk-muted);
+  color: var(--kk-text-muted);
   font-size: 0.82rem;
   line-height: 1.35;
 }
@@ -1063,7 +1105,8 @@ a:focus-visible {
   .kk-nav-item,
   .kk-run-item,
   .kk-icon-button,
-  .kk-focus-item {
+  .kk-focus-item,
+  .kk-artifact-row {
     transition:
       background-color 120ms ease,
       border-color 120ms ease,
@@ -1074,7 +1117,8 @@ a:focus-visible {
   .kk-icon-button:hover,
   .kk-nav-item:hover,
   .kk-run-item:hover,
-  .kk-focus-item:hover {
+  .kk-focus-item:hover,
+  .kk-artifact-row:hover {
     transform: translateY(-1px);
   }
 }

@@ -1,4 +1,5 @@
 import type {
+  ArtifactRecord,
   RunEvent,
   RunEventKind,
   ResearchCitationRecord,
@@ -80,6 +81,15 @@ export interface RunDashboardResearchRun {
   updatedAt: string;
 }
 
+export interface RunDashboardArtifact extends Omit<ArtifactRecord, "metadata" | "updatedAt"> {
+  phase: EntityPhase;
+  title?: string;
+  summary?: string;
+  traceId?: string;
+  updatedAt: string;
+  metadata?: Record<string, string | number | boolean>;
+}
+
 export interface RunDashboardGraphNode {
   id: string;
   phase: EntityPhase;
@@ -135,6 +145,7 @@ export interface RunDashboardProjection {
   entities: RunDashboardEntityMaps;
   subagentDetails: Record<string, RunDashboardSubagent>;
   researchRuns: Record<string, RunDashboardResearchRun>;
+  artifactDetails: Record<string, RunDashboardArtifact>;
   graph: RunDashboardGraph;
   pendingApprovalIds: string[];
   updatedAt?: string;
@@ -237,6 +248,8 @@ const EVENT_TITLES: Partial<Record<RunEventKind, string>> = {
   "tool.call.started": "Tool call started",
   "tool.call.completed": "Tool call completed",
   "tool.call.failed": "Tool call failed",
+  "artifact.created": "Artifact created",
+  "artifact.updated": "Artifact updated",
   "checkpoint.saved": "Checkpoint saved",
 };
 
@@ -271,6 +284,7 @@ export function createEmptyRunDashboard(runId?: string): RunDashboardProjection 
     },
     subagentDetails: {},
     researchRuns: {},
+    artifactDetails: {},
     graph: createEmptyGraphDashboard(),
     pendingApprovalIds: [],
   };
@@ -587,12 +601,39 @@ function applyArtifact(
   state: RunDashboardProjection,
   event: RunEvent,
 ): RunDashboardProjection {
-  return setEntityPhase(
-    state,
-    "artifacts",
-    event,
-    ARTIFACT_PHASE_BY_EVENT[event.kind],
-  );
+  const phase = ARTIFACT_PHASE_BY_EVENT[event.kind];
+  const next = setEntityPhase(state, "artifacts", event, phase);
+  const id = entityId(event);
+  if (!phase || !id) return next;
+
+  const previous = next.artifactDetails[id];
+  const path = firstString(event.payload, ["path", "artifactPath"]) ?? previous?.path;
+  const kind = firstString(event.payload, ["kind", "artifactKind"]) ?? previous?.kind;
+  const title = firstString(event.payload, ["title", "name"]) ?? previous?.title;
+  const summary = firstString(event.payload, ["summary", "message"]) ?? previous?.summary;
+  const traceId = firstString(event.payload, ["traceId"]) ?? previous?.traceId;
+  const metadata = primitiveRecord(event.payload.metadata) ?? previous?.metadata;
+
+  return {
+    ...next,
+    artifactDetails: {
+      ...next.artifactDetails,
+      [id]: {
+        ...previous,
+        id,
+        phase,
+        ...(path !== undefined ? { path } : {}),
+        ...(kind !== undefined ? { kind } : {}),
+        ...(title !== undefined ? { title } : {}),
+        ...(summary !== undefined ? { summary } : {}),
+        ...(traceId !== undefined ? { traceId } : {}),
+        createdAt:
+          firstString(event.payload, ["createdAt"]) ?? previous?.createdAt ?? event.timestamp,
+        updatedAt: firstString(event.payload, ["updatedAt"]) ?? event.timestamp,
+        ...(metadata !== undefined ? { metadata } : {}),
+      },
+    },
+  };
 }
 
 function applyGeneric(
@@ -986,6 +1027,17 @@ function objectValue(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : undefined;
+}
+
+function primitiveRecord(value: unknown): Record<string, string | number | boolean> | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+  const entries = Object.entries(value).filter(
+    (entry): entry is [string, string | number | boolean] =>
+      typeof entry[1] === "string" ||
+      typeof entry[1] === "number" ||
+      typeof entry[1] === "boolean",
+  );
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
 }
 
 function objectArray(value: unknown): Array<Record<string, unknown>> | undefined {

@@ -242,6 +242,46 @@ describe("frontend-core run dashboard projection", () => {
     });
   });
 
+  it("projects artifact details while preserving compact metadata", () => {
+    const projection = projectRunDashboard(createEmptyRunDashboard(), [
+      event(
+        "artifact.created",
+        {
+          artifactId: "artifact-a",
+          path: "artifacts/report.md",
+          kind: "markdown",
+          title: "Report",
+          summary: "Initial report",
+          metadata: { bytes: 123, source: "research", nested: { drop: true } },
+        },
+        1,
+      ),
+      event(
+        "artifact.updated",
+        {
+          artifactId: "artifact-a",
+          summary: "Updated report",
+          metadata: { bytes: 456, reviewed: true },
+        },
+        2,
+      ),
+    ]);
+
+    expect(projection.entities.artifacts["artifact-a"]).toBe("updated");
+    expect(projection.artifactDetails["artifact-a"]).toMatchObject({
+      id: "artifact-a",
+      phase: "updated",
+      path: "artifacts/report.md",
+      kind: "markdown",
+      title: "Report",
+      summary: "Updated report",
+      createdAt: "2026-06-08T00:00:01.000Z",
+      updatedAt: "2026-06-08T00:00:02.000Z",
+      metadata: { bytes: 456, reviewed: true },
+    });
+    expect(projection.artifactDetails["artifact-a"]?.metadata).not.toHaveProperty("nested");
+  });
+
   it("projects graph topology, task deltas, and checkpoints", () => {
     const projection = projectRunDashboard(createEmptyRunDashboard(), [
       event(

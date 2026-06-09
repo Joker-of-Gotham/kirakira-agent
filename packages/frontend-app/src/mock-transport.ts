@@ -75,6 +75,7 @@ export function createMockRuntimeTransport(): RuntimeTransport {
     const subagentId = `${runId}-agent`;
     const callId = `${runId}-tool`;
     const ticketId = `${runId}-approval`;
+    const artifactId = `${runId}-artifact`;
 
     const timeline: Array<[number, RunEventKind, Record<string, unknown>]> = [
       [0, "run.created", { prompt, mode }],
@@ -223,6 +224,18 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         },
       ],
       [
+        2040,
+        "artifact.created",
+        {
+          artifactId,
+          path: "artifacts/runtime-capability-manifest.md",
+          kind: "markdown",
+          title: "Runtime capability manifest notes",
+          summary: "Public capability surface captured for web and desktop clients",
+          metadata: { source: "mock", bytes: 1840, reviewed: false },
+        },
+      ],
+      [
         2120,
         "research.completed",
         {
@@ -230,6 +243,18 @@ export function createMockRuntimeTransport(): RuntimeTransport {
           evidenceCount: 3,
           citationCount: 1,
           unknowns: [],
+        },
+      ],
+      [
+        2280,
+        "artifact.updated",
+        {
+          artifactId,
+          path: "artifacts/runtime-capability-manifest.md",
+          kind: "markdown",
+          title: "Runtime capability manifest notes",
+          summary: "Updated after citation and approval checks",
+          metadata: { source: "mock", bytes: 2320, reviewed: true },
         },
       ],
       [

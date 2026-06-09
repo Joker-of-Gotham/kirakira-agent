@@ -1,5 +1,6 @@
 import type {
   EntityPhase,
+  RunDashboardArtifact,
   RunDashboardProjection,
   RunDashboardResearchRun,
   RunDashboardStatus,
@@ -185,7 +186,9 @@ export function createRunInspector(
     )),
     countLane("approvals", "Approvals", projection.entities.approvals, projection.updatedAt),
     countLane("tools", "Tools", projection.entities.tools, projection.updatedAt),
-    countLane("artifacts", "Artifacts", projection.entities.artifacts, projection.updatedAt),
+    countLane("artifacts", "Artifacts", projection.entities.artifacts, latestTimestamp(
+      Object.values(projection.artifactDetails).map((item) => item.updatedAt),
+    )),
   ];
 
   const focusItems = buildFocusItems(projection, options.maxFocusItems ?? 12);
@@ -246,9 +249,9 @@ function buildFocusItems(
   const toolItems = phaseEntries(projection.entities.tools)
     .filter(([, phase]) => phase === "running" || phase === "failed")
     .map(([id, phase]) => entityFocus("tool", id, phase));
-  const artifactItems = phaseEntries(projection.entities.artifacts)
-    .filter(([, phase]) => phase === "created" || phase === "updated")
-    .map(([id, phase]) => entityFocus("artifact", id, phase));
+  const artifactItems = Object.values(projection.artifactDetails)
+    .sort(compareByUpdatedDesc)
+    .map(artifactFocus);
 
   items.push(
     ...approvalItems,
@@ -364,6 +367,37 @@ function researchFocus(research: RunDashboardResearchRun): RunInspectorFocus {
   };
 }
 
+function metadataSummary(
+  metadata: Record<string, string | number | boolean> | undefined,
+): string | undefined {
+  if (!metadata) return undefined;
+  const entries = Object.entries(metadata)
+    .slice(0, 4)
+    .map(([key, value]) => `${key}=${String(value)}`);
+  return entries.length > 0 ? entries.join(", ") : undefined;
+}
+
+function artifactFocus(artifact: RunDashboardArtifact): RunInspectorFocus {
+  const details = [
+    ...detail("Artifact", artifact.id),
+    ...detail("Kind", artifact.kind),
+    ...detail("Path", artifact.path),
+    ...detail("Created", artifact.createdAt),
+    ...detail("Updated", artifact.updatedAt),
+    ...detail("Trace", artifact.traceId),
+    ...detail("Metadata", metadataSummary(artifact.metadata)),
+  ];
+  return {
+    id: `artifact:${artifact.id}`,
+    kind: "artifact",
+    label: artifact.title ?? artifact.path ?? artifact.id,
+    phase: artifact.phase,
+    summary: artifact.summary ?? artifact.path ?? artifact.kind ?? artifact.phase,
+    updatedAt: artifact.updatedAt,
+    details,
+  };
+}
+
 function approvalFocus(id: string, phase: EntityPhase): RunInspectorFocus {
   return {
     id: `approval:${id}`,
@@ -376,7 +410,7 @@ function approvalFocus(id: string, phase: EntityPhase): RunInspectorFocus {
 }
 
 function entityFocus(
-  kind: "tool" | "artifact",
+  kind: "tool",
   id: string,
   phase: EntityPhase,
 ): RunInspectorFocus {
@@ -386,6 +420,6 @@ function entityFocus(
     label: id,
     phase,
     summary: phase,
-    details: detail(kind === "tool" ? "Tool" : "Artifact", id),
+    details: detail("Tool", id),
   };
 }
