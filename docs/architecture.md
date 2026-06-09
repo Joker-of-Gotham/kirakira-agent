@@ -51,7 +51,9 @@ and the `workbench-host` profile. `pnpm start:web` starts Docker-published infra
 the host daemon, and the web workbench at `http://127.0.0.1:5183`.
 `pnpm start:desktop` uses the same daemon and the desktop renderer at
 `http://127.0.0.1:5174`, then launches the Electron shell as the foreground
-process. The browser runtime gateway is `ws://127.0.0.1:17373/runtime`.
+process. These workbench steps use profile-declared `waitFor` checks from the
+shared runtime readiness plan rather than local port literals. The browser
+runtime gateway is `ws://127.0.0.1:17373/runtime`.
 
 ## Runtime services
 

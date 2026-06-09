@@ -549,7 +549,13 @@
             },
             {
               "package": "web",
-              "mode": "foreground"
+              "mode": "foreground",
+              "waitFor": [
+                {
+                  "check": "daemon:browser-gateway",
+                  "skipWhen": "skipDaemon"
+                }
+              ]
             }
           ],
           "desktop": [
@@ -564,7 +570,18 @@
             },
             {
               "package": "desktop-shell",
-              "mode": "foreground"
+              "mode": "foreground",
+              "waitFor": [
+                {
+                  "check": "daemon:socket",
+                  "skipWhen": "skipDaemon"
+                },
+                {
+                  "check": "daemon:browser-gateway",
+                  "skipWhen": "skipDaemon"
+                },
+                "presentation:desktop"
+              ]
             }
           ]
         }

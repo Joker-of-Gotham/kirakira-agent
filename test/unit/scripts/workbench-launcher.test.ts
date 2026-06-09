@@ -1,9 +1,17 @@
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { EventEmitter } from "node:events";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ensureMcpConfig } from "../../../scripts/kirakira-common.mjs";
-import { buildWorkbenchPlan, profileFromOptions } from "../../../scripts/kirakira-workbench.mjs";
+import {
+  buildWorkbenchPlan,
+  profileFromOptions,
+  readinessPlanForCheckNames,
+  runWorkbenchPlan,
+  waitForReadinessChecks,
+  WorkbenchProcessSupervisor,
+} from "../../../scripts/kirakira-workbench.mjs";
 import {
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
@@ -56,6 +64,7 @@ describe("workbench launcher plan", () => {
       name: "web",
       mode: "foreground",
       args: ["--filter", "@kirakira/web", "dev"],
+      waitFor: ["daemon:browser-gateway"],
     });
     expect(plan.env.VITE_KIRAKIRA_GATEWAY_URL).toBe("ws://127.0.0.1:17373/runtime");
     expect(JSON.stringify(plan)).not.toContain("5173");
@@ -103,6 +112,7 @@ describe("workbench launcher plan", () => {
       name: "desktop-shell",
       mode: "foreground",
       args: ["--filter", "@kirakira/desktop", "dev:electron"],
+      waitFor: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
     });
     expect(plan.env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
     expect(plan.env.VITE_KIRAKIRA_GATEWAY_URL).toBe("ws://127.0.0.1:17373/runtime");
@@ -118,6 +128,10 @@ describe("workbench launcher plan", () => {
       "desktop-shell",
     ]);
     expect(plan.steps.map((step) => step.mode)).toEqual(["background", "foreground"]);
+    expect(plan.steps[1]).toMatchObject({
+      name: "desktop-shell",
+      waitFor: ["presentation:desktop"],
+    });
     expect(plan.env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
     expect(JSON.stringify(plan)).not.toContain("5173");
   });
@@ -296,4 +310,200 @@ describe("workbench launcher plan", () => {
       ),
     ).toThrow(/Workbench package step "missing" is not defined/u);
   });
+
+  it("filters readiness plans by declared waitFor check names", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "desktop", { skipInfra: true });
+    const selected = readinessPlanForCheckNames(plan.readiness, [
+      "daemon:socket",
+      "presentation:desktop",
+    ]);
+
+    expect(selected.checks.map((check) => check.name)).toEqual([
+      "daemon:socket",
+      "presentation:desktop",
+    ]);
+    expect(() => readinessPlanForCheckNames(plan.readiness, ["missing:check"])).toThrow(
+      /Readiness checks not found: missing:check/u,
+    );
+  });
+
+  it("polls waitFor readiness checks until the selected checks pass", async () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "web", { skipInfra: true });
+    let now = 0;
+    let calls = 0;
+    const reportFor = (status: "fail" | "ok") => ({
+      ok: status === "ok",
+      checks: [
+        {
+          name: "daemon:browser-gateway",
+          status,
+          required: true,
+          detail: status === "fail" ? "not ready" : undefined,
+        },
+      ],
+    });
+
+    const report = await waitForReadinessChecks(plan.readiness, ["daemon:browser-gateway"], {
+      env: {},
+      timeoutMs: 50,
+      intervalMs: 10,
+      probeTimeoutMs: 5,
+      now: () => now,
+      sleep: async (ms: number) => {
+        now += ms;
+      },
+      evaluate: async (selectedPlan: typeof plan.readiness, options: { timeoutMs: number }) => {
+        calls += 1;
+        expect(selectedPlan.checks.map((check) => check.name)).toEqual([
+          "daemon:browser-gateway",
+        ]);
+        expect(options.timeoutMs).toBe(5);
+        return calls === 1 ? reportFor("fail") : reportFor("ok");
+      },
+    });
+
+    expect(report?.ok).toBe(true);
+    expect(calls).toBe(2);
+  });
+
+  it("reports the failing readiness check when waitFor times out", async () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "web", { skipInfra: true });
+
+    await expect(
+      waitForReadinessChecks(plan.readiness, ["daemon:browser-gateway"], {
+        env: {},
+        timeoutMs: 0,
+        intervalMs: 10,
+        now: () => 0,
+        sleep: async () => {},
+        evaluate: async () => ({
+          ok: false,
+          checks: [
+            {
+              name: "daemon:browser-gateway",
+              status: "fail",
+              required: true,
+              detail: "connection refused",
+            },
+          ],
+        }),
+      }),
+    ).rejects.toThrow(/daemon:browser-gateway: fail \(connection refused\)/u);
+  });
+
+  it("executes workbench steps in order and cleans up background children", async () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "web");
+    const events: string[] = [];
+    const supervisor = new WorkbenchProcessSupervisor({
+      spawn: (step) => {
+        events.push(`spawn:${step.name}`);
+        const child = fakeChild(step.name);
+        return child;
+      },
+      forceStop: (child) => {
+        events.push(`stop:${child.name}`);
+        child.killed = true;
+        child.emit("close", 0, null);
+      },
+    });
+
+    await runWorkbenchPlan(plan, {
+      supervisor,
+      runChecked: (step) => {
+        events.push(`run:${step.name}`);
+      },
+      waitForReadiness: async (_readiness, checks) => {
+        events.push(`wait:${checks.join(",")}`);
+      },
+      runForeground: async (step) => {
+        events.push(`foreground:${step.name}`);
+      },
+    });
+
+    expect(events).toEqual([
+      "run:infra",
+      "spawn:daemon",
+      "wait:daemon:browser-gateway",
+      "foreground:web",
+      "stop:daemon",
+    ]);
+  });
+
+  it("fails fast when a background step exits during readiness wait", async () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "web", { skipInfra: true });
+    let daemon: ReturnType<typeof fakeChild> | undefined;
+    const supervisor = new WorkbenchProcessSupervisor({
+      spawn: (step) => {
+        daemon = fakeChild(step.name);
+        return daemon;
+      },
+      forceStop: (child) => {
+        child.killed = true;
+        child.emit("close", 0, null);
+      },
+    });
+
+    const run = runWorkbenchPlan(plan, {
+      supervisor,
+      waitForReadiness: async () => new Promise(() => {}),
+      runForeground: async () => {
+        throw new Error("foreground should not start");
+      },
+    });
+
+    await Promise.resolve();
+    daemon?.emit("close", 1, null);
+
+    await expect(run).rejects.toThrow(/Background step "daemon" exited early with code 1/u);
+  });
+
+  it("fails fast when a background step exits while foreground is running", async () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles(), {});
+    const plan = buildWorkbenchPlan(profile, "web", { skipInfra: true });
+    let daemon: ReturnType<typeof fakeChild> | undefined;
+    const supervisor = new WorkbenchProcessSupervisor({
+      spawn: (step) => {
+        daemon = fakeChild(step.name);
+        return daemon;
+      },
+      forceStop: (child) => {
+        child.killed = true;
+        child.emit("close", 0, null);
+      },
+    });
+
+    const run = runWorkbenchPlan(plan, {
+      supervisor,
+      waitForReadiness: async () => {},
+      runForeground: async () => new Promise(() => {}),
+    });
+
+    await Promise.resolve();
+    daemon?.emit("close", 1, null);
+
+    await expect(run).rejects.toThrow(/Background step "daemon" exited early with code 1/u);
+  });
 });
+
+function fakeChild(name: string) {
+  const child = new EventEmitter() as EventEmitter & {
+    killed: boolean;
+    name: string;
+    exitCode: number | null;
+    kill: (signal?: string) => boolean;
+  };
+  child.name = name;
+  child.killed = false;
+  child.exitCode = null;
+  child.kill = () => {
+    child.killed = true;
+    child.emit("close", 0, null);
+    return true;
+  };
+  return child;
+}

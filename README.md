@@ -112,7 +112,11 @@ That is the intended operating model: one command, one runtime path, one place t
 | `pnpm dev:web` | UI-only Vite shortcut; does not start infra or daemon | none |
 | `pnpm dev:desktop` | Desktop renderer plus Electron shell shortcut; does not start infra or daemon | `workbench-host` |
 
-The Kirakira web workbench default is port `5183`. A Vite server on `5173` is not this repo's default startup target.
+Workbench startup is gated by the selected runtime profile. `pnpm start:web`
+waits for the browser gateway before opening the web workbench; `pnpm
+start:desktop` waits for daemon IPC, the browser gateway, and the desktop
+renderer before opening Electron. The Kirakira web workbench default is port
+`5183`. A Vite server on `5173` is not this repo's default startup target.
 
 ## Common Flows
 

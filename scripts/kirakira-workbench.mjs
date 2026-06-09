@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { spawn, spawnSync } from "node:child_process";
+import { setTimeout as delay } from "node:timers/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
+import { evaluateRuntimeReadinessPlan } from "./runtime-doctor.mjs";
 import {
   buildRuntimeReadinessPlan,
   loadRuntimeProfiles,
@@ -15,6 +17,10 @@ import {
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_WORKBENCH_PROFILE = "workbench-host";
+const DEFAULT_WAIT_TIMEOUT_MS = 30_000;
+const DEFAULT_WAIT_INTERVAL_MS = 750;
+const DEFAULT_PROBE_TIMEOUT_MS = 1_500;
+const DEFAULT_STOP_GRACE_MS = 7_000;
 
 function pnpmCommand() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -100,28 +106,56 @@ function resolveSurface(profile, requestedSurface) {
   return { name: surface, steps: surfaces[surface] };
 }
 
-function resolvePackageStep(profile, step, env) {
+function resolvePackageStep(profile, step, env, options) {
   const packageKey = step.package;
   const spec = profile.workbench?.packages?.[packageKey];
   if (!spec?.package || !spec?.script) {
     throw new Error(`Workbench package step "${packageKey}" is not defined in profile "${profile.name}"`);
   }
-  return pnpmStep(step.name ?? packageKey, spec.package, spec.script, env, step.mode ?? "foreground");
+  const rendered = pnpmStep(step.name ?? packageKey, spec.package, spec.script, env, step.mode ?? "foreground");
+  const waitFor = normalizeWaitFor(step.waitFor, step.name ?? packageKey, options);
+  return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
 }
 
 function renderWorkbenchStep(profile, step, env, options) {
   if (step.skipWhen && options[step.skipWhen]) return undefined;
-  if (step.package) return resolvePackageStep(profile, step, env);
+  if (step.package) return resolvePackageStep(profile, step, env, options);
   if (step.command) {
-    return {
+    const rendered = {
       name: step.name ?? step.command,
       mode: step.mode ?? "foreground",
       command: step.command,
       args: Array.isArray(step.args) ? step.args : [],
       env: { ...env, ...(step.env ?? {}) },
     };
+    const waitFor = normalizeWaitFor(step.waitFor, step.name ?? step.command, options);
+    return waitFor.length > 0 ? { ...rendered, waitFor } : rendered;
   }
   throw new Error(`Invalid workbench step in profile "${profile.name}"`);
+}
+
+function normalizeWaitFor(waitFor, stepName, options = {}) {
+  if (waitFor === undefined) return [];
+  if (!Array.isArray(waitFor)) {
+    throw new Error(`Workbench step "${stepName}" waitFor must be an array`);
+  }
+  const checks = [];
+  for (const item of waitFor) {
+    if (typeof item === "string") {
+      if (item.length > 0) checks.push(item);
+      continue;
+    }
+    if (item && typeof item === "object" && !Array.isArray(item)) {
+      if (item.skipWhen && options[item.skipWhen]) continue;
+      if (typeof item.check !== "string" || item.check.length === 0) {
+        throw new Error(`Workbench step "${stepName}" waitFor entry requires a check name`);
+      }
+      checks.push(item.check);
+      continue;
+    }
+    throw new Error(`Workbench step "${stepName}" waitFor entries must be strings or check records`);
+  }
+  return [...new Set(checks)];
 }
 
 export function buildWorkbenchPlan(profile, surface, options = {}) {
@@ -167,11 +201,11 @@ function runChecked(step) {
   });
   if (result.error) throw result.error;
   if ((result.status ?? 1) !== 0) {
-    process.exit(result.status ?? 1);
+    throw new Error(`Workbench step "${step.name}" exited with code ${result.status ?? 1}`);
   }
 }
 
-function spawnBackground(step) {
+function spawnStep(step) {
   return spawn(step.command, step.args, {
     cwd: repoRoot,
     env: { ...process.env, ...step.env },
@@ -180,13 +214,290 @@ function spawnBackground(step) {
   });
 }
 
-function stopChildren(children) {
-  for (const child of children) {
-    if (!child.killed) child.kill();
+function killProcessTree(child) {
+  if (!child || child.killed) return;
+  if (process.platform === "win32" && child.pid) {
+    spawnSync("taskkill", ["/pid", String(child.pid), "/t", "/f"], {
+      stdio: "ignore",
+      shell: false,
+    });
+    return;
+  }
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // Ignore teardown races.
   }
 }
 
-function main(argv) {
+function requestGracefulStop(child) {
+  if (!child || child.killed) return;
+  try {
+    child.kill("SIGTERM");
+  } catch {
+    // Ignore teardown races.
+  }
+}
+
+function requestForceStop(child) {
+  if (!child || child.killed) return;
+  if (process.platform === "win32") {
+    killProcessTree(child);
+    return;
+  }
+  try {
+    child.kill("SIGKILL");
+  } catch {
+    // Ignore teardown races.
+  }
+}
+
+function waitForClose(child) {
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal }));
+  });
+}
+
+export class WorkbenchProcessSupervisor {
+  #children = [];
+  #spawn;
+  #forceStop;
+  #gracefulStop;
+  #sleep;
+  #stopGraceMs;
+  #failure;
+  #resolveFailure;
+  #failurePromise;
+
+  constructor(options = {}) {
+    this.#spawn = options.spawn ?? spawnStep;
+    this.#gracefulStop = options.gracefulStop ?? requestGracefulStop;
+    this.#forceStop = options.forceStop ?? requestForceStop;
+    this.#sleep = options.sleep ?? delay;
+    this.#stopGraceMs = options.stopGraceMs ?? DEFAULT_STOP_GRACE_MS;
+    this.#failurePromise = new Promise((resolve) => {
+      this.#resolveFailure = resolve;
+    });
+  }
+
+  spawnBackground(step) {
+    const child = this.#spawn(step);
+    const record = {
+      name: step.name,
+      child,
+      stopping: false,
+      failure: undefined,
+    };
+    child.once("error", (error) => {
+      this.#recordFailure(record, error instanceof Error ? error : new Error(String(error)));
+    });
+    child.once("close", (code, signal) => {
+      if (!record.stopping) {
+        this.#recordFailure(
+          record,
+          new Error(
+            `Background step "${step.name}" exited early${signal ? ` via ${signal}` : ` with code ${code}`}`,
+          ),
+        );
+      }
+    });
+    this.#children.push(record);
+    return child;
+  }
+
+  #recordFailure(record, error) {
+    record.failure = error;
+    if (!this.#failure) {
+      this.#failure = error;
+      this.#resolveFailure(error);
+    }
+  }
+
+  assertHealthy() {
+    const failed = this.#children.find((record) => record.failure);
+    if (failed?.failure) throw failed.failure;
+  }
+
+  waitForFailure() {
+    return this.#failure ? Promise.resolve(this.#failure) : this.#failurePromise;
+  }
+
+  async stopAll() {
+    const waits = [];
+    for (const record of [...this.#children].reverse()) {
+      record.stopping = true;
+      waits.push(this.#stopRecord(record));
+    }
+    await Promise.allSettled(waits);
+  }
+
+  async #stopRecord(record) {
+    const child = record.child;
+    if (!child || child.killed || (child.exitCode !== null && child.exitCode !== undefined)) return;
+    if (process.platform === "win32") {
+      this.#forceStop(child);
+      return;
+    }
+    const closed = waitForClose(child).then(() => true, () => true);
+    this.#gracefulStop(child);
+    const timedOut = this.#sleep(this.#stopGraceMs).then(() => false);
+    if (!(await Promise.race([closed, timedOut]))) {
+      this.#forceStop(child);
+      await Promise.race([closed, this.#sleep(250)]);
+    }
+  }
+}
+
+export function readinessPlanForCheckNames(readiness, checkNames) {
+  const wanted = new Set(checkNames ?? []);
+  const checks = (readiness.checks ?? []).filter((check) => wanted.has(check.name));
+  const found = new Set(checks.map((check) => check.name));
+  const missing = [...wanted].filter((name) => !found.has(name));
+  if (missing.length > 0) {
+    throw new Error(`Readiness checks not found: ${missing.join(", ")}`);
+  }
+  return {
+    ...readiness,
+    checks,
+  };
+}
+
+function reportReady(report) {
+  return report.ok && (report.checks ?? []).every((check) =>
+    check.status === "ok" || (check.required === false && check.status === "warn"),
+  );
+}
+
+function resolveMilliseconds(optionValue, envValue, fallback, name, { allowZero = false } = {}) {
+  const rawValue = optionValue ?? envValue;
+  if (rawValue === undefined || rawValue === "") return fallback;
+  const value = Number(rawValue);
+  const minimum = allowZero ? 0 : 1;
+  if (!Number.isInteger(value) || value < minimum) {
+    throw new Error(`${name} must be ${allowZero ? "a non-negative" : "a positive"} integer`);
+  }
+  return value;
+}
+
+export async function waitForReadinessChecks(readiness, checkNames, options = {}) {
+  const checks = [...new Set(checkNames ?? [])];
+  if (checks.length === 0) return undefined;
+  const selectedPlan = readinessPlanForCheckNames(readiness, checks);
+  const env = options.env ?? process.env;
+  const timeoutMs = resolveMilliseconds(
+    options.timeoutMs,
+    env.KIRAKIRA_WORKBENCH_WAIT_TIMEOUT_MS,
+    DEFAULT_WAIT_TIMEOUT_MS,
+    "KIRAKIRA_WORKBENCH_WAIT_TIMEOUT_MS",
+    { allowZero: true },
+  );
+  const intervalMs = resolveMilliseconds(
+    options.intervalMs,
+    env.KIRAKIRA_WORKBENCH_WAIT_INTERVAL_MS,
+    DEFAULT_WAIT_INTERVAL_MS,
+    "KIRAKIRA_WORKBENCH_WAIT_INTERVAL_MS",
+  );
+  const probeTimeoutMs = resolveMilliseconds(
+    options.probeTimeoutMs,
+    env.KIRAKIRA_WORKBENCH_PROBE_TIMEOUT_MS,
+    DEFAULT_PROBE_TIMEOUT_MS,
+    "KIRAKIRA_WORKBENCH_PROBE_TIMEOUT_MS",
+  );
+  const evaluate = options.evaluate ?? evaluateRuntimeReadinessPlan;
+  const sleep = options.sleep ?? delay;
+  const now = options.now ?? Date.now;
+  const started = now();
+  let latestReport;
+  for (;;) {
+    latestReport = await evaluate(selectedPlan, {
+      timeoutMs: probeTimeoutMs,
+      fetcher: options.fetcher,
+      transport: options.transport,
+    });
+    if (reportReady(latestReport)) return latestReport;
+    const elapsedMs = now() - started;
+    if (elapsedMs >= timeoutMs) break;
+    await sleep(Math.min(intervalMs, timeoutMs - elapsedMs));
+  }
+  const detail = (latestReport?.checks ?? [])
+    .filter((check) => check.status !== "ok")
+    .map((check) => `${check.name}: ${check.status}${check.detail ? ` (${check.detail})` : ""}`)
+    .join("; ");
+  throw new Error(`Timed out waiting for readiness checks: ${checks.join(", ")}${detail ? `; ${detail}` : ""}`);
+}
+
+async function runForeground(step) {
+  const child = spawnStep(step);
+  const { code, signal } = await waitForClose(child);
+  if (code !== 0 || signal) {
+    throw new Error(`Workbench step "${step.name}" exited${signal ? ` via ${signal}` : ` with code ${code}`}`);
+  }
+}
+
+async function raceBackgroundFailure(supervisor, task) {
+  return Promise.race([
+    task,
+    supervisor.waitForFailure().then((error) => {
+      throw error;
+    }),
+  ]);
+}
+
+export async function runWorkbenchPlan(plan, options = {}) {
+  const supervisor = options.supervisor ?? new WorkbenchProcessSupervisor(options.processes);
+  const waitForChecks = options.waitForReadiness ?? waitForReadinessChecks;
+  const runForegroundStep = options.runForeground ?? runForeground;
+  const runBlockingStep = options.runChecked ?? runChecked;
+  const removeSignalHandlers = options.installSignalHandlers
+    ? installSignalHandlers(supervisor)
+    : () => {};
+  try {
+    for (const step of plan.steps) {
+      supervisor.assertHealthy();
+      if (step.waitFor?.length) {
+        await raceBackgroundFailure(
+          supervisor,
+          waitForChecks(plan.readiness, step.waitFor, options.readiness),
+        );
+      }
+      if (step.mode === "background") {
+        supervisor.spawnBackground(step);
+        continue;
+      }
+      if (step.mode === "foreground") {
+        await raceBackgroundFailure(supervisor, runForegroundStep(step));
+        continue;
+      }
+      runBlockingStep(step);
+    }
+  } finally {
+    removeSignalHandlers();
+    await supervisor.stopAll();
+  }
+}
+
+function installSignalHandlers(supervisor) {
+  const handlers = [
+    ["SIGINT", 130],
+    ["SIGTERM", 143],
+  ].map(([signal, exitCode]) => {
+    const handler = () => {
+      void supervisor.stopAll().finally(() => {
+        process.exit(exitCode);
+      });
+    };
+    process.once(signal, handler);
+    return [signal, handler];
+  });
+  return () => {
+    for (const [signal, handler] of handlers) {
+      process.off(signal, handler);
+    }
+  };
+}
+
+async function main(argv) {
   const options = normalizeArgs(argv);
   const profile = profileFromOptions(options);
   const plan = buildWorkbenchPlan(profile, options.surface, options);
@@ -200,31 +511,14 @@ function main(argv) {
   ensureEnvFile(repoRoot);
   ensureMcpConfig(repoRoot, profile);
 
-  const children = [];
-  process.on("exit", () => stopChildren(children));
-  process.on("SIGINT", () => {
-    stopChildren(children);
-    process.exit(130);
-  });
-  process.on("SIGTERM", () => {
-    stopChildren(children);
-    process.exit(143);
-  });
-
-  for (const step of plan.steps) {
-    if (step.mode === "background") {
-      children.push(spawnBackground(step));
-      continue;
-    }
-    runChecked(step);
-  }
+  await runWorkbenchPlan(plan, { installSignalHandlers: true });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    main(process.argv.slice(2));
+    await main(process.argv.slice(2));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    process.exitCode = 1;
   }
 }
