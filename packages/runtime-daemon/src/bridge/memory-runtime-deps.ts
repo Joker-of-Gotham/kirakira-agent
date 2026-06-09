@@ -45,6 +45,13 @@ export interface DaemonMemoryDependencies {
 const MEMORY_SERVICE_NAMES = new Set(["postgres", "redis", "qdrant", "neo4j", "minio"]);
 const MEMORY_CONTEXT_LEVELS = new Set(["L0", "L1", "L2", "L3"]);
 const DEFAULT_MEMORY_LEVEL: NonNullable<DaemonMemoryResearchSourceOptions["level"]> = "L3";
+const LOCAL_MEMORY_DEFAULTS = {
+  postgresDsn: "postgresql://localhost:5432/kirakira",
+  redisUrl: "redis://localhost:6379/0",
+  qdrantHost: "localhost",
+  qdrantPort: 6333,
+  neo4jUri: "bolt://localhost:7687",
+};
 
 function envFirst(env: DaemonMemoryEnv, ...keys: Array<string | undefined>): string | undefined {
   for (const key of keys) {
@@ -124,6 +131,71 @@ function memoryServiceEnv(
   return memory?.services?.find((service) => service.name === name)?.url_env;
 }
 
+function memoryDeclaresService(
+  memory: ResolvedRuntimeMemoryState | undefined,
+  name: string,
+): boolean {
+  if (!memory || memory.enabled === false) return false;
+  return (memory.services ?? []).some((service) => service.name === name);
+}
+
+function profileMemoryFallback<T>(
+  memory: ResolvedRuntimeMemoryState | undefined,
+  label: string,
+  keys: Array<string | undefined>,
+  fallback: T,
+): T {
+  if (!memory || memory.enabled === false) return fallback;
+  const envKeys = [...new Set(keys.filter((key): key is string => Boolean(key)))];
+  throw new Error(
+    `Resolved runtime memory profile requires ${label} from env${
+      envKeys.length > 0 ? ` (${envKeys.join(", ")})` : ""
+    }`,
+  );
+}
+
+function memoryPostgresEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return ["KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL"];
+}
+
+function memoryRedisEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return ["KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL"];
+}
+
+function memoryQdrantUrlEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return [
+    "KIRAKIRA_MEMORY_QDRANT_URL",
+    memory?.vector?.url_env,
+    memoryServiceEnv(memory, "qdrant"),
+    "QDRANT_URL",
+  ];
+}
+
+function memoryQdrantHostEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return ["KIRAKIRA_MEMORY_QDRANT_HOST", memory?.vector?.host_env];
+}
+
+function memoryNeo4jUriEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return [
+    "KIRAKIRA_MEMORY_NEO4J_URI",
+    memory?.graph?.uri_env,
+    memoryServiceEnv(memory, "neo4j"),
+    "NEO4J_URI",
+  ];
+}
+
+function memoryNeo4jUserEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return ["KIRAKIRA_MEMORY_NEO4J_USER", memory?.graph?.username_env, "KIRAKIRA_NEO4J_USER"];
+}
+
+function memoryNeo4jPasswordEnvKeys(memory: ResolvedRuntimeMemoryState | undefined): Array<string | undefined> {
+  return [
+    "KIRAKIRA_MEMORY_NEO4J_PASSWORD",
+    memory?.graph?.password_env,
+    "KIRAKIRA_NEO4J_PASSWORD",
+  ];
+}
+
 function memoryProfileHasService(
   options: Pick<DaemonMemoryDependencyOptions, "resolvedConfig" | "runtimeProfileName">,
   name: string,
@@ -150,7 +222,7 @@ function memoryPostgresDsn(
   env: DaemonMemoryEnv,
   memory: ResolvedRuntimeMemoryState | undefined,
 ): string | undefined {
-  return envFirst(env, "KIRAKIRA_MEMORY_POSTGRES_DSN", memoryServiceEnv(memory, "postgres"), "DATABASE_URL");
+  return envFirst(env, ...memoryPostgresEnvKeys(memory));
 }
 
 function hasRuntimeMemoryPostgresEnv(
@@ -166,7 +238,7 @@ function hasRuntimeMemoryEnv(
 ): boolean {
   return Boolean(
     memoryPostgresDsn(env, memory) &&
-      envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") &&
+      envFirst(env, ...memoryRedisEnvKeys(memory)) &&
       envFirst(
         env,
         "KIRAKIRA_MEMORY_S3_ENDPOINT_URL",
@@ -226,26 +298,39 @@ export function memoryServiceConfigFromEnv(
   env: DaemonMemoryEnv = process.env,
   memory?: ResolvedRuntimeMemoryState,
 ): MemoryServiceConfig {
-  const postgresDsn = memoryPostgresDsn(env, memory) ?? "postgresql://localhost:5432/kirakira";
+  const postgresDsn =
+    memoryPostgresDsn(env, memory) ??
+    (memoryDeclaresService(memory, "postgres")
+      ? profileMemoryFallback(
+          memory,
+          "Postgres DSN",
+          memoryPostgresEnvKeys(memory),
+          LOCAL_MEMORY_DEFAULTS.postgresDsn,
+        )
+      : LOCAL_MEMORY_DEFAULTS.postgresDsn);
   const redisUrl =
-    envFirst(env, "KIRAKIRA_MEMORY_REDIS_URL", memoryServiceEnv(memory, "redis"), "REDIS_URL") ?? "redis://localhost:6379/0";
-  const qdrantUrl = envFirst(
-    env,
-    "KIRAKIRA_MEMORY_QDRANT_URL",
-    memory?.vector?.url_env,
-    memoryServiceEnv(memory, "qdrant"),
-    "QDRANT_URL",
-  );
+    envFirst(env, ...memoryRedisEnvKeys(memory)) ??
+    (memoryDeclaresService(memory, "redis")
+      ? profileMemoryFallback(memory, "Redis URL", memoryRedisEnvKeys(memory), LOCAL_MEMORY_DEFAULTS.redisUrl)
+      : LOCAL_MEMORY_DEFAULTS.redisUrl);
+  const qdrantUrl = envFirst(env, ...memoryQdrantUrlEnvKeys(memory));
   const vectorBackend = envFirst(env, "KIRAKIRA_MEMORY_VECTOR_BACKEND") ?? memory?.vector?.backend;
   const graphBackend = envFirst(env, "KIRAKIRA_MEMORY_GRAPH_BACKEND") ?? memory?.graph?.backend;
   const neo4jUri =
-    envFirst(
-      env,
-      "KIRAKIRA_MEMORY_NEO4J_URI",
-      memory?.graph?.uri_env,
-      memoryServiceEnv(memory, "neo4j"),
-      "NEO4J_URI",
-    ) ?? "bolt://localhost:7687";
+    envFirst(env, ...memoryNeo4jUriEnvKeys(memory)) ??
+    (memoryDeclaresService(memory, "neo4j") || graphBackend === "neo4j"
+      ? profileMemoryFallback(memory, "Neo4j URI", memoryNeo4jUriEnvKeys(memory), LOCAL_MEMORY_DEFAULTS.neo4jUri)
+      : LOCAL_MEMORY_DEFAULTS.neo4jUri);
+  const neo4jUsername =
+    envFirst(env, ...memoryNeo4jUserEnvKeys(memory)) ??
+    (memory?.graph?.username_env
+      ? profileMemoryFallback(memory, "Neo4j username", memoryNeo4jUserEnvKeys(memory), "neo4j")
+      : "neo4j");
+  const neo4jPassword =
+    envFirst(env, ...memoryNeo4jPasswordEnvKeys(memory)) ??
+    (memory?.graph?.password_env
+      ? profileMemoryFallback(memory, "Neo4j password", memoryNeo4jPasswordEnvKeys(memory), "password")
+      : "password");
   const s3Endpoint = envFirst(
     env,
     "KIRAKIRA_MEMORY_S3_ENDPOINT_URL",
@@ -268,17 +353,39 @@ export function memoryServiceConfigFromEnv(
     "S3_SECRET_ACCESS_KEY",
     "AWS_SECRET_ACCESS_KEY",
   );
-  const qdrant = endpointHostPort(
-    qdrantUrl,
-    envFirst(env, "KIRAKIRA_MEMORY_QDRANT_HOST", memory?.vector?.host_env) ?? "localhost",
-    parsePort(envFirst(env, "KIRAKIRA_MEMORY_QDRANT_PORT", memory?.vector?.port_env), 6333),
+  const qdrantHost = envFirst(env, ...memoryQdrantHostEnvKeys(memory));
+  const qdrantPort = parsePort(
+    envFirst(env, "KIRAKIRA_MEMORY_QDRANT_PORT", memory?.vector?.port_env),
+    LOCAL_MEMORY_DEFAULTS.qdrantPort,
   );
+  const requiresQdrant =
+    vectorBackend === "qdrant" ||
+    memoryDeclaresService(memory, "qdrant") ||
+    Boolean(memory?.vector?.url_env || memory?.vector?.host_env);
+  const useQdrant =
+    vectorBackend === "qdrant" ||
+    Boolean(qdrantUrl) ||
+    (requiresQdrant && vectorBackend !== "pgvector");
+  const qdrant = qdrantUrl
+    ? endpointHostPort(qdrantUrl, qdrantHost ?? LOCAL_MEMORY_DEFAULTS.qdrantHost, qdrantPort)
+    : {
+        host: qdrantHost ??
+          (requiresQdrant
+            ? profileMemoryFallback(
+                memory,
+                "Qdrant URL or host",
+                [...memoryQdrantUrlEnvKeys(memory), ...memoryQdrantHostEnvKeys(memory)],
+                LOCAL_MEMORY_DEFAULTS.qdrantHost,
+              )
+            : LOCAL_MEMORY_DEFAULTS.qdrantHost),
+        port: qdrantPort,
+      };
 
   return {
     postgres: postgresConfigFromDsn(postgresDsn),
     redis: { url: redisUrl },
     vector:
-      vectorBackend === "pgvector" || (!qdrantUrl && vectorBackend !== "qdrant")
+      !useQdrant
         ? { backend: "pgvector" }
         : {
             backend: "qdrant",
@@ -298,16 +405,8 @@ export function memoryServiceConfigFromEnv(
         : {
             backend: "neo4j",
             uri: neo4jUri,
-            username:
-              envFirst(env, "KIRAKIRA_MEMORY_NEO4J_USER", memory?.graph?.username_env, "KIRAKIRA_NEO4J_USER") ??
-              "neo4j",
-            password:
-              envFirst(
-                env,
-                "KIRAKIRA_MEMORY_NEO4J_PASSWORD",
-                memory?.graph?.password_env,
-                "KIRAKIRA_NEO4J_PASSWORD",
-              ) ?? "password",
+            username: neo4jUsername,
+            password: neo4jPassword,
           },
     blob: {
       bucket: envFirst(env, "KIRAKIRA_MEMORY_S3_BUCKET", "S3_BUCKET") ?? memory?.blob?.bucket ?? "kirakira-memory",

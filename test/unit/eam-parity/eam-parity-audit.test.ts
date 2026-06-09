@@ -76,6 +76,8 @@ describe("EAM parity audit", () => {
       "3",
       "--write",
       "audit.json",
+      "--behavior",
+      "behavior.json",
       "--fail-on-missing",
       "--alias",
       "eamd=kirakirad",
@@ -90,6 +92,7 @@ describe("EAM parity audit", () => {
     expect(options.nameAliases.eamd).toBe("kirakirad");
     expect(options.prefixAliases["eam-agent"]).toBe("kirakira-agent");
     expect(options.writePath).toMatch(/audit\.json$/);
+    expect(options.behaviorPath).toMatch(/behavior\.json$/);
   });
 
   it("detects file-level drift when requested", () => {
@@ -135,6 +138,63 @@ describe("EAM parity audit", () => {
     });
     expect(markdown).toContain("1 missing");
     expect(markdown).toContain("src/retain.ts");
+  });
+
+  it("merges behavior parity checks into matching file-drift rows", () => {
+    const root = mkdtempSync(join(tmpdir(), "kirakira-parity-"));
+    const reference = join(root, "reference");
+    const workspace = join(root, "workspace");
+    const behaviorPath = join(workspace, "docs", "upgrade", "eam-behavior-parity.json");
+
+    createPackage(reference, "memory-service");
+    createPackage(workspace, "memory-service");
+    writeFile(
+      workspace,
+      "packages/memory-service/src/local-extension.ts",
+      "export const local = true;\n",
+    );
+    writeFile(
+      workspace,
+      "docs/upgrade/eam-behavior-parity.json",
+      JSON.stringify({
+        schemaVersion: 1,
+        checks: [
+          {
+            kind: "package",
+            sourceName: "memory-service",
+            targetName: "memory-service",
+            classification: "intentional-kirakira-extension",
+            status: "covered",
+            behavior: "local extension preserves source file parity",
+            evidence: [{ kind: "test", path: "test/unit/memory-service.test.ts" }],
+            remainingGaps: [],
+          },
+        ],
+      }),
+    );
+    mkdirSync(join(reference, "docs", "plane"), { recursive: true });
+    mkdirSync(join(workspace, "docs", "plane"), { recursive: true });
+
+    const audit = buildEamParityAudit({
+      referenceRoot: reference,
+      workspaceRoot: workspace,
+      depth: "files",
+      behaviorPath,
+    });
+    const row = audit.sections[0].rows.find((item) => item.sourceName === "memory-service");
+    const markdown = renderEamParityAudit(audit, "markdown");
+
+    expect(audit.behaviorParity?.summary).toMatchObject({
+      checks: 1,
+      status: { covered: 1 },
+      driftRows: { total: 1, checked: 1, unchecked: 0 },
+    });
+    expect(row?.behaviorCheck).toMatchObject({
+      classification: "intentional-kirakira-extension",
+      status: "covered",
+    });
+    expect(markdown).toContain("## Behavior Parity Checks");
+    expect(markdown).toContain("local extension preserves source file parity");
   });
 
   it("normalizes package-specific Python namespaces and docs-plane filenames", () => {

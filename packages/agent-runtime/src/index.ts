@@ -10,6 +10,11 @@ export {
 
 export type {
   Action,
+  AgentMcpOtelMetadata,
+  AgentMcpToolCallRequest,
+  AgentMcpToolCallResult,
+  AgentMcpToolGateway,
+  AgentMcpToolPolicyResult,
   Artifact,
   ArtifactRef,
   ChainResult,
@@ -28,6 +33,9 @@ export type {
   GatewayClientLike,
   InterruptToken,
   Message,
+  McpCallToolResult,
+  McpContentBlock,
+  McpTraceContextCarrier,
   ModelPlannerClient,
   ModelResponse,
   ModelRoutingConfig,

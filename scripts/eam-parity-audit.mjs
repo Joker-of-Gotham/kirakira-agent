@@ -68,6 +68,8 @@ export function normalizeAuditArgs(argv = []) {
   const options = {
     workspaceRoot: DEFAULT_WORKSPACE,
     referenceRoot: join(DEFAULT_WORKSPACE, "reference_project", "eam-agent"),
+    behaviorPath: undefined,
+    behaviorEnabled: true,
     format: "markdown",
     depth: "entries",
     sampleSize: 8,
@@ -112,6 +114,12 @@ export function normalizeAuditArgs(argv = []) {
     } else if (arg === "--write") {
       options.writePath = resolve(readRequiredValue(argv, index));
       index += 1;
+    } else if (arg === "--behavior") {
+      options.behaviorPath = resolve(readRequiredValue(argv, index));
+      options.behaviorEnabled = true;
+      index += 1;
+    } else if (arg === "--no-behavior") {
+      options.behaviorEnabled = false;
     } else if (arg === "--fail-on-missing") {
       options.failOnMissing = true;
     } else if (arg === "--alias") {
@@ -145,6 +153,13 @@ export function buildEamParityAudit(options = {}) {
     options.filePathRenameRules ?? DEFAULT_FILE_PATH_RENAME_RULES;
   const depth = options.depth ?? "entries";
   const sampleSize = options.sampleSize ?? 8;
+  const behaviorPath =
+    options.behaviorEnabled === false
+      ? undefined
+      : resolve(
+          options.behaviorPath ??
+            join(workspaceRoot, "docs", "upgrade", "eam-behavior-parity.json"),
+        );
 
   const packages = compareNamedChildren({
     kind: "package",
@@ -166,15 +181,25 @@ export function buildEamParityAudit(options = {}) {
     sampleSize,
     filePathRenameRules,
   });
+  const sections = [packages, docs];
+  const behaviorParity = behaviorPath
+    ? loadBehaviorParity(behaviorPath, sections)
+    : undefined;
 
-  return {
+  const audit = {
     generatedAt: new Date().toISOString(),
     depth,
     workspaceRoot,
     referenceRoot,
-    summary: summarize([packages, docs]),
-    sections: [packages, docs],
+    summary: summarize(sections),
+    sections: behaviorParity
+      ? attachBehaviorChecks(sections, behaviorParity.checks)
+      : sections,
   };
+  if (behaviorParity) {
+    audit.behaviorParity = behaviorParity;
+  }
+  return audit;
 }
 
 export function renderEamParityAudit(audit, format = "markdown") {
@@ -218,7 +243,193 @@ export function renderEamParityAudit(audit, format = "markdown") {
     lines.push("");
   }
 
+  if (audit.behaviorParity) {
+    lines.push("## Behavior Parity Checks", "");
+    lines.push(
+      `Source: \`${toPosixPath(relative(audit.workspaceRoot, audit.behaviorParity.path))}\``,
+    );
+    lines.push(
+      `Coverage: ${audit.behaviorParity.summary.driftRows.checked}/${audit.behaviorParity.summary.driftRows.total} drift rows classified, ${audit.behaviorParity.summary.driftRows.unchecked} unclassified`,
+    );
+    lines.push(
+      `Status: ${formatCountMap(audit.behaviorParity.summary.status)}; Classification: ${formatCountMap(audit.behaviorParity.summary.classification)}`,
+    );
+    lines.push("");
+    lines.push("| Source | Target | Classification | Behavior status | Evidence | Remaining gaps |");
+    lines.push("| --- | --- | --- | --- | --- | --- |");
+    for (const check of audit.behaviorParity.checks) {
+      lines.push(
+        `| \`${check.sourceName ?? "-"}\` | \`${check.targetName ?? "-"}\` | ${escapeTableCell(check.classification)} | ${check.status} | ${escapeTableCell(behaviorEvidence(check))} | ${escapeTableCell(check.remainingGaps.join("; ") || "none")} |`,
+      );
+    }
+    lines.push("");
+
+    if (audit.behaviorParity.extraTargetEntries.length > 0) {
+      lines.push("Extra target behavior entries:");
+      lines.push("");
+      lines.push("| Target | Classification | Behavior status | Evidence |");
+      lines.push("| --- | --- | --- | --- |");
+      for (const entry of audit.behaviorParity.extraTargetEntries) {
+        lines.push(
+          `| \`${entry.targetName}\` | ${escapeTableCell(entry.classification)} | ${entry.status} | ${escapeTableCell(entry.behavior || "none")} |`,
+        );
+      }
+      lines.push("");
+    }
+  }
+
   return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function loadBehaviorParity(behaviorPath, sections) {
+  if (!existsSync(behaviorPath)) return undefined;
+  const payload = JSON.parse(readFileSync(behaviorPath, "utf8"));
+  if (!payload || typeof payload !== "object" || !Array.isArray(payload.checks)) {
+    throw new Error(`Behavior parity file must contain a checks array: ${behaviorPath}`);
+  }
+  const checks = payload.checks.map(normalizeBehaviorCheck);
+  const extraTargetEntries = Array.isArray(payload.extraTargetEntries)
+    ? payload.extraTargetEntries.map(normalizeExtraTargetEntry)
+    : [];
+  const driftRows = sections.flatMap((section) =>
+    section.rows
+      .filter((row) => row.status === "drift")
+      .map((row) => behaviorKey(row.kind, row.sourceName, row.targetName)),
+  );
+  const checkKeys = new Set(
+    checks.map((check) => behaviorKey(check.kind, check.sourceName, check.targetName)),
+  );
+  const checkedDriftRows = driftRows.filter((key) => checkKeys.has(key));
+  return {
+    path: behaviorPath,
+    schemaVersion: payload.schemaVersion ?? 1,
+    updatedAt: payload.updatedAt,
+    references: Array.isArray(payload.references) ? payload.references : [],
+    checks,
+    extraTargetEntries,
+    summary: {
+      checks: checks.length,
+      extraTargetEntries: extraTargetEntries.length,
+      status: countBy(checks, "status"),
+      classification: countBy(checks, "classification"),
+      driftRows: {
+        total: driftRows.length,
+        checked: checkedDriftRows.length,
+        unchecked: driftRows.length - checkedDriftRows.length,
+      },
+    },
+  };
+}
+
+function normalizeBehaviorCheck(check) {
+  if (!check || typeof check !== "object") {
+    throw new Error("Behavior parity checks must be objects");
+  }
+  if (typeof check.targetName !== "string" || check.targetName.length === 0) {
+    throw new Error("Behavior parity checks require a targetName");
+  }
+  return {
+    kind: typeof check.kind === "string" ? check.kind : "package",
+    sourceName: typeof check.sourceName === "string" ? check.sourceName : null,
+    targetName: check.targetName,
+    classification:
+      typeof check.classification === "string" ? check.classification : "unclassified",
+    status: normalizeBehaviorStatus(check.status),
+    behavior: typeof check.behavior === "string" ? check.behavior : "",
+    extensionFiles: normalizeStringArray(check.extensionFiles),
+    evidence: normalizeEvidence(check.evidence),
+    remainingGaps: normalizeStringArray(check.remainingGaps),
+    notes: normalizeStringArray(check.notes),
+  };
+}
+
+function normalizeExtraTargetEntry(entry) {
+  if (!entry || typeof entry !== "object") {
+    throw new Error("Extra target behavior entries must be objects");
+  }
+  if (typeof entry.targetName !== "string" || entry.targetName.length === 0) {
+    throw new Error("Extra target behavior entries require a targetName");
+  }
+  return {
+    targetName: entry.targetName,
+    classification:
+      typeof entry.classification === "string" ? entry.classification : "unclassified",
+    status: normalizeBehaviorStatus(entry.status),
+    behavior: typeof entry.behavior === "string" ? entry.behavior : "",
+  };
+}
+
+function normalizeBehaviorStatus(status) {
+  if (["covered", "partial", "gap", "unknown"].includes(status)) return status;
+  return "unknown";
+}
+
+function normalizeStringArray(value) {
+  return Array.isArray(value)
+    ? value.filter((item) => typeof item === "string")
+    : [];
+}
+
+function normalizeEvidence(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      kind: typeof item.kind === "string" ? item.kind : "evidence",
+      ...(typeof item.path === "string" ? { path: item.path } : {}),
+      ...(typeof item.command === "string" ? { command: item.command } : {}),
+      ...(typeof item.url === "string" ? { url: item.url } : {}),
+      ...(typeof item.note === "string" ? { note: item.note } : {}),
+    }));
+}
+
+function attachBehaviorChecks(sections, checks) {
+  const byKey = new Map(
+    checks.map((check) => [
+      behaviorKey(check.kind, check.sourceName, check.targetName),
+      check,
+    ]),
+  );
+  return sections.map((section) => ({
+    ...section,
+    rows: section.rows.map((row) => {
+      const behaviorCheck = byKey.get(
+        behaviorKey(row.kind, row.sourceName, row.targetName),
+      );
+      return behaviorCheck ? { ...row, behaviorCheck } : row;
+    }),
+  }));
+}
+
+function behaviorKey(kind, sourceName, targetName) {
+  return `${kind}:${sourceName ?? ""}:${targetName ?? ""}`;
+}
+
+function countBy(items, property) {
+  return items.reduce((counts, item) => {
+    const value = item[property] ?? "unknown";
+    counts[value] = (counts[value] ?? 0) + 1;
+    return counts;
+  }, {});
+}
+
+function formatCountMap(counts) {
+  return Object.entries(counts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, count]) => `${name}=${count}`)
+    .join(", ");
+}
+
+function behaviorEvidence(check) {
+  const values = [];
+  if (check.behavior) values.push(check.behavior);
+  for (const item of check.evidence) {
+    if (item.path) values.push(`${item.kind}: ${item.path}`);
+    else if (item.command) values.push(`${item.kind}: ${item.command}`);
+    else if (item.url) values.push(`${item.kind}: ${item.url}`);
+    else if (item.note) values.push(`${item.kind}: ${item.note}`);
+  }
+  return values.join("; ") || "none";
 }
 
 function compareNamedChildren({
@@ -501,6 +712,8 @@ Options:
   --depth <entries|files>  Compare directories only, or include file inventories.
   --sample-size <number>   File drift sample size for each row. Defaults to 8.
   --write <path>           Write output to a file instead of stdout only.
+  --behavior <path>        Behavior parity JSON to merge into file drift rows.
+  --no-behavior            Disable default docs/upgrade behavior parity merge.
   --fail-on-missing        Exit non-zero when any source package/docs plane is missing.
   --alias <from=to>        Add a package directory alias.
   --prefix-alias <from=to> Add a docs-plane prefix alias.

@@ -42,7 +42,11 @@ describe("desktop main process security contract", () => {
     expect(source).toContain("show: !smokeEnabled");
     expect(source).toContain("did-finish-load");
     expect(source).toContain("did-fail-load");
+    expect(source).toContain("assertElectronSmokeSecurityPreferences");
+    expect(source).toContain("assertElectronSmokeWindow");
+    expect(source).toContain("Electron smoke renderer content verified");
     expect(source).toContain("Electron smoke timed out");
+    expect(source).toContain("app.exit(error ? 1 : 0)");
     expect(source).toContain("contextIsolation: true");
     expect(source).toContain("nodeIntegration: false");
     expect(source).toContain("sandbox: true");

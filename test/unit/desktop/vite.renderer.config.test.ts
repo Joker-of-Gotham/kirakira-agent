@@ -23,6 +23,7 @@ const loadConfig = async (env: Partial<Record<(typeof ENV_KEYS)[number], string>
   Object.assign(process.env, env);
   vi.resetModules();
   const config = (await import("../../../apps/desktop/vite.renderer.config.ts")).default as {
+    base?: string;
     server?: {
       host?: string;
       port?: number;
@@ -45,6 +46,7 @@ describe("desktop renderer Vite config", () => {
   it("uses the Kirakira desktop renderer port by default", async () => {
     const config = await loadConfig();
 
+    expect(config.base).toBe("./");
     expect(config.server).toMatchObject({
       host: "127.0.0.1",
       port: 5174,

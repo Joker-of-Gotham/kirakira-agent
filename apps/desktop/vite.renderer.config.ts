@@ -30,6 +30,7 @@ const devServerFromUrl = (endpoint: RuntimeEndpointParts) => {
 
 export default defineConfig({
   root: ".",
+  base: "./",
   plugins: [react()],
   build: {
     outDir: "dist/renderer",

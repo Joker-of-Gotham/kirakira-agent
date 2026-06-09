@@ -148,9 +148,9 @@ function eamMechanismTrack({ workspaceRoot, parity }) {
         `missing=${parity.summary.missing}, drift=${parity.summary.drift}, extra=${parity.summary.extra}`,
       ),
       warnIf(
-        "File-level mechanism drift is still present",
-        parity.summary.drift === 0,
-        `drift=${parity.summary.drift}; remaining drift requires subsystem-specific behavior checks`,
+        "File-level mechanism drift has behavior classifications",
+        parity.summary.drift === 0 || behaviorDriftClosed(parity.behaviorParity),
+        behaviorParityEvidence(parity),
       ),
       passFail(
         "File-level parity audit is enabled",
@@ -161,6 +161,33 @@ function eamMechanismTrack({ workspaceRoot, parity }) {
       ),
     ],
   };
+}
+
+function behaviorDriftClosed(behaviorParity) {
+  if (!behaviorParity) return false;
+  return (
+    behaviorParity.summary.driftRows.unchecked === 0 &&
+    (behaviorParity.summary.status.partial ?? 0) === 0 &&
+    (behaviorParity.summary.status.gap ?? 0) === 0 &&
+    (behaviorParity.summary.status.unknown ?? 0) === 0
+  );
+}
+
+function behaviorParityEvidence(parity) {
+  const behaviorParity = parity.behaviorParity;
+  if (!behaviorParity) {
+    return `drift=${parity.summary.drift}; remaining drift requires subsystem-specific behavior checks`;
+  }
+  const status = behaviorParity.summary.status;
+  const classification = behaviorParity.summary.classification;
+  return [
+    `drift=${parity.summary.drift}`,
+    `classified=${behaviorParity.summary.driftRows.checked}/${behaviorParity.summary.driftRows.total}`,
+    `covered=${status.covered ?? 0}`,
+    `partial=${status.partial ?? 0}`,
+    `gap=${status.gap ?? 0}`,
+    `intentional=${classification["intentional-kirakira-extension"] ?? 0}`,
+  ].join(", ");
 }
 
 function presentationTrack({ workspaceRoot, packageJson, projection }) {

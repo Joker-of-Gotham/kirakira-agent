@@ -9,7 +9,9 @@ export function handleToolResult(
   store?: ArtifactStore,
 ): ProcessedResult {
   const refs = [...(result.artifactRefs ?? [])];
-  let content = result.success ? result.output : `ERROR: ${result.error ?? "unknown"}`;
+  let content = result.success
+    ? result.output
+    : `ERROR: ${result.output || result.error || "unknown"}`;
   let truncated = false;
 
   if (workspace.rootPath && content.includes(workspace.rootPath)) {
@@ -22,7 +24,7 @@ export function handleToolResult(
     content = `Large output stored as artifact ${art.id} (${art.size} bytes).`;
     truncated = true;
   } else if (content.length > INLINE_MAX) {
-    content = `${content.slice(0, INLINE_MAX)}\n… [truncated]`;
+    content = `${content.slice(0, INLINE_MAX)}\n...[truncated]`;
     truncated = true;
   }
   return { content, artifactRefs: refs, truncated };

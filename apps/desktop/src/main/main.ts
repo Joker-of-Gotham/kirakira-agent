@@ -12,6 +12,10 @@ import { DaemonClient } from "@kirakira/runtime-daemon";
 import { isTrustedDesktopRuntimeSenderUrl } from "./renderer-endpoint.js";
 import { createRuntimeIpcController } from "./runtime-ipc.js";
 import {
+  assertElectronSmokeSecurityPreferences,
+  assertElectronSmokeWindow,
+} from "./electron-smoke.js";
+import {
   canOpenExternalDesktopUrl,
   desktopWindowOptionsFromManifest,
   resolveDesktopStartupManifest,
@@ -37,9 +41,9 @@ function finishElectronSmoke(error?: unknown): void {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 1;
   } else {
-    console.log("Electron smoke renderer loaded.");
+    console.log("Electron smoke renderer content verified.");
   }
-  app.quit();
+  app.exit(error ? 1 : 0);
 }
 
 const isTrustedRuntimeSender = (event: IpcMainInvokeEvent): boolean => {
@@ -82,11 +86,16 @@ function applyNavigationPolicy(window: BrowserWindow): void {
 
 const createWindow = async () => {
   const smoke = isWorkbenchElectronSmoke();
-  const window = new BrowserWindow(desktopWindowOptionsFromManifest(startupManifest));
+  const windowOptions = desktopWindowOptionsFromManifest(startupManifest);
+  if (smoke) {
+    assertElectronSmokeSecurityPreferences(windowOptions.webPreferences);
+  }
+  const window = new BrowserWindow(windowOptions);
   applyNavigationPolicy(window);
 
   if (smoke) {
     const timeoutMs = electronSmokeTimeoutMs();
+    const startedAt = Date.now();
     const timeout = setTimeout(() => {
       finishElectronSmoke(
         new Error(`Electron smoke timed out after ${timeoutMs}ms`),
@@ -94,8 +103,17 @@ const createWindow = async () => {
     }, timeoutMs);
 
     window.webContents.once("did-finish-load", () => {
+      const remainingMs = Math.max(1, timeoutMs - (Date.now() - startedAt));
       clearTimeout(timeout);
-      finishElectronSmoke();
+      void assertElectronSmokeWindow(window, startupManifest, {
+        timeoutMs: remainingMs,
+      })
+        .then(() => {
+          finishElectronSmoke();
+        })
+        .catch((error) => {
+          finishElectronSmoke(error);
+        });
     });
     window.webContents.once("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
       clearTimeout(timeout);

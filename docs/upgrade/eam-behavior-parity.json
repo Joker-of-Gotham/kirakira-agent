@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-06-10",
+  "auditCommand": "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100",
+  "auditBaseline": {
+    "exact": 15,
+    "equivalent": 8,
+    "drift": 8,
+    "missing": 0,
+    "extra": 4
+  },
+  "references": [
+    {
+      "title": "MCP 2025-11-25 CallToolResult schema",
+      "url": "https://modelcontextprotocol.io/specification/2025-11-25/schema",
+      "expectation": "CallToolResult requires content, may include structuredContent, and tool-originated failures should be returned with isError true."
+    },
+    {
+      "title": "OpenTelemetry MCP semantic conventions",
+      "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/",
+      "expectation": "MCP tools/call spans map to execute_tool and should carry gen_ai.tool.name and jsonrpc.request.id when available."
+    }
+  ],
+  "checks": [
+    {
+      "kind": "package",
+      "sourceName": "agent-runtime",
+      "targetName": "agent-runtime",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds runtime capability scoping and ephemeral delegate execution while preserving all EAM agent-runtime files.",
+      "extensionFiles": [
+        "packages/agent-runtime/src/runtime-scope.ts",
+        "packages/agent-runtime/src/worker/delegate-runner.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "packages/agent-runtime/src/runtime-scope.ts"
+        },
+        {
+          "kind": "source",
+          "path": "packages/agent-runtime/src/worker/delegate-runner.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/agent-runtime/capability-scope.test.ts",
+          "command": "pnpm exec vitest run test/unit/agent-runtime/capability-scope.test.ts test/unit/agent-runtime/react-loop-delegate.test.ts test/unit/agent-runtime/tool-executor-scope.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-08-runtime-capability-scope.md"
+        }
+      ],
+      "remainingGaps": [
+        "Provide a concrete forked child runtime view for context assembler, tool registry, skill injector, and MCP client instead of relying on parent dependency reuse plus scope checks."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "cli",
+      "targetName": "cli",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds runtime profile and doctor command bridges plus provider setup and TUI presentation surfaces while retaining the EAM CLI file set.",
+      "extensionFiles": [
+        "packages/cli/src/commands/runtime/doctor.ts",
+        "packages/cli/src/commands/runtime/index.ts",
+        "packages/cli/src/commands/runtime/profile.ts",
+        "packages/cli/src/gateway/provider-catalog.ts",
+        "packages/cli/src/runtime/runtime-doctor-command.ts",
+        "packages/cli/src/runtime/runtime-profile-command.ts",
+        "packages/cli/src/runtime/runtime-script-command.ts",
+        "packages/cli/src/tui/HomeScreen.tsx",
+        "packages/cli/src/tui/hooks/useTicker.ts",
+        "packages/cli/src/tui/motion.tsx",
+        "packages/cli/src/tui/mouse.ts",
+        "packages/cli/src/tui/ProviderSetup.tsx"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/cli/runtime-script-command.test.ts",
+          "command": "pnpm exec vitest run test/unit/cli/runtime-script-command.test.ts test/unit/cli/runtime-doctor-command.test.ts test/unit/cli/runtime-profile-command.test.ts test/contract/cli/runtime-doctor-command.test.ts test/contract/cli/runtime-profile-command.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/tui/layout-stability.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-runtime-profile-cli.md"
+        }
+      ],
+      "remainingGaps": [
+        "Replace remaining CLI MCP setup duplication with the resolved runtime profile projection where command behavior permits.",
+        "Keep provider setup and home-screen UI covered by focused TUI tests when the workbench IA changes."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "config-resolver",
+      "targetName": "config-resolver",
+      "classification": "intentional-kirakira-extension",
+      "status": "covered",
+      "behavior": "Kirakira adds resolved runtime profile projection so SDK, daemon, launcher, MCP, and memory callers can consume the same profile-derived state.",
+      "extensionFiles": [
+        "packages/config-resolver/src/runtime-projection.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "packages/config-resolver/src/runtime-projection.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/config-resolver/resolved-state.test.ts",
+          "command": "pnpm exec vitest run test/unit/config-resolver/resolved-state.test.ts test/contract/config/resolved-state-schema.test.ts test/unit/runtime/profile-resolution.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-resolved-runtime-state.md"
+        }
+      ],
+      "remainingGaps": [
+        "Migrate older runtime callers onto the resolved-state projection only after parity coverage is broad enough to avoid behavior drift."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "eamd",
+      "targetName": "kirakirad",
+      "classification": "intentional-kirakira-extension",
+      "status": "covered",
+      "behavior": "Kirakira keeps the EAM daemon package shape under the kirakirad rename; the only extra file is Go module checksum metadata.",
+      "extensionFiles": [
+        "packages/kirakirad/go.sum"
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "packages/kirakirad/go.mod"
+        },
+        {
+          "kind": "source",
+          "path": "packages/kirakirad/go.sum"
+        },
+        {
+          "kind": "audit",
+          "command": "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
+        }
+      ],
+      "remainingGaps": []
+    },
+    {
+      "kind": "package",
+      "sourceName": "mcp-adapter",
+      "targetName": "mcp-adapter",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds profile-driven alias catalogs, gateway trust/policy/audit context, and MCP span propagation while preserving EAM adapter files.",
+      "extensionFiles": [
+        "packages/mcp-adapter/src/alias-catalog.ts",
+        "packages/mcp-adapter/src/gateway-context.ts",
+        "packages/mcp-adapter/src/otel-bridge.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/mcp-adapter/gateway-context.test.ts",
+          "command": "pnpm exec vitest run test/unit/mcp-adapter/gateway-context.test.ts test/unit/mcp-adapter/otel-bridge.test.ts test/unit/runtime-daemon/mcp-runtime.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/mcp-runtime.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-runtime-mcp-discovery-events.md"
+        },
+        {
+          "kind": "spec",
+          "url": "https://modelcontextprotocol.io/specification/2025-11-25/schema"
+        },
+        {
+          "kind": "spec",
+          "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/"
+        }
+      ],
+      "remainingGaps": [
+        "Wire configured OpenTelemetry SDK or exporter construction from runtime profiles.",
+        "Add live propagation smoke coverage across daemon-owned MCP transports.",
+        "Ensure direct browser and desktop tool actions continue returning tool-originated failures as MCP tool results with isError true."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "memory-store",
+      "targetName": "memory-store",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds daemon checkpoint migration and repository support so kernel checkpoints can persist through the memory Postgres profile.",
+      "extensionFiles": [
+        "packages/memory-store/scripts/copy-migrations.mjs",
+        "packages/memory-store/src/postgres/migrations/009_daemon_checkpoints.sql",
+        "packages/memory-store/src/postgres/repositories/checkpoint-envelope-repo.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/memory-runtime-deps.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-daemon/memory-runtime-deps.test.ts test/contract/memory/checkpoint-envelope.test.ts test/unit/orchestrator-kernel/task-executor.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/contract/memory/checkpoint-envelope.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-daemon-durable-checkpoints.md"
+        }
+      ],
+      "remainingGaps": [
+        "Run gated Docker/local checkpoint persistence validation against the test-host memory stack.",
+        "Connect retain and reflect events to the daemon memory service in addition to checkpoint persistence."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "orchestrator-kernel",
+      "targetName": "orchestrator-kernel",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds subagent task execution, research task execution, event projection, and runtime bridge contracts while preserving the EAM kernel file set.",
+      "extensionFiles": [
+        "packages/orchestrator-kernel/src/execution/subagent-task-executor.ts",
+        "packages/orchestrator-kernel/src/research/event-bridge.ts",
+        "packages/orchestrator-kernel/src/research/research-task-executor.ts",
+        "packages/orchestrator-kernel/src/subagent/contract.ts",
+        "packages/orchestrator-kernel/src/subagent/runtime-bridge.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/orchestrator-kernel/task-executor.test.ts",
+          "command": "pnpm exec vitest run test/unit/orchestrator-kernel/task-executor.test.ts test/unit/orchestrator-kernel/subagent-contract.test.ts test/unit/orchestrator-kernel/daemon-orchestrator.test.ts test/unit/orchestrator-kernel/research-event-bridge.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-kernel-deep-research-executor.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-topology-manifest-doctor-policy.md"
+        }
+      ],
+      "remainingGaps": [
+        "Add topology lineage IDs and handoff edge IDs to subagent lifecycle events.",
+        "Add bounded role defaults for model, context, and child runtime policy.",
+        "Expand behavior validation from injected adapters to live daemon source adapters where practical."
+      ]
+    },
+    {
+      "kind": "package",
+      "sourceName": "runtime-daemon",
+      "targetName": "runtime-daemon",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira adds daemon config, shared MCP and memory dependency factories, deep-research composition, socket resolution, browser gateway, and runtime socket surfaces on top of the EAM daemon baseline.",
+      "extensionFiles": [
+        "packages/runtime-daemon/src/bin/daemon-config.ts",
+        "packages/runtime-daemon/src/bin/kirakira-runtime-daemon.ts",
+        "packages/runtime-daemon/src/bridge/deep-research.ts",
+        "packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts",
+        "packages/runtime-daemon/src/bridge/mcp-runtime.ts",
+        "packages/runtime-daemon/src/bridge/memory-runtime-deps.ts",
+        "packages/runtime-daemon/src/bridge/runtime-deps.ts",
+        "packages/runtime-daemon/src/ipc/socket-path.ts",
+        "packages/runtime-daemon/src/server/artifact-content.ts",
+        "packages/runtime-daemon/src/server/browser-gateway-server.ts",
+        "packages/runtime-daemon/src/server/runtime-socket.ts"
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "path": "test/unit/runtime-daemon/mcp-runtime.test.ts",
+          "command": "pnpm exec vitest run test/unit/runtime-daemon/mcp-runtime.test.ts test/unit/runtime-daemon/memory-runtime-deps.test.ts test/unit/runtime-daemon/daemon-config.test.ts test/unit/runtime-daemon/socket-path.test.ts test/unit/runtime-daemon/browser-gateway-server.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-runtime-mcp-dependency-factory.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-daemon-memory-runtime-deps.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-09-profile-driven-workbench-socket.md"
+        }
+      ],
+      "remainingGaps": [
+        "Run regular live Docker/local web and desktop smoke gates outside focused unit tests.",
+        "Unify OTel exporter construction, audit bridge wiring, memory, and topology dependencies through one profile-derived composition path.",
+        "Reduce remaining daemon lifecycle and runtime-profile projection duplication."
+      ]
+    }
+  ],
+  "extraTargetEntries": [
+    {
+      "targetName": "deep-research",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package."
+    },
+    {
+      "targetName": "frontend-app",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira owns shared web and desktop workbench presentation outside the EAM package baseline."
+    },
+    {
+      "targetName": "frontend-core",
+      "classification": "intentional-kirakira-extension",
+      "status": "partial",
+      "behavior": "Kirakira owns browser-safe frontend projection selectors outside the EAM package baseline."
+    },
+    {
+      "targetName": "runtime-contracts",
+      "classification": "intentional-kirakira-extension",
+      "status": "covered",
+      "behavior": "Kirakira centralizes daemon/browser/desktop protocol contracts outside the EAM package baseline."
+    }
+  ]
+}

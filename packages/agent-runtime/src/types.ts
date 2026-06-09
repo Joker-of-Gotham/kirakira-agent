@@ -218,12 +218,84 @@ export interface GatewayClientLike {
   }>;
 }
 
+export interface McpTraceContextCarrier {
+  traceparent?: string;
+  tracestate?: string;
+  baggage?: string;
+}
+
+export interface McpContentBlock {
+  type: string;
+  [key: string]: unknown;
+}
+
+export interface McpCallToolResult {
+  content: McpContentBlock[];
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+  _meta?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface AgentMcpToolCallRequest {
+  server: string;
+  tool: string;
+  arguments?: Record<string, unknown>;
+  runId?: string;
+  traceId?: string;
+  traceContext?: McpTraceContextCarrier;
+  subagentId?: string;
+  role?: string;
+  requestedLane?: string;
+  runtimeProfileName?: string;
+}
+
+export interface AgentMcpToolPolicyResult {
+  effect: "allow" | "deny" | "escalate";
+  reasonCodes: string[];
+  approvalRequired: boolean;
+  traceId: string;
+  decisionId?: string;
+  summary?: string;
+}
+
+export interface AgentMcpOtelMetadata {
+  spanName: string;
+  attributes: Record<string, string | number | boolean>;
+  traceId?: string;
+  spanId?: string;
+  parentSpanId?: string;
+  traceContext?: McpTraceContextCarrier;
+  status?: "UNSET" | "OK" | "ERROR";
+  durationMs?: number;
+}
+
+export interface AgentMcpToolCallResult {
+  server: string;
+  tool: string;
+  success: boolean;
+  content?: unknown;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+  error?: string;
+  latencyMs?: number;
+  policy?: AgentMcpToolPolicyResult;
+  trust?: Record<string, unknown>;
+  audit?: Record<string, unknown>;
+  otel?: AgentMcpOtelMetadata;
+}
+
+export interface AgentMcpToolGateway {
+  callTool(request: AgentMcpToolCallRequest): Promise<AgentMcpToolCallResult>;
+}
+
 export interface ToolResult {
   success: boolean;
   output: string;
   artifactRefs?: string[];
   error?: string;
   approvalRequired?: boolean;
+  mcp?: AgentMcpToolCallResult;
 }
 
 export interface ExitConditionMetrics {

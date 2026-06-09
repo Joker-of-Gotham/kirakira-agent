@@ -53,6 +53,12 @@ change, a validation command, and a pushed commit.
 | Hardcoding, harness, SDK/API | 50% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, profile-projected MCP/memory startup fragments, PEP execution context, browser-safe topology/MCP selectors, MCP gateway alias catalogs, launcher executor tests, and the workbench smoke harness are being centralized through resolver/contract-backed APIs; launcher smoke contracts now own web/desktop readiness checks and desktop Electron smoke step overrides for both dry-run and live paths. | Replace switch-heavy routing where it blocks extensibility, harden remaining test harnesses, finish shared gateway trust/audit/OTel context, and deduplicate runtime-profile/daemon manifest topology projection. |
 | Docker/local ecosystem | 56% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, profile-generated MCP config fragments, daemon plan-context topology injection, profile-driven topology doctor checks, mock/web/desktop topology consumption, profile-driven Electron shell startup, surface-aware `waitFor` gates, and opt-in `workbench-host` web/desktop live smoke commands now exist. | Wire the new projection fragments into remaining launchers/CLI paths where behavior permits, reuse resolved memory/topology contracts in broader harnesses, and run the live Docker/local web plus Electron smoke gates in a slower environment. |
 
+Behavior-level evidence for the eight file-level drift rows now lives in
+`docs/upgrade/eam-behavior-parity.md` and the script-consumed
+`docs/upgrade/eam-behavior-parity.json`. The current classification is eight
+intentional Kirakira extension rows: two covered, six partial, and zero
+unclassified EAM behavior gaps.
+
 ## Gap Matrix
 
 | Area | EAM source | Kirakira current | Status | Next implementation slice |

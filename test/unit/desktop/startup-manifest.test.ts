@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { join, resolve } from "node:path";
 import {
   DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS,
+  DEFAULT_ELECTRON_SMOKE_INTERVAL_MS,
+  DEFAULT_ELECTRON_SMOKE_SELECTORS,
+  DEFAULT_ELECTRON_SMOKE_TEXT,
   canOpenExternalDesktopUrl,
   desktopWindowOptionsFromManifest,
+  electronSmokeIntervalMs,
+  electronSmokeSelectors,
+  electronSmokeTextMarkers,
   electronSmokeTimeoutMs,
   isWorkbenchElectronSmoke,
   resolveDesktopStartupManifest,
@@ -31,6 +37,9 @@ describe("desktop startup manifest", () => {
     expect(manifest.renderer.fileUrl).toContain("apps/desktop/dist/renderer/index.html");
     expect(manifest.window.show).toBe(false);
     expect(manifest.smoke.timeoutMs).toBe(2500);
+    expect(manifest.smoke.intervalMs).toBe(DEFAULT_ELECTRON_SMOKE_INTERVAL_MS);
+    expect(manifest.smoke.selectors).toEqual([...DEFAULT_ELECTRON_SMOKE_SELECTORS]);
+    expect(manifest.smoke.textMarkers).toEqual([...DEFAULT_ELECTRON_SMOKE_TEXT]);
     expect(JSON.stringify(manifest)).not.toContain("5173");
   });
 
@@ -80,6 +89,33 @@ describe("desktop startup manifest", () => {
     expect(electronSmokeTimeoutMs({ KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TIMEOUT_MS: "42" })).toBe(
       42,
     );
+    expect(electronSmokeIntervalMs({ KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_INTERVAL_MS: "0" })).toBe(
+      DEFAULT_ELECTRON_SMOKE_INTERVAL_MS,
+    );
+    expect(electronSmokeIntervalMs({ KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_INTERVAL_MS: "10" })).toBe(
+      10,
+    );
+  });
+
+  it("keeps renderer content smoke markers configurable", () => {
+    expect(electronSmokeSelectors({})).toEqual([...DEFAULT_ELECTRON_SMOKE_SELECTORS]);
+    expect(electronSmokeTextMarkers({})).toEqual([...DEFAULT_ELECTRON_SMOKE_TEXT]);
+    expect(
+      electronSmokeSelectors({
+        KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_SELECTORS:
+          '["main.kk-shell","[aria-label=\\"Runtime workspace\\"]"]',
+      }),
+    ).toEqual(["main.kk-shell", '[aria-label="Runtime workspace"]']);
+    expect(
+      electronSmokeTextMarkers({
+        KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TEXT: "Kirakira Agent,Desktop IPC",
+      }),
+    ).toEqual(["Kirakira Agent", "Desktop IPC"]);
+    expect(() =>
+      electronSmokeSelectors({
+        KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_SELECTORS: "[1]",
+      }),
+    ).toThrow("KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_SELECTORS must be a JSON string array");
   });
 
   it("creates BrowserWindow options from the manifest security contract", () => {

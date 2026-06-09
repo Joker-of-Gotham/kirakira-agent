@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import type { ResolvedConfig } from "../../../packages/core/src/index.js";
+import type {
+  ResolvedConfig,
+  ResolvedRuntimeMemoryState,
+} from "../../../packages/core/src/index.js";
 import type { MemoryBundle, RecallRequest, RetrievalTrace } from "../../../packages/memory-core/src/index.js";
 import {
   createDaemonMemoryDependencies,
@@ -221,6 +224,12 @@ describe("daemon memory runtime dependencies", () => {
       resolvedConfig,
       runtimeProfileName: "profiled",
       env: {
+        DATABASE_URL: "postgres://generic:generic@localhost:5432/generic",
+        REDIS_URL: "redis://localhost:6379/0",
+        QDRANT_URL: "http://localhost:6333",
+        NEO4J_URI: "bolt://localhost:7687",
+        KIRAKIRA_NEO4J_USER: "generic-neo4j",
+        KIRAKIRA_NEO4J_PASSWORD: "generic-password",
         PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
         PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
         PROFILE_QDRANT_URL: "http://profile-qdrant:7333",
@@ -287,6 +296,7 @@ describe("daemon memory runtime dependencies", () => {
       apiKey: "profile-embedding-key",
       baseUrl: "http://profile-embeddings",
     });
+    expect(JSON.stringify(capturedConfig)).not.toContain("localhost");
     expect(capturedConfig?.recall).toMatchObject({
       defaultTokenBudget: 2048,
       defaultLevel: "L2",
@@ -296,6 +306,105 @@ describe("daemon memory runtime dependencies", () => {
       limit: 5,
       level: "L2",
     });
+  });
+
+  it("does not synthesize localhost defaults for declared resolved profile memory services", () => {
+    const memory = {
+      enabled: true,
+      services: [
+        { name: "postgres", url_env: "PROFILE_DATABASE_URL" },
+        { name: "redis", url_env: "PROFILE_REDIS_URL" },
+        { name: "qdrant", url_env: "PROFILE_QDRANT_URL" },
+        { name: "neo4j", url_env: "PROFILE_NEO4J_URI" },
+      ],
+      vector: {
+        backend: "qdrant",
+        url_env: "PROFILE_QDRANT_URL",
+      },
+      graph: {
+        backend: "neo4j",
+        uri_env: "PROFILE_NEO4J_URI",
+        username_env: "PROFILE_NEO4J_USER",
+        password_env: "PROFILE_NEO4J_PASSWORD",
+      },
+    } satisfies ResolvedRuntimeMemoryState;
+
+    expect(() => memoryServiceConfigFromEnv({}, memory)).toThrow(
+      /Postgres DSN.*PROFILE_DATABASE_URL/,
+    );
+    expect(() =>
+      memoryServiceConfigFromEnv(
+        { PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile" },
+        memory,
+      ),
+    ).toThrow(/Redis URL.*PROFILE_REDIS_URL/);
+    expect(() =>
+      memoryServiceConfigFromEnv(
+        {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+          PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+        },
+        memory,
+      ),
+    ).toThrow(/Neo4j URI.*PROFILE_NEO4J_URI/);
+    expect(() =>
+      memoryServiceConfigFromEnv(
+        {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+          PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+          PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+        },
+        memory,
+      ),
+    ).toThrow(/Neo4j username.*PROFILE_NEO4J_USER/);
+    expect(() =>
+      memoryServiceConfigFromEnv(
+        {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+          PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+          PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+          PROFILE_NEO4J_USER: "profile-neo4j",
+        },
+        memory,
+      ),
+    ).toThrow(/Neo4j password.*PROFILE_NEO4J_PASSWORD/);
+    expect(() =>
+      memoryServiceConfigFromEnv(
+        {
+          PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+          PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+          PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+          PROFILE_NEO4J_USER: "profile-neo4j",
+          PROFILE_NEO4J_PASSWORD: "profile-neo4j-secret",
+        },
+        memory,
+      ),
+    ).toThrow(/Qdrant URL or host.*PROFILE_QDRANT_URL/);
+
+    const config = memoryServiceConfigFromEnv(
+      {
+        PROFILE_DATABASE_URL: "postgres://profile:secret@profile-pg:15432/profile",
+        PROFILE_REDIS_URL: "redis://profile-redis:16379/2",
+        PROFILE_QDRANT_URL: "http://profile-qdrant:7333",
+        PROFILE_NEO4J_URI: "bolt://profile-neo4j:17687",
+        PROFILE_NEO4J_USER: "profile-neo4j",
+        PROFILE_NEO4J_PASSWORD: "profile-neo4j-secret",
+      },
+      memory,
+    );
+
+    expect(config).toMatchObject({
+      postgres: { host: "profile-pg" },
+      redis: { url: "redis://profile-redis:16379/2" },
+      vector: { backend: "qdrant", host: "profile-qdrant", port: 7333 },
+      graph: {
+        backend: "neo4j",
+        uri: "bolt://profile-neo4j:17687",
+        username: "profile-neo4j",
+        password: "profile-neo4j-secret",
+      },
+    });
+    expect(JSON.stringify(config)).not.toContain("localhost");
   });
 
   it("selects a checkpoint repository from the resolved memory Postgres profile without enabling recall", async () => {

@@ -14,13 +14,33 @@ import {
 export const WORKBENCH_ELECTRON_SMOKE_ENV = "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE";
 export const WORKBENCH_ELECTRON_SMOKE_TIMEOUT_ENV =
   "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TIMEOUT_MS";
+export const WORKBENCH_ELECTRON_SMOKE_INTERVAL_ENV =
+  "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_INTERVAL_MS";
+export const WORKBENCH_ELECTRON_SMOKE_SELECTORS_ENV =
+  "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_SELECTORS";
+export const WORKBENCH_ELECTRON_SMOKE_TEXT_ENV =
+  "KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TEXT";
 export const DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS = 30_000;
+export const DEFAULT_ELECTRON_SMOKE_INTERVAL_MS = 250;
+export const DEFAULT_ELECTRON_SMOKE_SELECTORS = [
+  "main.kk-shell",
+  '[aria-label="Run navigation"]',
+  '[aria-label="Runtime workspace"]',
+] as const;
+export const DEFAULT_ELECTRON_SMOKE_TEXT = [
+  "Kirakira Agent",
+  "Desktop IPC",
+  "Runtime workbench",
+] as const;
 
 const EXTERNAL_BROWSER_PROTOCOLS = ["https:", "http:", "mailto:"] as const;
 
 export interface DesktopStartupManifestEnv extends DesktopRendererEndpointEnv {
   KIRAKIRA_WORKBENCH_ELECTRON_SMOKE?: string;
   KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TIMEOUT_MS?: string;
+  KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_INTERVAL_MS?: string;
+  KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_SELECTORS?: string;
+  KIRAKIRA_WORKBENCH_ELECTRON_SMOKE_TEXT?: string;
 }
 
 export interface DesktopStartupManifestPaths {
@@ -48,6 +68,12 @@ export interface DesktopStartupManifest {
     envKey: typeof WORKBENCH_ELECTRON_SMOKE_ENV;
     timeoutEnvKey: typeof WORKBENCH_ELECTRON_SMOKE_TIMEOUT_ENV;
     timeoutMs: number;
+    intervalEnvKey: typeof WORKBENCH_ELECTRON_SMOKE_INTERVAL_ENV;
+    intervalMs: number;
+    selectorsEnvKey: typeof WORKBENCH_ELECTRON_SMOKE_SELECTORS_ENV;
+    selectors: string[];
+    textEnvKey: typeof WORKBENCH_ELECTRON_SMOKE_TEXT_ENV;
+    textMarkers: string[];
   };
   window: Pick<
     BrowserWindowConstructorOptions,
@@ -70,6 +96,68 @@ export function electronSmokeTimeoutMs(
 ): number {
   const value = Number(env[WORKBENCH_ELECTRON_SMOKE_TIMEOUT_ENV]);
   return Number.isInteger(value) && value > 0 ? value : DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS;
+}
+
+export function electronSmokeIntervalMs(
+  env: DesktopStartupManifestEnv = process.env,
+): number {
+  const value = Number(env[WORKBENCH_ELECTRON_SMOKE_INTERVAL_ENV]);
+  return Number.isInteger(value) && value > 0 ? value : DEFAULT_ELECTRON_SMOKE_INTERVAL_MS;
+}
+
+function parseSmokeListEnv(
+  value: string | undefined,
+  fallback: readonly string[],
+  envKey: string,
+): string[] {
+  const trimmed = value?.trim();
+  if (!trimmed) return [...fallback];
+
+  const rawValues = trimmed.startsWith("[")
+    ? parseJsonSmokeList(trimmed, envKey)
+    : trimmed.split(",");
+  const values = rawValues.map((item) => item.trim()).filter(Boolean);
+  if (values.length === 0) {
+    throw new Error(`${envKey} must contain at least one non-empty value`);
+  }
+  return values;
+}
+
+function parseJsonSmokeList(value: string, envKey: string): string[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch (error) {
+    throw new Error(
+      `${envKey} must be a comma-separated list or JSON string array: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  if (!Array.isArray(parsed) || parsed.some((item) => typeof item !== "string")) {
+    throw new Error(`${envKey} must be a JSON string array`);
+  }
+  return parsed;
+}
+
+export function electronSmokeSelectors(
+  env: DesktopStartupManifestEnv = process.env,
+): string[] {
+  return parseSmokeListEnv(
+    env[WORKBENCH_ELECTRON_SMOKE_SELECTORS_ENV],
+    DEFAULT_ELECTRON_SMOKE_SELECTORS,
+    WORKBENCH_ELECTRON_SMOKE_SELECTORS_ENV,
+  );
+}
+
+export function electronSmokeTextMarkers(
+  env: DesktopStartupManifestEnv = process.env,
+): string[] {
+  return parseSmokeListEnv(
+    env[WORKBENCH_ELECTRON_SMOKE_TEXT_ENV],
+    DEFAULT_ELECTRON_SMOKE_TEXT,
+    WORKBENCH_ELECTRON_SMOKE_TEXT_ENV,
+  );
 }
 
 export function canOpenExternalDesktopUrl(value: string): boolean {
@@ -110,6 +198,12 @@ export function resolveDesktopStartupManifest(
       envKey: WORKBENCH_ELECTRON_SMOKE_ENV,
       timeoutEnvKey: WORKBENCH_ELECTRON_SMOKE_TIMEOUT_ENV,
       timeoutMs: electronSmokeTimeoutMs(env),
+      intervalEnvKey: WORKBENCH_ELECTRON_SMOKE_INTERVAL_ENV,
+      intervalMs: electronSmokeIntervalMs(env),
+      selectorsEnvKey: WORKBENCH_ELECTRON_SMOKE_SELECTORS_ENV,
+      selectors: electronSmokeSelectors(env),
+      textEnvKey: WORKBENCH_ELECTRON_SMOKE_TEXT_ENV,
+      textMarkers: electronSmokeTextMarkers(env),
     },
     window: {
       show: !smokeEnabled,
