@@ -24,6 +24,7 @@ export const DEFAULT_ELECTRON_SMOKE_TIMEOUT_MS = 30_000;
 export const DEFAULT_ELECTRON_SMOKE_INTERVAL_MS = 250;
 export const DEFAULT_ELECTRON_SMOKE_SELECTORS = [
   "main.kk-shell",
+  '[data-kk-presentation-surface="desktop"]',
   '[aria-label="Run navigation"]',
   '[aria-label="Runtime workspace"]',
 ] as const;

@@ -23,6 +23,7 @@ const REQUIRED_STYLE_TOKENS = Object.freeze([
 
 const REQUIRED_SMOKE_SELECTORS = Object.freeze([
   "main.kk-shell",
+  '[data-kk-presentation-surface="desktop"]',
   '[aria-label="Run navigation"]',
   '[aria-label="Runtime workspace"]',
 ]);

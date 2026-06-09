@@ -118,6 +118,20 @@ describe("desktop Electron smoke assertions", () => {
       'Electron smoke renderer content assertion failed: missing selector main.kk-shell; body text sample: "blank dev shell"',
     );
   });
+
+  it("requires the desktop presentation surface identity marker", () => {
+    expect(
+      electronSmokeRendererProbeFailures({
+        ...validProbe(),
+        selectors: [
+          { selector: "main.kk-shell", found: true },
+          { selector: '[data-kk-presentation-surface="desktop"]', found: false },
+          { selector: '[aria-label="Run navigation"]', found: true },
+          { selector: '[aria-label="Runtime workspace"]', found: true },
+        ],
+      }),
+    ).toContain('missing selector [data-kk-presentation-surface="desktop"]');
+  });
 });
 
 function validProbe(): ElectronSmokeRendererProbe {
@@ -127,6 +141,7 @@ function validProbe(): ElectronSmokeRendererProbe {
     rootChildCount: 1,
     selectors: [
       { selector: "main.kk-shell", found: true },
+      { selector: '[data-kk-presentation-surface="desktop"]', found: true },
       { selector: '[aria-label="Run navigation"]', found: true },
       { selector: '[aria-label="Runtime workspace"]', found: true },
     ],

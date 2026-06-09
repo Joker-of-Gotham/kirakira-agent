@@ -79,6 +79,13 @@ describe("presentation quality gate", () => {
       desktop: { declared: true },
       sharedWorkbenchAttribute: true,
     });
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        id: "desktop-smoke-content-contract",
+        status: "pass",
+        evidence: "selectors=4; text=4",
+      }),
+    );
     expect(report.designReview.summary).toEqual({
       status: "pass",
       passed: 7,

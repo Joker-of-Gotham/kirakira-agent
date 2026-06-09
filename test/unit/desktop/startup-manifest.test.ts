@@ -39,6 +39,9 @@ describe("desktop startup manifest", () => {
     expect(manifest.smoke.timeoutMs).toBe(2500);
     expect(manifest.smoke.intervalMs).toBe(DEFAULT_ELECTRON_SMOKE_INTERVAL_MS);
     expect(manifest.smoke.selectors).toEqual([...DEFAULT_ELECTRON_SMOKE_SELECTORS]);
+    expect(DEFAULT_ELECTRON_SMOKE_SELECTORS).toContain(
+      '[data-kk-presentation-surface="desktop"]',
+    );
     expect(manifest.smoke.textMarkers).toEqual([...DEFAULT_ELECTRON_SMOKE_TEXT]);
     expect(JSON.stringify(manifest)).not.toContain("5173");
   });
