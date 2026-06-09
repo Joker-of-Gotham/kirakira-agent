@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
 import {
+  buildRuntimeReadinessPlan,
   loadRuntimeProfiles,
   renderComposeArgs,
   renderRuntimeEnv,
@@ -129,6 +130,9 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
   const composeArgs = renderComposeArgs(profile);
   const infraServices = profile.workbench?.infraServices ?? [];
   const selectedSurface = resolveSurface(profile, surface);
+  const readiness = buildRuntimeReadinessPlan(profile, {
+    services: options.skipInfra ? [] : infraServices,
+  });
 
   if (!options.skipInfra && composeArgs.length > 0 && infraServices.length > 0) {
     steps.push({
@@ -149,6 +153,7 @@ export function buildWorkbenchPlan(profile, surface, options = {}) {
     profile: profile.name,
     surface: selectedSurface.name,
     env,
+    readiness,
     steps,
   };
 }

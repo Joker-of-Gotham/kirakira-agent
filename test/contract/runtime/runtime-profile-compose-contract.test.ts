@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildRuntimeReadinessPlan,
   loadRuntimeProfiles,
   renderRuntimeEnv,
   resolveRuntimeProfile,
@@ -60,6 +61,41 @@ function expectCatalogPortsInCompose(
 }
 
 describe("runtime profile compose contracts", () => {
+  it("keeps readiness compose services aligned with catalog mappings and healthchecks", () => {
+    const config = loadRuntimeProfiles();
+    const baseCompose = loadComposeFile("docker-compose.yml", import.meta.url);
+    const testCompose = loadComposeFile("docker-compose.test.yml", import.meta.url);
+    const cases = [
+      {
+        profile: resolveRuntimeProfile("container", config, emptyEnv),
+        healthcheckCompose: baseCompose,
+      },
+      {
+        profile: resolveRuntimeProfile("workbench-host", config, emptyEnv),
+        healthcheckCompose: baseCompose,
+      },
+      {
+        profile: resolveRuntimeProfile("test-host", config, emptyEnv),
+        healthcheckCompose: testCompose,
+      },
+    ];
+
+    for (const { profile, healthcheckCompose } of cases) {
+      const readiness = buildRuntimeReadinessPlan(profile, { config });
+      expect(readiness.compose?.services.length).toBeGreaterThan(0);
+      for (const check of readiness.checks.filter((entry) => entry.type === "compose-service")) {
+        const catalogService = runtimeServiceCatalog(config)[check.service];
+        const composeName = typeof catalogService?.composeService === "string"
+          ? catalogService.composeService
+          : check.service;
+        expect(check.composeService).toBe(composeName);
+        expect(readiness.compose?.services).toContain(composeName);
+        expect((composeService(healthcheckCompose, composeName) as { healthcheck?: unknown }).healthcheck)
+          .toBeTruthy();
+      }
+    }
+  });
+
   it("keeps the service catalog aligned with compose published port interpolation", () => {
     const config = loadRuntimeProfiles();
     const workbenchProfile = resolveRuntimeProfile("workbench-host", config, emptyEnv);

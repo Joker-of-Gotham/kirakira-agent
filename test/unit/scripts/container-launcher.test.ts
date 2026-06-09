@@ -50,6 +50,21 @@ describe("container launcher plan", () => {
       "--no-build",
       ...expectedRuntimeServices,
     ]);
+    expect(plan.readiness.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "--profile",
+      "cli",
+      "up",
+      "-d",
+      "--wait",
+      ...expectedRuntimeServices,
+    ]);
+    expect(plan.readiness.checks.map((check) => check.service).filter(Boolean))
+      .toEqual(expectedRuntimeServices);
+    expect(JSON.stringify(plan.readiness)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(plan.readiness)).not.toContain("testpassword");
     expect(plan.run.args).toEqual([
       "compose",
       "-f",

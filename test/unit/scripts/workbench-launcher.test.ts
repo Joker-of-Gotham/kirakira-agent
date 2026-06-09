@@ -34,6 +34,19 @@ describe("workbench launcher plan", () => {
         ...expectedInfraServices,
       ],
     });
+    expect(plan.readiness.compose?.args).toEqual(plan.steps[0]?.args);
+    expect(plan.readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        target: "http://127.0.0.1:17373/healthz",
+      }),
+    );
+    expect(plan.readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:web",
+        target: "http://127.0.0.1:5183/",
+      }),
+    );
     expect(plan.steps[1]).toMatchObject({
       name: "daemon",
       mode: "background",
@@ -53,6 +66,7 @@ describe("workbench launcher plan", () => {
     const plan = buildWorkbenchPlan(profile, "daemon", { skipInfra: true });
 
     expect(plan.steps).toHaveLength(1);
+    expect(plan.readiness.compose).toBeUndefined();
     expect(plan.steps[0]).toMatchObject({
       name: "daemon",
       mode: "foreground",

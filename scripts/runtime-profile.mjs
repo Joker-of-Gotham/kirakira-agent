@@ -175,6 +175,18 @@ function runtimeServiceCatalog(config) {
   return isRecord(catalog.services) ? catalog.services : {};
 }
 
+function runtimeServiceCatalogEntry(config, serviceName) {
+  const entry = runtimeServiceCatalog(config)[serviceName];
+  return isRecord(entry) ? entry : undefined;
+}
+
+function runtimeComposeServiceName(config, serviceName) {
+  const entry = runtimeServiceCatalogEntry(config, serviceName);
+  return typeof entry?.composeService === "string" && entry.composeService.length > 0
+    ? entry.composeService
+    : serviceName;
+}
+
 export function expandRuntimeServiceRefs(refs = [], config = loadRuntimeProfiles()) {
   if (!Array.isArray(refs)) {
     throw new Error("Runtime service references must be a string array");
@@ -436,6 +448,139 @@ function renderBoundEnv(env, profile) {
   }
 }
 
+function readinessServiceNames(profile) {
+  return uniqueStrings([
+    ...Object.keys(profile.services ?? {}),
+    ...(Array.isArray(profile.containerStartup?.runtimeServices)
+      ? profile.containerStartup.runtimeServices
+      : []),
+    ...(Array.isArray(profile.workbench?.infraServices) ? profile.workbench.infraServices : []),
+  ]);
+}
+
+function sanitizedReadinessUrl(value) {
+  if (typeof value !== "string" || value.length === 0) return undefined;
+  try {
+    const url = new URL(value);
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function browserGatewayHealthUrl(endpoint) {
+  if (typeof endpoint !== "string" || endpoint.length === 0) return undefined;
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") return undefined;
+    url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+    url.pathname = "/healthz";
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function serviceReadinessCheck(config, profile, serviceName, composeEnabled) {
+  const target = sanitizedReadinessUrl(profile.services?.[serviceName]);
+  const composeService = runtimeComposeServiceName(config, serviceName);
+  return {
+    name: `service:${serviceName}`,
+    type: composeEnabled ? "compose-service" : "external-service",
+    service: serviceName,
+    composeService,
+    source: "services",
+    required: true,
+    ...(target ? { target } : {}),
+  };
+}
+
+export function buildRuntimeReadinessPlan(profile = resolveRuntimeProfile(), options = {}) {
+  const config = options.config ?? loadRuntimeProfiles();
+  const composeArgs = renderComposeArgs(profile);
+  const serviceNames = uniqueStrings(
+    Array.isArray(options.services) ? options.services : readinessServiceNames(profile),
+  );
+  const composeServiceNames = uniqueStrings(
+    serviceNames.map((serviceName) => runtimeComposeServiceName(config, serviceName)),
+  );
+  const composeEnabled = composeArgs.length > 0 && composeServiceNames.length > 0;
+  const checks = serviceNames.map((serviceName) =>
+    serviceReadinessCheck(config, profile, serviceName, composeEnabled),
+  );
+  const env = renderRuntimeEnv(profile);
+  const daemonSocket = env.KIRAKIRA_DAEMON_SOCKET;
+  if (
+    pathValue(profile, "daemon.socketPath") !== undefined
+    && typeof daemonSocket === "string"
+    && daemonSocket.length > 0
+  ) {
+    checks.push({
+      name: "daemon:socket",
+      type: "socket",
+      source: "daemon.socketPath",
+      target: daemonSocket,
+      required: true,
+    });
+  }
+
+  const gatewayEndpoint = browserGatewayEndpoint(profile.daemon?.browserGateway);
+  const gatewayHealth = browserGatewayHealthUrl(gatewayEndpoint);
+  if (gatewayHealth) {
+    checks.push({
+      name: "daemon:browser-gateway",
+      type: "http-health",
+      source: "daemon.browserGateway",
+      target: gatewayHealth,
+      endpoint: sanitizedReadinessUrl(gatewayEndpoint),
+      required: true,
+    });
+  }
+
+  const webUrl = sanitizedReadinessUrl(profile.presentation?.web?.url);
+  if (webUrl) {
+    checks.push({
+      name: "presentation:web",
+      type: "http",
+      source: "presentation.web.url",
+      target: webUrl,
+      required: true,
+    });
+  }
+
+  const desktopUrl = sanitizedReadinessUrl(profile.presentation?.desktop?.rendererUrl);
+  if (desktopUrl) {
+    checks.push({
+      name: "presentation:desktop",
+      type: "http",
+      source: "presentation.desktop.rendererUrl",
+      target: desktopUrl,
+      required: true,
+    });
+  }
+
+  return {
+    schemaVersion: 1,
+    profile: profile.name,
+    mode: profile.mode,
+    compose: composeEnabled
+      ? {
+          command: "docker",
+          args: ["compose", ...composeArgs, "up", "-d", "--wait", ...composeServiceNames],
+          services: composeServiceNames,
+          wait: "running|healthy",
+        }
+      : undefined,
+    checks,
+  };
+}
+
 export function loadRuntimeProfiles(configPath = defaultProfilesPath) {
   if (!existsSync(configPath)) {
     throw new Error(`Runtime profile config not found: ${configPath}`);
@@ -588,6 +733,10 @@ function main(argv) {
   }
   if (command === "compose-args") {
     console.log(renderComposeArgs(profile).join(" "));
+    return;
+  }
+  if (command === "readiness") {
+    console.log(JSON.stringify(buildRuntimeReadinessPlan(profile), null, 2));
     return;
   }
   if (command === "mcp") {

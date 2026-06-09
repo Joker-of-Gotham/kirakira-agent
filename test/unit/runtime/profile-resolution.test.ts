@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildRuntimeReadinessPlan,
   expandRuntimeServiceRefs,
   loadRuntimeProfiles,
   renderComposeArgs,
@@ -106,6 +107,128 @@ describe("runtime profile rendering", () => {
     expect(env.KIRAKIRA_WEB_URL).toBe("http://127.0.0.1:5183");
     expect(env.KIRAKIRA_DESKTOP_RENDERER_URL).toBe("http://127.0.0.1:5174");
     expect(env.KIRAKIRA_DESKTOP_DEV_URL).toBe("http://127.0.0.1:5174");
+  });
+
+  it("renders container readiness from the runtime service catalog without credentials", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("container", config, {});
+    const runtimeServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
+    const readiness = buildRuntimeReadinessPlan(profile, { config });
+
+    expect(readiness).toMatchObject({
+      schemaVersion: 1,
+      profile: "container",
+      mode: "container",
+      compose: {
+        command: "docker",
+        args: [
+          "compose",
+          "-f",
+          "docker-compose.yml",
+          "--profile",
+          "cli",
+          "up",
+          "-d",
+          "--wait",
+          ...runtimeServices,
+        ],
+        services: runtimeServices,
+        wait: "running|healthy",
+      },
+    });
+    expect(readiness.checks.filter((check) => check.type === "compose-service").map((check) => check.service))
+      .toEqual(runtimeServices);
+    expect(JSON.stringify(readiness)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(readiness)).not.toContain("testpassword");
+    expect(JSON.stringify(readiness)).not.toContain("minioadmin");
+    expect(JSON.stringify(readiness)).not.toContain("5173");
+  });
+
+  it("renders host readiness as external endpoint checks without compose ownership", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("host", config, {});
+    const readiness = buildRuntimeReadinessPlan(profile, { config });
+
+    expect(readiness.profile).toBe("host");
+    expect(readiness.compose).toBeUndefined();
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "service:postgres",
+        type: "external-service",
+        target: "postgres://127.0.0.1:5432/kirakira",
+      }),
+    );
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "service:kirakirad",
+        type: "external-service",
+        target: "tcp://127.0.0.1:17777",
+      }),
+    );
+    expect(JSON.stringify(readiness)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(readiness)).not.toContain("5173");
+  });
+
+  it("renders workbench readiness for runtime infra and Kirakira presentation ports", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("workbench-host", config, {});
+    const runtimeServices = expandRuntimeServiceRefs(["@runtime-stack"], config);
+    const readiness = buildRuntimeReadinessPlan(profile, { config });
+
+    expect(readiness.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "-f",
+      "docker-compose.ports.yml",
+      "up",
+      "-d",
+      "--wait",
+      ...runtimeServices,
+    ]);
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        type: "http-health",
+        target: "http://127.0.0.1:17373/healthz",
+        endpoint: "ws://127.0.0.1:17373/runtime",
+      }),
+    );
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:web",
+        type: "http",
+        target: "http://127.0.0.1:5183/",
+      }),
+    );
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:desktop",
+        type: "http",
+        target: "http://127.0.0.1:5174/",
+      }),
+    );
+    expect(JSON.stringify(readiness)).not.toContain("5173");
+  });
+
+  it("renders test-host readiness from the memory stack compose file", () => {
+    const config = loadRuntimeProfiles();
+    const profile = resolveRuntimeProfile("test-host", config, {});
+    const memoryServices = expandRuntimeServiceRefs(["@memory-stack"], config);
+    const readiness = buildRuntimeReadinessPlan(profile, { config });
+
+    expect(readiness.compose?.args).toEqual([
+      "compose",
+      "-f",
+      "docker-compose.test.yml",
+      "up",
+      "-d",
+      "--wait",
+      ...memoryServices,
+    ]);
+    expect(readiness.checks.map((check) => check.service).filter(Boolean)).toEqual(memoryServices);
+    expect(JSON.stringify(readiness)).not.toContain("kirakira:kirakira");
+    expect(JSON.stringify(readiness)).not.toContain("5173");
   });
 
   it("keeps container service URLs on internal ports when host published ports are overridden", () => {

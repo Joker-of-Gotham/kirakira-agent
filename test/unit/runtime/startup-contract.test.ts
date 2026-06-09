@@ -35,6 +35,24 @@ describe("startup contract", () => {
       "http://127.0.0.1:5183,http://127.0.0.1:5174",
     );
     expect(plan.steps.map((step) => step.name)).toEqual(["infra", "daemon", "web"]);
+    expect(plan.readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "daemon:browser-gateway",
+        target: "http://127.0.0.1:17373/healthz",
+      }),
+    );
+    expect(plan.readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:web",
+        target: "http://127.0.0.1:5183/",
+      }),
+    );
+    expect(plan.readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "presentation:desktop",
+        target: "http://127.0.0.1:5174/",
+      }),
+    );
     expect(JSON.stringify({ profile, env, plan })).not.toContain("5173");
   });
 });

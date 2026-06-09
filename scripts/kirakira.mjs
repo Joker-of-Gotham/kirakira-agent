@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { ensureEnvFile, ensureMcpConfig } from "./kirakira-common.mjs";
 import {
+  buildRuntimeReadinessPlan,
   loadRuntimeProfiles,
   renderComposeArgs,
   renderRuntimeEnv,
@@ -32,7 +33,19 @@ function runtimeFlags(env = process.env) {
 }
 
 function normalizeArgs(argv) {
-  return argv[0] === "--" ? argv.slice(1) : argv;
+  const args = argv[0] === "--" ? argv.slice(1) : argv;
+  const options = {
+    dryRun: false,
+    userArgs: [],
+  };
+  for (const arg of args) {
+    if (arg === "--dry-run" || arg === "--plan") {
+      options.dryRun = true;
+      continue;
+    }
+    options.userArgs.push(arg);
+  }
+  return options;
 }
 
 function stringValue(value, label) {
@@ -451,10 +464,12 @@ export function buildComposeRunArgs(profile, startup, userArgs, options = {}) {
 export function buildContainerStartupPlan(profile, userArgs, options = {}) {
   const startup = options.startup ?? resolveContainerStartup(profile);
   const sourceHash = options.sourceHash ?? "<source-hash>";
+  const readiness = buildRuntimeReadinessPlan(profile, { services: startup.runtimeServices });
   return {
     profile: profile.name,
     env: renderRuntimeEnv(profile),
     runtimeImage: startup.runtimeImage,
+    readiness,
     build: {
       command: "docker",
       args: buildRuntimeImageArgs(profile, startup, sourceHash),
@@ -475,10 +490,16 @@ export function buildContainerStartupPlan(profile, userArgs, options = {}) {
 }
 
 export function main(argv, env = process.env) {
-  const args = normalizeArgs(argv);
+  const options = normalizeArgs(argv);
+  const args = options.userArgs;
   const profile = selectContainerProfile(env);
   const startup = resolveContainerStartup(profile);
   const flags = runtimeFlags(env);
+
+  if (options.dryRun) {
+    console.log(JSON.stringify(buildContainerStartupPlan(profile, args, { startup }), null, 2));
+    return 0;
+  }
 
   ensureDockerAvailable(profile);
   ensureEnvFile(repoRoot);
