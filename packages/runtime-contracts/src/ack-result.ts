@@ -1,5 +1,5 @@
 import type { RuntimeArtifactContent } from "./artifact-content.js";
-import type { RuntimeMcpToolCallResult } from "./mcp-call.js";
+import type { RuntimeMcpListResult, RuntimeMcpToolCallResult } from "./mcp-call.js";
 import type { RunStateSnapshot } from "./snapshot.js";
 
 export interface RuntimeSubmitAckResult {
@@ -10,6 +10,7 @@ export type RuntimeAckResultPayload =
   | RuntimeSubmitAckResult
   | RunStateSnapshot
   | RuntimeArtifactContent
+  | RuntimeMcpListResult
   | RuntimeMcpToolCallResult
   | undefined;
 

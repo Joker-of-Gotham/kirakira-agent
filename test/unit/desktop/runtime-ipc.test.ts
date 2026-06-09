@@ -65,6 +65,17 @@ function createFakeClient() {
         encoding: "utf8" as const,
         content: "preview",
       })),
+      listMcpTools: vi.fn(async () => ({
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        servers: [
+          {
+            name: "filesystem-core",
+            health: "healthy" as const,
+            toolCount: 1,
+            tools: [{ name: "read_file", inputSchema: { type: "object" } }],
+          },
+        ],
+      })),
       callMcpTool: vi.fn(async () => ({
         server: "filesystem-core",
         tool: "read_file",
@@ -355,6 +366,38 @@ describe("desktop runtime IPC controller", () => {
         arguments: ["README.md"],
       }),
     ).rejects.toThrow("callMcpTool arguments must be an object");
+  });
+
+  it("validates MCP discovery requests before forwarding through desktop IPC", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:listMcpTools", eventFor(37), {
+        server: "filesystem-core",
+        includeTools: true,
+        startServers: true,
+      }),
+    ).resolves.toMatchObject({
+      servers: [{ name: "filesystem-core", health: "healthy", toolCount: 1 }],
+    });
+    expect(fake.client.listMcpTools).toHaveBeenCalledWith({
+      server: "filesystem-core",
+      includeTools: true,
+      startServers: true,
+    });
+
+    await expect(
+      ipcMain.invoke("runtime:listMcpTools", eventFor(37), {
+        includeTools: "yes",
+      }),
+    ).rejects.toThrow("listMcpTools includeTools must be a boolean");
   });
 
   it("reports desktop IPC status without forcing daemon connection", async () => {

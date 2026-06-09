@@ -15,6 +15,28 @@ const bridgeStub = (
   })),
   submitPrompt: vi.fn(async () => ({ runId: "run-1" })),
   getState: vi.fn(async (runId: string) => ({ runId, state: {} })),
+  getArtifactContent: vi.fn(async () => ({
+    runId: "run-1",
+    artifactId: "artifact-a",
+    path: "artifacts/a.md",
+    sizeBytes: 1,
+    truncated: false,
+    encoding: "utf8",
+    content: "a",
+  })),
+  listMcpTools: vi.fn(async () => ({ generatedAt: "2026-06-09T00:00:00.000Z", servers: [] })),
+  callMcpTool: vi.fn(async () => ({
+    server: "filesystem-core",
+    tool: "read_file",
+    success: true,
+    latencyMs: 1,
+    policy: {
+      effect: "allow",
+      reasonCodes: [],
+      approvalRequired: false,
+      traceId: "trace-1",
+    },
+  })),
   subscribeRun: vi.fn(() => () => {}),
   approve: vi.fn(async () => {}),
   cancel: vi.fn(async () => {}),
@@ -72,5 +94,17 @@ describe("desktop runtime transport", () => {
       label: "Desktop IPC",
       detail: "Desktop status check failed",
     });
+  });
+
+  it("forwards MCP discovery through the preload bridge", async () => {
+    const bridge = bridgeStub();
+    setDesktopBridge(bridge);
+
+    const transport = createDesktopRuntimeTransport();
+
+    await expect(
+      transport?.listMcpTools({ includeTools: true }),
+    ).resolves.toMatchObject({ servers: [] });
+    expect(bridge.listMcpTools).toHaveBeenCalledWith({ includeTools: true });
   });
 });

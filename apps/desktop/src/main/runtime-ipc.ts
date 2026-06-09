@@ -6,6 +6,7 @@ import {
   sanitizeRuntimeDaemonHealth,
   type RuntimeDaemonHealth,
   type RuntimeClientMessage,
+  type RuntimeMcpListRequest,
   type RuntimeMcpToolCallRequest,
 } from "@kirakira/runtime-contracts";
 import type {
@@ -25,6 +26,7 @@ export interface RuntimeIpcControllerOptions {
     | "submitPrompt"
     | "getState"
     | "getArtifactContent"
+    | "listMcpTools"
     | "callMcpTool"
     | "subscribeToRun"
     | "unsubscribe"
@@ -218,6 +220,36 @@ function parseMcpToolCallRequest(value: unknown): RuntimeMcpToolCallRequest {
     ...(validated.arguments !== undefined ? { arguments: validated.arguments } : {}),
     ...(validated.runId !== undefined ? { runId: validated.runId } : {}),
     ...(validated.traceId !== undefined ? { traceId: validated.traceId } : {}),
+  };
+}
+
+function parseMcpListRequest(value: unknown): RuntimeMcpListRequest {
+  if (value === undefined || value === null) return {};
+  if (!isRecord(value)) throw new Error("listMcpTools requires a request object");
+  const server = optionalString(value.server);
+  if (value.server !== undefined && server === undefined) {
+    throw new Error("listMcpTools server must be a string");
+  }
+  if (value.includeTools !== undefined && typeof value.includeTools !== "boolean") {
+    throw new Error("listMcpTools includeTools must be a boolean");
+  }
+  if (value.startServers !== undefined && typeof value.startServers !== "boolean") {
+    throw new Error("listMcpTools startServers must be a boolean");
+  }
+  const validated = validateRuntimeClientMessage({
+    type: "mcp_list",
+    ...(server !== undefined ? { server } : {}),
+    ...(value.includeTools !== undefined ? { includeTools: value.includeTools } : {}),
+    ...(value.startServers !== undefined ? { startServers: value.startServers } : {}),
+    messageId: "desktop-mcp-list-validate",
+  });
+  if (validated.type !== "mcp_list") {
+    throw new Error("listMcpTools message is malformed");
+  }
+  return {
+    ...(validated.server !== undefined ? { server: validated.server } : {}),
+    ...(validated.includeTools !== undefined ? { includeTools: validated.includeTools } : {}),
+    ...(validated.startServers !== undefined ? { startServers: validated.startServers } : {}),
   };
 }
 
@@ -486,6 +518,13 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         const request = parseArtifactContentRequest(rawRequest);
         await ensureConnected();
         return options.client.getArtifactContent(request);
+      });
+
+      ipcMain.handle("runtime:listMcpTools", async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseMcpListRequest(rawRequest);
+        await ensureConnected();
+        return options.client.listMcpTools(request);
       });
 
       ipcMain.handle("runtime:callMcpTool", async (event, rawRequest: unknown) => {

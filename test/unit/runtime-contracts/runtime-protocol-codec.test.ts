@@ -4,6 +4,7 @@ import {
   makeRuntimeProtocolError,
   parseRuntimeArtifactContentAckResult,
   parseRuntimeClientMessage,
+  parseRuntimeMcpListAckResult,
   parseRuntimeMcpToolCallAckResult,
   parseRuntimeServerMessage,
   parseRuntimeStateSnapshotAckResult,
@@ -125,6 +126,36 @@ describe("runtime protocol codec", () => {
     ).toMatchObject({
       ok: false,
       error: { code: "invalid_message", messageId: "mcp-bad" },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "mcp_list",
+        messageId: "mcp-list-1",
+        server: "filesystem-core",
+        includeTools: true,
+        startServers: true,
+      }),
+    ).toEqual({
+      ok: true,
+      message: {
+        type: "mcp_list",
+        messageId: "mcp-list-1",
+        server: "filesystem-core",
+        includeTools: true,
+        startServers: true,
+      },
+    });
+
+    expect(
+      parseRuntimeClientMessage({
+        type: "mcp_list",
+        messageId: "mcp-list-bad",
+        includeTools: "yes",
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: { code: "invalid_message", messageId: "mcp-list-bad" },
     });
   });
 
@@ -251,6 +282,12 @@ describe("RuntimeRequestTracker", () => {
       10_000,
       parseRuntimeMcpToolCallAckResult,
     );
+    const mcpList = tracker.track(
+      "mcp-list-1",
+      "mcp-list",
+      10_000,
+      parseRuntimeMcpListAckResult,
+    );
 
     tracker.handleServerMessage({ type: "ack", messageId: "submit-1", result: { runId: "run-1" } });
     tracker.handleServerMessage({
@@ -295,6 +332,27 @@ describe("RuntimeRequestTracker", () => {
         },
       },
     });
+    tracker.handleServerMessage({
+      type: "ack",
+      messageId: "mcp-list-1",
+      result: {
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        servers: [
+          {
+            name: "filesystem-core",
+            health: "healthy",
+            toolCount: 1,
+            tools: [
+              {
+                name: "read_file",
+                title: "Read file",
+                inputSchema: { type: "object", properties: {} },
+              },
+            ],
+          },
+        ],
+      },
+    });
 
     await expect(submit).resolves.toEqual({ runId: "run-1" });
     await expect(state).resolves.toMatchObject({ runId: "run-1", status: "running" });
@@ -304,6 +362,9 @@ describe("RuntimeRequestTracker", () => {
       server: "filesystem-core",
       tool: "read_file",
       success: true,
+    });
+    await expect(mcpList).resolves.toMatchObject({
+      servers: [{ name: "filesystem-core", health: "healthy", toolCount: 1 }],
     });
   });
 

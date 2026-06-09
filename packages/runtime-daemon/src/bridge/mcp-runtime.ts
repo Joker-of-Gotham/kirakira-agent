@@ -7,6 +7,10 @@ import {
   type PepContext,
 } from "@kirakira/policy-engine";
 import type {
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
+  RuntimeMcpServerHealth,
+  RuntimeMcpToolSummary,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
@@ -27,6 +31,7 @@ export interface DaemonMcpRuntimeOptions {
 }
 
 export type DaemonMcpToolCallInput = RuntimeMcpToolCallRequest;
+export type DaemonMcpListInput = RuntimeMcpListRequest;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -84,6 +89,19 @@ function projectMcpResult(raw: unknown): Pick<
   };
 }
 
+function extractToolsFromResult(raw: unknown): RuntimeMcpToolSummary[] {
+  if (!isRecord(raw) || !Array.isArray(raw.tools)) return [];
+  return raw.tools
+    .filter((tool): tool is Record<string, unknown> => isRecord(tool) && typeof tool.name === "string")
+    .map((tool) => ({
+      name: String(tool.name),
+      ...(typeof tool.title === "string" ? { title: tool.title } : {}),
+      ...(typeof tool.description === "string" ? { description: tool.description } : {}),
+      ...(isRecord(tool.inputSchema) ? { inputSchema: tool.inputSchema } : {}),
+      ...(isRecord(tool.outputSchema) ? { outputSchema: tool.outputSchema } : {}),
+    }));
+}
+
 export class DaemonMcpRuntime {
   private readonly workspaceRoot: string;
   private readonly manager: McpClientManager;
@@ -118,6 +136,50 @@ export class DaemonMcpRuntime {
     }
     if (this.manager.getHealth(server) === "healthy") return;
     await this.manager.startServer(server);
+  }
+
+  async listTools(input: DaemonMcpListInput = {}): Promise<RuntimeMcpListResult> {
+    const selectedServers = this.manager
+      .listServers()
+      .filter((server) => input.server === undefined || server === input.server);
+    const servers: RuntimeMcpListResult["servers"] = [];
+
+    for (const server of selectedServers) {
+      let health = this.manager.getHealth(server) as RuntimeMcpServerHealth;
+      let error = this.manager.getLastError(server);
+      let tools: RuntimeMcpToolSummary[] | undefined;
+
+      if (input.startServers && health !== "healthy") {
+        try {
+          await this.manager.startServer(server);
+          health = this.manager.getHealth(server) as RuntimeMcpServerHealth;
+          error = this.manager.getLastError(server);
+        } catch (startError) {
+          health = this.manager.getHealth(server) as RuntimeMcpServerHealth;
+          error = startError instanceof Error ? startError.message : String(startError);
+        }
+      }
+
+      if (input.includeTools && health === "healthy") {
+        try {
+          tools = extractToolsFromResult(await this.manager.request(server, "tools/list", {}));
+        } catch (listError) {
+          error = listError instanceof Error ? listError.message : String(listError);
+        }
+      }
+
+      servers.push({
+        name: server,
+        health,
+        ...(tools !== undefined ? { tools, toolCount: tools.length } : {}),
+        ...(error !== undefined ? { error } : {}),
+      });
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      servers,
+    };
   }
 
   async callTool(input: DaemonMcpToolCallInput): Promise<RuntimeMcpToolCallResult> {

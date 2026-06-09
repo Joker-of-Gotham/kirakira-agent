@@ -3,6 +3,8 @@ import type {
   RuntimeTransportEvent,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   SubmitPromptRequest,
@@ -350,6 +352,32 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         };
       }
       return artifact;
+    },
+    async listMcpTools(_request: RuntimeMcpListRequest = {}): Promise<RuntimeMcpListResult> {
+      return {
+        generatedAt: now(),
+        servers: [
+          {
+            name: "filesystem-core",
+            health: "healthy",
+            toolCount: 2,
+            tools: [
+              {
+                name: "read_file",
+                title: "Read file",
+                description: "Read workspace file content",
+                inputSchema: { type: "object", properties: { path: { type: "string" } } },
+              },
+              {
+                name: "list_directory",
+                title: "List directory",
+                description: "List workspace directory contents",
+                inputSchema: { type: "object", properties: { path: { type: "string" } } },
+              },
+            ],
+          },
+        ],
+      };
     },
     async callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult> {
       return {

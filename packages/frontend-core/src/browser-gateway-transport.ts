@@ -4,6 +4,8 @@ import type {
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeAckResultParser,
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeRunMode,
@@ -12,6 +14,7 @@ import type {
 import {
   RuntimeRequestTracker,
   parseRuntimeArtifactContentAckResult,
+  parseRuntimeMcpListAckResult,
   parseRuntimeMcpToolCallAckResult,
   parseRuntimeServerMessage,
   parseRuntimeStateSnapshotAckResult,
@@ -293,6 +296,18 @@ export function createBrowserGatewayTransport(
           messageId: idFactory(),
         },
         parseRuntimeArtifactContentAckResult,
+      );
+    },
+    async listMcpTools(input: RuntimeMcpListRequest = {}): Promise<RuntimeMcpListResult> {
+      return request(
+        {
+          type: "mcp_list",
+          ...(input.server !== undefined ? { server: input.server } : {}),
+          ...(input.includeTools !== undefined ? { includeTools: input.includeTools } : {}),
+          ...(input.startServers !== undefined ? { startServers: input.startServers } : {}),
+          messageId: idFactory(),
+        },
+        parseRuntimeMcpListAckResult,
       );
     },
     async callMcpTool(input: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult> {

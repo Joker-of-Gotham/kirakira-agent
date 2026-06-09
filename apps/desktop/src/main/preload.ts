@@ -3,6 +3,8 @@ import type {
   ApprovalDecision,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeTransportEvent,
@@ -26,6 +28,8 @@ contextBridge.exposeInMainWorld("kirakiraRuntime", {
     ipcRenderer.invoke("runtime:getState", runId) as Promise<{ runId: string; state: unknown }>,
   getArtifactContent: (request: RuntimeArtifactContentRequest) =>
     ipcRenderer.invoke("runtime:getArtifactContent", request) as Promise<RuntimeArtifactContent>,
+  listMcpTools: (request?: RuntimeMcpListRequest) =>
+    ipcRenderer.invoke("runtime:listMcpTools", request ?? {}) as Promise<RuntimeMcpListResult>,
   callMcpTool: (request: RuntimeMcpToolCallRequest) =>
     ipcRenderer.invoke("runtime:callMcpTool", request) as Promise<RuntimeMcpToolCallResult>,
   subscribeRun: (

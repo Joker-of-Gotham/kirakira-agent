@@ -2,6 +2,8 @@ import type {
   ApprovalDecision,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeTransportEvent,
@@ -18,6 +20,7 @@ export interface KirakiraDesktopRuntimeBridge {
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<{ runId: string; state: unknown }>;
   getArtifactContent(request: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent>;
+  listMcpTools(request?: RuntimeMcpListRequest): Promise<RuntimeMcpListResult>;
   callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult>;
   subscribeRun(
     runId: string,

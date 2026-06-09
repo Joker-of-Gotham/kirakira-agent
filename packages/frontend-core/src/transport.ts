@@ -5,6 +5,8 @@ import type {
   RuntimeArtifactContentRequest,
   RuntimeBrowserGatewayHealth,
   RuntimeDaemonHealth,
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeRunMode,
@@ -72,6 +74,7 @@ export interface RuntimeTransport {
   submitPrompt(request: SubmitPromptRequest): Promise<{ runId: string }>;
   getState(runId: string): Promise<RuntimeTransportSnapshot>;
   getArtifactContent(request: RuntimeArtifactContentRequest): Promise<RuntimeArtifactContent>;
+  listMcpTools(request?: RuntimeMcpListRequest): Promise<RuntimeMcpListResult>;
   callMcpTool(request: RuntimeMcpToolCallRequest): Promise<RuntimeMcpToolCallResult>;
   subscribeRun(
     runId: string,

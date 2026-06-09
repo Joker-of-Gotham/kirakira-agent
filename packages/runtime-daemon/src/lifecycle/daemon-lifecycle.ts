@@ -8,7 +8,9 @@ import {
   type RuntimeCapabilityOverrides,
   type RuntimeDaemonHealth,
   type RuntimeManifest,
+  type RuntimeMcpListResult,
   type RuntimeMcpManifest,
+  type RuntimeMcpToolCallResult,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
@@ -124,6 +126,18 @@ function daemonCapabilityOverrides(
       state: hasMcpRuntime(options) ? "enabled" : "available",
     },
   };
+}
+
+function resultPreview(result: RuntimeMcpToolCallResult): string | undefined {
+  const value = result.error ?? result.structuredContent ?? result.content;
+  if (value === undefined) return undefined;
+  let text: string;
+  try {
+    text = typeof value === "string" ? value : JSON.stringify(value);
+  } catch {
+    text = "[unserializable MCP result]";
+  }
+  return text.length > 2000 ? `${text.slice(0, 2000)}...` : text;
 }
 
 export class DaemonLifecycle {
@@ -299,6 +313,9 @@ export class DaemonLifecycle {
       case "mcp_call":
         await this.handleMcpCall(clientId, msg);
         break;
+      case "mcp_list":
+        await this.handleMcpList(clientId, msg);
+        break;
       case "control":
         await this.handleControl(clientId, session, msg.message, msg.messageId);
         break;
@@ -376,6 +393,17 @@ export class DaemonLifecycle {
     });
   }
 
+  private appendAndDispatchEvent(event: RunEvent): RunEvent {
+    let stamped = event;
+    try {
+      stamped = this.kernelBridge?.getKernel().getWriter().append(event) ?? event;
+    } catch {
+      /* Event persistence must not break direct runtime requests. */
+    }
+    this.dispatchEvent(stamped);
+    return stamped;
+  }
+
   private async handleGetArtifact(
     clientId: string,
     msg: Extract<ClientMessage, { type: "get_artifact" }>,
@@ -442,6 +470,26 @@ export class DaemonLifecycle {
       );
       return;
     }
+    const callId = ulid();
+    if (msg.runId !== undefined) {
+      this.appendAndDispatchEvent({
+        id: ulid(),
+        runId: msg.runId,
+        timestamp: new Date().toISOString(),
+        kind: "tool.call.started",
+        payload: {
+          callId,
+          toolName: `${msg.server}:${msg.tool}`,
+          toolId: `mcp.${msg.server}.${msg.tool}`,
+          mcpServer: msg.server,
+          server: msg.server,
+          nativeTool: msg.tool,
+          source: "runtime.mcp_call",
+          ...(msg.arguments !== undefined ? { args: msg.arguments } : {}),
+          ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+        },
+      });
+    }
     try {
       const result = await runtime.callTool({
         server: msg.server,
@@ -455,12 +503,92 @@ export class DaemonLifecycle {
         messageId: msg.messageId,
         result,
       });
+      if (msg.runId !== undefined) {
+        const preview = resultPreview(result);
+        this.appendAndDispatchEvent({
+          id: ulid(),
+          runId: msg.runId,
+          timestamp: new Date().toISOString(),
+          kind: result.success ? "tool.call.completed" : "tool.call.failed",
+          payload: {
+            callId,
+            toolName: `${msg.server}:${msg.tool}`,
+            toolId: `mcp.${msg.server}.${msg.tool}`,
+            mcpServer: msg.server,
+            server: msg.server,
+            nativeTool: msg.tool,
+            source: "runtime.mcp_call",
+            success: result.success,
+            isError: result.isError ?? false,
+            latencyMs: result.latencyMs,
+            policy: result.policy,
+            ...(result.error !== undefined ? { error: result.error } : {}),
+            ...(preview !== undefined ? { resultPreview: preview } : {}),
+            ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+          },
+        });
+      }
     } catch (error) {
+      if (msg.runId !== undefined) {
+        this.appendAndDispatchEvent({
+          id: ulid(),
+          runId: msg.runId,
+          timestamp: new Date().toISOString(),
+          kind: "tool.call.failed",
+          payload: {
+            callId,
+            toolName: `${msg.server}:${msg.tool}`,
+            toolId: `mcp.${msg.server}.${msg.tool}`,
+            mcpServer: msg.server,
+            server: msg.server,
+            nativeTool: msg.tool,
+            source: "runtime.mcp_call",
+            error: error instanceof Error ? error.message : String(error),
+            ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+          },
+        });
+      }
       this.sendRequestError(
         clientId,
         msg.messageId,
         "mcp_call_failed",
         "MCP tool call failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+
+  private async handleMcpList(
+    clientId: string,
+    msg: Extract<ClientMessage, { type: "mcp_list" }>,
+  ): Promise<void> {
+    const runtime = this.mcpRuntime;
+    if (!runtime) {
+      this.sendRequestError(
+        clientId,
+        msg.messageId,
+        "mcp_unavailable",
+        "MCP runtime is not available",
+      );
+      return;
+    }
+    try {
+      const result: RuntimeMcpListResult = await runtime.listTools({
+        ...(msg.server !== undefined ? { server: msg.server } : {}),
+        ...(msg.includeTools !== undefined ? { includeTools: msg.includeTools } : {}),
+        ...(msg.startServers !== undefined ? { startServers: msg.startServers } : {}),
+      });
+      this.sendToClient(clientId, {
+        type: "ack",
+        messageId: msg.messageId,
+        result,
+      });
+    } catch (error) {
+      this.sendRequestError(
+        clientId,
+        msg.messageId,
+        "mcp_list_failed",
+        "MCP tool discovery failed",
         error instanceof Error ? error.message : String(error),
       );
     }

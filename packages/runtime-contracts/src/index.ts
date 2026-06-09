@@ -19,12 +19,19 @@ export type {
   RuntimeSubmitAckResult,
 } from "./ack-result.js";
 export type {
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
+  RuntimeMcpServerHealth,
+  RuntimeMcpServerStatus,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
+  RuntimeMcpToolSummary,
 } from "./mcp-call.js";
 export {
+  isRuntimeMcpListResult,
   isRuntimeMcpToolCallResult,
+  parseRuntimeMcpListAckResult,
   parseRuntimeMcpToolCallAckResult,
 } from "./mcp-call.js";
 export {

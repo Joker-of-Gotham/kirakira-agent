@@ -14,9 +14,14 @@ export type {
   Unsubscribe,
 } from "./transport.js";
 export type {
+  RuntimeMcpListRequest,
+  RuntimeMcpListResult,
+  RuntimeMcpServerHealth,
+  RuntimeMcpServerStatus,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
   RuntimeMcpToolPolicyResult,
+  RuntimeMcpToolSummary,
 } from "@kirakira/runtime-contracts";
 export type { BrowserGatewayTransportOptions } from "./browser-gateway-transport.js";
 export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";

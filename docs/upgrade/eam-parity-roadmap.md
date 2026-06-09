@@ -38,9 +38,9 @@ change, a validation command, and a pushed commit.
 
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
-| EAM mechanism parity | 35% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present. | Prove exact parity against `reference_project/eam-agent`; wire memory as a daemon default; close MCP tool execution loop; finish swarm topology/config. |
+| EAM mechanism parity | 38% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, and direct call event projection now exist. | Prove exact parity against `reference_project/eam-agent`; wire memory as a daemon default; finish MCP gateway/trust/audit closure; finish swarm topology/config. |
 | Web and Electron presentation | 45% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed visual system, design tokens, browser/desktop visual QA. |
-| Hardcoding, harness, SDK/API | 33% | Runtime env, artifact policy, daemon config, CLI config loading, and runtime ack parsing are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
+| Hardcoding, harness, SDK/API | 35% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, and runtime ack parsing are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish policy context unification. |
 | Docker/local ecosystem | 40% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, and daemon resolved-config startup exist. | Make profile state the only startup truth source, unify memory stack readiness, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
 
 ## Gap Matrix
@@ -49,13 +49,13 @@ change, a validation command, and a pushed commit.
 | --- | --- | --- | --- | --- |
 | Subagent swarm topology | `reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*` | `packages/orchestrator-kernel/src/subagent/*`, `packages/runtime-daemon/src/bridge/kernel-bridge.ts` | Partial. Contracts, inheritance, delegate bridge, and kernel events exist. | Add a declarative swarm/topology projection from resolved config into kernel routing and delegation policy; validate multi-subagent fanout and lineage. |
 | Deep research | `reference_project/eam-agent/packages/memory-service/src/recall/*`, `packages/memory-pipeline/*`, `packages/orchestrator-kernel/src/research/*` | `packages/deep-research`, `packages/orchestrator-kernel/src/research/*`, `packages/runtime-daemon/src/bridge/deep-research.ts` | Partial. Kernel research executor and daemon composition exist. | Enable daemon default memory-backed research source from resolved memory service config; add an end-to-end daemon run test. |
-| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest and `mcp_call` projection | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, and delegate/direct daemon MCP dependency construction now share one factory. | Expose live tool health/discovery views, emit MCP calls into the run event stream, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
+| MCP design | `reference_project/eam-agent/packages/mcp-adapter/src/*`, `docs/plane/eam-agent-cli/07-mcp/*` | `packages/mcp-adapter`, `configs/runtime/profiles.json`, `scripts/runtime-profile.mjs`, `packages/runtime-daemon/src/bridge/mcp-runtime-deps.ts`, `packages/runtime-daemon/src/bridge/runtime-deps.ts`, `packages/runtime-daemon/src/bridge/mcp-runtime.ts`, runtime MCP manifest plus `mcp_call` and `mcp_list` projection | Advancing. Catalog rendering, MCP manager registration, public daemon manifest projection, shared browser/desktop MCP tool invocation, live MCP discovery contracts, direct call run events, and delegate/direct daemon MCP dependency construction now share one factory. | Expose live tool health/discovery views in the workbench, route direct calls through gateway trust/audit/OTel, and replace remaining CLI MCP setup duplication where CLI behavior permits. |
 | Memory | `reference_project/eam-agent/packages/memory-core`, `memory-service`, `memory-store`, `memory-vector`, `memory-graph`, `memory-pipeline` | Same renamed packages exist under `packages/`; docs under `docs/plane/kirakira-agent-memory` | Partial. Package surface exists; pipeline env bridge exists. | Make memory service construction a daemon dependency, then connect retain/recall/reflect to runs and research. |
 | Policy and harness | `reference_project/eam-agent/packages/policy-engine`, `packages/eamd`, `policies/*` | `packages/policy-engine`, `packages/kirakirad`, `policies/*` | Partial. PEP/PDP packages exist. | Centralize runtime policy context generation and ensure web/desktop tool actions pass through same PEP path as CLI. |
 | Registry and skills | `reference_project/eam-agent/packages/registry-client`, `packages/skill-runtime` | `packages/registry-client`, `packages/skill-runtime`, `skills-lock.json` | Partial. Packages exist; lockfile is currently untracked local state. | Decide tracked vs generated lockfile policy; connect registry trust decisions to runtime install/activation UI and CLI. |
 | Audit and tracing | `reference_project/eam-agent/packages/audit-ledger`, `docs/plane/eam-agent-tracing` | `packages/audit-ledger`, `docs/plane/kirakira-agent-tracing` | Partial. Ledger package and tracing plane exist. | Emit OTel-compatible spans for run, tool, MCP, subagent, research, memory retrieval, and policy decisions. |
 | Runtime profiles | `reference_project/eam-agent/packages/config-resolver`, `agent.toml`, `policy.yaml` | `configs/runtime/profiles.json`, `packages/config-resolver`, `scripts/runtime-profile.mjs`, daemon resolved-config startup, CLI resolver adapter | Advancing. Daemon and CLI now consume resolved config. | Move remaining CLI config subcommands and init/doctor surfaces away from local helper duplication. |
-| Runtime protocol | `reference_project/eam-agent/packages/runtime-contracts`, daemon/browser/desktop clients | `packages/runtime-contracts`, daemon/browser clients, runtime manifest MCP projection | Advancing. Ack payload parsing and public MCP runtime directory are centralized in runtime contracts. | Extend the same contract layer to MCP tool invocation results and desktop preload result validation. |
+| Runtime protocol | `reference_project/eam-agent/packages/runtime-contracts`, daemon/browser/desktop clients | `packages/runtime-contracts`, daemon/browser/desktop clients, runtime manifest MCP projection | Advancing. Ack payload parsing, public MCP runtime directory, MCP tool invocation results, MCP discovery results, and desktop preload validation are centralized in runtime contracts. | Extend the same contract layer to richer gateway/audit/tracing results and live workbench projections. |
 | Presentation shell | `reference_project/openhuman/app`, `reference_project/openhuman/src`, `reference_project/openhuman/design-previews` | `apps/web`, `apps/desktop`, `packages/frontend-app`, `packages/frontend-core` | Partial. Shared workbench exists but is still a narrow runtime console. | Build product-grade navigation, inspector, research, memory, MCP, and settings views with design tokens and visual QA. |
 
 ## Agent Audit Intake
@@ -79,12 +79,14 @@ Latest four-lane audit intake on 2026-06-09:
   and presentation endpoints. CLI config loading is now routed through
   `@kirakira/config-resolver`; runtime control ack/result parsing now lives in
   `@kirakira/runtime-contracts`. Runtime manifests now expose the resolved MCP
-  directory without secrets, and `mcp_call` now carries browser/desktop MCP
-  tool invocation through daemon-side PEP and typed ack results. Delegate
-  runtime and direct daemon MCP calls now share one MCP dependency factory
-  backed by resolved runtime profiles. Next work should target live MCP
-  discovery/health surfaces, run-event emission for direct client tool calls,
-  and per-service test readiness.
+  directory without secrets, `mcp_call` carries browser/desktop MCP tool
+  invocation through daemon-side PEP and typed ack results, and `mcp_list`
+  carries live MCP discovery/health through daemon, browser, desktop, and mock
+  transports. Direct `mcp_call` requests with a `runId` now emit run timeline
+  events. Delegate runtime and direct daemon MCP calls share one MCP dependency
+  factory backed by resolved runtime profiles. Next work should target live MCP
+  workbench views, gateway trust/audit/OTel convergence, and per-service test
+  readiness.
 
 ## Execution Queue
 
@@ -94,7 +96,8 @@ Latest four-lane audit intake on 2026-06-09:
    paths; memory and deep-research construction still need to join this path.
 2. **MCP runtime loop:** expose daemon MCP tools/health through
    `RuntimeManifest`, browser gateway, and desktop IPC.
-   Tool invocation is now wired; health/discovery UI and run-event emission
+   Tool invocation, typed live discovery, and direct call run-event emission
+   are now wired; health/discovery UI and gateway trust/audit/OTel convergence
    remain.
 3. **Memory daemon composition:** construct memory service dependencies from
    resolved runtime profile env and inject memory recall into deep research by

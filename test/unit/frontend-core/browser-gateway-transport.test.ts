@@ -254,6 +254,58 @@ describe("browser gateway runtime transport", () => {
     });
   });
 
+  it("discovers MCP tools through the runtime protocol", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const pending = transport.listMcpTools({
+      server: "filesystem-core",
+      includeTools: true,
+      startServers: true,
+    });
+    const frame = JSON.parse(socket?.sent[0] ?? "{}") as {
+      messageId: string;
+      type: string;
+    };
+    expect(frame).toMatchObject({
+      type: "mcp_list",
+      server: "filesystem-core",
+      includeTools: true,
+      startServers: true,
+    });
+
+    socket?.message({
+      type: "ack",
+      messageId: frame.messageId,
+      result: {
+        generatedAt: "2026-06-09T00:00:00.000Z",
+        servers: [
+          {
+            name: "filesystem-core",
+            health: "healthy",
+            toolCount: 1,
+            tools: [{ name: "read_file", inputSchema: { type: "object" } }],
+          },
+        ],
+      },
+    });
+    await expect(pending).resolves.toMatchObject({
+      servers: [{ name: "filesystem-core", health: "healthy", toolCount: 1 }],
+    });
+  });
+
   it("maps subscriptions to events and sends daemon unsubscribe frames", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;

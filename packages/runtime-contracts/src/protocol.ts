@@ -11,7 +11,7 @@ import {
 } from "./events.js";
 import type { RunStateSnapshot } from "./snapshot.js";
 import type { RuntimeAckResultParser } from "./ack-result.js";
-import type { RuntimeMcpToolCallRequest } from "./mcp-call.js";
+import type { RuntimeMcpListRequest, RuntimeMcpToolCallRequest } from "./mcp-call.js";
 
 export type RuntimeClientMessage =
   | {
@@ -47,6 +47,10 @@ export type RuntimeClientMessage =
       type: "mcp_call";
       messageId: string;
     } & RuntimeMcpToolCallRequest)
+  | ({
+      type: "mcp_list";
+      messageId: string;
+    } & RuntimeMcpListRequest)
   | {
       type: "ping";
       messageId?: string;
@@ -361,6 +365,43 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           ...(args !== undefined ? { arguments: args } : {}),
           ...(runId !== undefined ? { runId } : {}),
           ...(traceId !== undefined ? { traceId } : {}),
+        },
+      };
+    }
+    case "mcp_list": {
+      if (typeof raw.messageId !== "string") {
+        return error("invalid_message", "mcp_list requires messageId", raw, raw);
+      }
+      const server = optionalString(raw.server);
+      if (raw.server !== undefined && server === undefined) {
+        return error("invalid_message", "mcp_list server must be a string", raw, raw.server);
+      }
+      const includeTools = optionalBoolean(raw.includeTools);
+      if (raw.includeTools !== undefined && includeTools === undefined) {
+        return error(
+          "invalid_message",
+          "mcp_list includeTools must be a boolean",
+          raw,
+          raw.includeTools,
+        );
+      }
+      const startServers = optionalBoolean(raw.startServers);
+      if (raw.startServers !== undefined && startServers === undefined) {
+        return error(
+          "invalid_message",
+          "mcp_list startServers must be a boolean",
+          raw,
+          raw.startServers,
+        );
+      }
+      return {
+        ok: true,
+        message: {
+          type: "mcp_list",
+          messageId: raw.messageId,
+          ...(server !== undefined ? { server } : {}),
+          ...(includeTools !== undefined ? { includeTools } : {}),
+          ...(startServers !== undefined ? { startServers } : {}),
         },
       };
     }

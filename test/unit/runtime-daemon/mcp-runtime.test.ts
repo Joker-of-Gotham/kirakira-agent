@@ -67,6 +67,7 @@ function fakeManager(rawResult: unknown): {
     registerServer,
     listServers: vi.fn(() => ["filesystem-core"]),
     getHealth: vi.fn(() => (started ? "healthy" : "stopped")),
+    getLastError: vi.fn(() => undefined),
     startServer,
     request,
     stopAll,
@@ -190,6 +191,56 @@ describe("DaemonMcpRuntime", () => {
           traceId: "trace-1",
         },
       });
+    } finally {
+      await runtime.close();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("lists live MCP server health and tools on demand", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-mcp-runtime-list-"));
+    const manager = fakeManager({
+      tools: [
+        {
+          name: "read_file",
+          title: "Read file",
+          description: "Read file content",
+          inputSchema: { type: "object", properties: { path: { type: "string" } } },
+          outputSchema: { type: "object" },
+        },
+      ],
+    });
+    const runtime = new DaemonMcpRuntime({
+      workspaceRoot,
+      mcpManager: manager.manager,
+      mcpPep: fakePep(decision("allow")),
+    });
+
+    try {
+      const result = await runtime.listTools({
+        server: "filesystem-core",
+        includeTools: true,
+        startServers: true,
+      });
+
+      expect(manager.startServer).toHaveBeenCalledWith("filesystem-core");
+      expect(manager.request).toHaveBeenCalledWith("filesystem-core", "tools/list", {});
+      expect(result.servers).toEqual([
+        {
+          name: "filesystem-core",
+          health: "healthy",
+          toolCount: 1,
+          tools: [
+            {
+              name: "read_file",
+              title: "Read file",
+              description: "Read file content",
+              inputSchema: { type: "object", properties: { path: { type: "string" } } },
+              outputSchema: { type: "object" },
+            },
+          ],
+        },
+      ]);
     } finally {
       await runtime.close();
       await rm(workspaceRoot, { recursive: true, force: true });
