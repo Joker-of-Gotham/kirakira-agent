@@ -711,12 +711,21 @@ importers:
       '@kirakira/event-store':
         specifier: workspace:*
         version: link:../event-store
+      '@kirakira/mcp-adapter':
+        specifier: workspace:*
+        version: link:../mcp-adapter
       '@kirakira/orchestrator-kernel':
         specifier: workspace:*
         version: link:../orchestrator-kernel
+      '@kirakira/policy-engine':
+        specifier: workspace:*
+        version: link:../policy-engine
       '@kirakira/runtime-contracts':
         specifier: workspace:*
         version: link:../runtime-contracts
+      '@kirakira/skill-runtime':
+        specifier: workspace:*
+        version: link:../skill-runtime
       ulid:
         specifier: ^2.3.0
         version: 2.4.0

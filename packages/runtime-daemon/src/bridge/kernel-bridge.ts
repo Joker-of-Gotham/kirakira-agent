@@ -4,39 +4,99 @@ import {
   FsCheckpointRepository,
   resolveEventStoreBasePath,
 } from "@kirakira/event-store";
-import { OrchestratorKernel } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import {
+  OrchestratorKernel,
+  type OrchestratorKernelOptions,
+} from "@kirakira/orchestrator-kernel/daemon-orchestrator";
+import { DelegateRunnerSubagentBridge } from "@kirakira/orchestrator-kernel";
 import type {
   ControlMessage,
   RunEvent,
   RuntimeRunMode,
   RuntimeRunOptions,
 } from "@kirakira/runtime-contracts";
+import {
+  createDaemonDelegateRuntime,
+  type DaemonDelegateRuntime,
+  type DaemonDelegateRuntimeOptions,
+} from "./runtime-deps.js";
 
 type RunMode = RuntimeRunMode;
 type RunOptions = RuntimeRunOptions;
 
+export interface KernelBridgeOptions {
+  workspaceRoot?: string;
+  mcpConfigPath?: string;
+  enableDaemonSubagents?: boolean;
+  kernelOptions?: Omit<OrchestratorKernelOptions, "subagentBridge">;
+  delegateRuntimeFactory?: (
+    options: DaemonDelegateRuntimeOptions,
+  ) => Promise<DaemonDelegateRuntime>;
+}
+
 export class KernelBridge {
   private readonly eventStoreBasePath?: string;
+  private readonly options: KernelBridgeOptions;
   private kernel: OrchestratorKernel | null = null;
+  private delegateRuntime: DaemonDelegateRuntime | null = null;
+  private unsubKernelEvents: (() => void) | null = null;
+  private readonly eventHandlers = new Set<(event: RunEvent) => void>();
 
-  constructor(eventStoreBasePath?: string) {
+  constructor(eventStoreBasePath?: string, options: KernelBridgeOptions = {}) {
     this.eventStoreBasePath = eventStoreBasePath;
+    this.options = options;
   }
 
   async create(): Promise<void> {
     const basePath = resolveEventStoreBasePath(this.eventStoreBasePath);
     const writer = new EventWriter({ basePath });
+    const kernelOptions = this.options.kernelOptions ?? {};
+    let subagentBridge: DelegateRunnerSubagentBridge | undefined;
+    if (this.options.enableDaemonSubagents !== false) {
+      const delegateRuntimeFactory =
+        this.options.delegateRuntimeFactory ?? createDaemonDelegateRuntime;
+      this.delegateRuntime = await delegateRuntimeFactory({
+        workspaceRoot:
+          this.options.workspaceRoot ??
+          process.env.KIRAKIRA_WORKSPACE_ROOT ??
+          process.cwd(),
+        ...(this.options.mcpConfigPath !== undefined
+          ? { mcpConfigPath: this.options.mcpConfigPath }
+          : {}),
+        eventWriter: {
+          emit: async (event) => {
+            this.dispatchEvent(writer.append(event));
+          },
+        },
+      });
+      subagentBridge = new DelegateRunnerSubagentBridge(this.delegateRuntime.delegateRunner);
+    }
     this.kernel = new OrchestratorKernel(writer, {
-      checkpointRepository: new FsCheckpointRepository(join(basePath, "_graph_checkpoints")),
-      checkpointDurability: "async",
+      ...kernelOptions,
+      ...(subagentBridge !== undefined ? { subagentBridge } : {}),
+      checkpointRepository:
+        kernelOptions.checkpointRepository ??
+        new FsCheckpointRepository(join(basePath, "_graph_checkpoints")),
+      checkpointDurability: kernelOptions.checkpointDurability ?? "async",
+    });
+    this.unsubKernelEvents = this.kernel.onEvent((event) => {
+      this.dispatchEvent(event);
     });
     await this.kernel.start();
   }
 
   async destroy(): Promise<void> {
+    if (this.unsubKernelEvents) {
+      this.unsubKernelEvents();
+      this.unsubKernelEvents = null;
+    }
     if (this.kernel) {
       await this.kernel.stop();
       this.kernel = null;
+    }
+    if (this.delegateRuntime) {
+      await this.delegateRuntime.close();
+      this.delegateRuntime = null;
     }
   }
 
@@ -56,6 +116,19 @@ export class KernelBridge {
   }
 
   onEvent(handler: (event: RunEvent) => void): () => void {
-    return this.getKernel().onEvent(handler);
+    this.eventHandlers.add(handler);
+    return () => {
+      this.eventHandlers.delete(handler);
+    };
+  }
+
+  private dispatchEvent(event: RunEvent): void {
+    for (const handler of this.eventHandlers) {
+      try {
+        handler(event);
+      } catch {
+        /* ignore handler errors */
+      }
+    }
   }
 }

@@ -20,8 +20,11 @@
     "@kirakira/core": "workspace:*",
     "@kirakira/agent-runtime": "workspace:*",
     "@kirakira/event-store": "workspace:*",
+    "@kirakira/mcp-adapter": "workspace:*",
     "@kirakira/orchestrator-kernel": "workspace:*",
+    "@kirakira/policy-engine": "workspace:*",
     "@kirakira/runtime-contracts": "workspace:*",
+    "@kirakira/skill-runtime": "workspace:*",
     "ulid": "^2.3.0",
     "ws": "^8.18.0"
   },
