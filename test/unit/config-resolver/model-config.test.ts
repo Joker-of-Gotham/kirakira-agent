@@ -1,8 +1,32 @@
-import { describe, expect, it } from "vitest";
-import { extractGatewayConfig } from "../../../packages/config-resolver/src/model-config.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { AgentToml } from "@kirakira/core";
 
+import { extractGatewayConfig } from "../../../packages/config-resolver/src/model-config.js";
+
+const MODEL_ENV_KEYS = [
+  "LLM_PROVIDER",
+  "LLM_API_KEY",
+  "LLM_BASE_URL",
+  "LLM_MODEL",
+  "LLM_MIRROR_BASE_URLS",
+  "OPENAI_API_KEY",
+  "DASHSCOPE_API_KEY",
+  "ARK_API_KEY",
+  "DEEPSEEK_API_KEY",
+] as const;
+
 describe("extractGatewayConfig", () => {
+  beforeEach(() => {
+    for (const key of MODEL_ENV_KEYS) {
+      vi.stubEnv(key, undefined);
+    }
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it("uses provider declarations when available", () => {
     const toml: AgentToml = {
       schema_version: 1,
@@ -64,5 +88,27 @@ describe("extractGatewayConfig", () => {
 
     const cfg = extractGatewayConfig(toml);
     expect(cfg.maxCostPerSessionUsd).toBe(5.0);
+  });
+
+  it("uses the shared provider catalog for env alias defaults", () => {
+    vi.stubEnv("LLM_PROVIDER", "dashscope");
+    vi.stubEnv("LLM_MODEL", "qwen-custom");
+
+    const cfg = extractGatewayConfig({ schema_version: 1 });
+    expect(cfg.provider).toBe("aliyun-bailian");
+    expect(cfg.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode/v1");
+    expect(cfg.apiKeyEnv).toBe("DASHSCOPE_API_KEY");
+    expect(cfg.model).toBe("qwen-custom");
+  });
+
+  it("preserves the config-resolver generic key bootstrap behavior", () => {
+    vi.stubEnv("LLM_PROVIDER", "deepseek-official");
+    vi.stubEnv("LLM_API_KEY", "your-api-key");
+
+    const cfg = extractGatewayConfig({ schema_version: 1 });
+    expect(cfg.provider).toBe("deepseek");
+    expect(cfg.apiKeyEnv).toBe("LLM_API_KEY");
+    expect(cfg.baseUrl).toBe("https://api.deepseek.com");
+    expect(cfg.model).toBe("deepseek-v4-flash");
   });
 });

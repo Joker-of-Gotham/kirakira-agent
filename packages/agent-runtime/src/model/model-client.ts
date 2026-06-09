@@ -1,3 +1,11 @@
+import {
+  MODEL_PROVIDERS,
+  buildOpenAICompatibleUrl,
+  normalizeModelProviderId,
+  trimTrailingSlash,
+  type ModelProviderCatalogEntry,
+} from "@kirakira/core";
+
 import { ModelInvocationError } from "../errors.js";
 import type {
   CompleteOptions,
@@ -8,59 +16,15 @@ import type {
 
 import { buildStructuredPrompt, parseStructuredOutput } from "./structured-output.js";
 
-const PROVIDER_DEFAULTS = {
-  openai: {
-    baseUrl: "https://api.openai.com/v1",
-    apiKeyEnv: "OPENAI_API_KEY",
-    defaultModel: "gpt-5.2",
-  },
-  "aliyun-bailian": {
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    apiKeyEnv: "DASHSCOPE_API_KEY",
-    defaultModel: "qwen3.6-plus",
-  },
-  "volcengine-ark": {
-    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
-    apiKeyEnv: "ARK_API_KEY",
-    defaultModel: "doubao-seed-1-6-250615",
-  },
-  deepseek: {
-    baseUrl: "https://api.deepseek.com",
-    apiKeyEnv: "DEEPSEEK_API_KEY",
-    defaultModel: "deepseek-v4-flash",
-  },
-} as const;
+function detectProviderFromEnv(): ModelProviderCatalogEntry {
+  const explicit = normalizeModelProviderId(process.env.LLM_PROVIDER);
+  if (explicit && explicit !== "auto") {
+    const provider = MODEL_PROVIDERS.find((entry) => entry.id === explicit);
+    if (provider) return provider;
+  }
 
-const PROVIDER_ALIASES: Record<string, keyof typeof PROVIDER_DEFAULTS | "auto"> = {
-  auto: "auto",
-  "openai-platform": "openai",
-  bailian: "aliyun-bailian",
-  "alibaba-bailian": "aliyun-bailian",
-  dashscope: "aliyun-bailian",
-  aliyun: "aliyun-bailian",
-  ark: "volcengine-ark",
-  "volcano-ark": "volcengine-ark",
-  bytedance: "volcengine-ark",
-  byte: "volcengine-ark",
-  "deepseek-official": "deepseek",
-};
-
-const VERSIONED_BASE_SUFFIXES = ["/v1", "/api/v3", "/compatible-mode/v1"] as const;
-
-function normalizeProviderId(value?: string): keyof typeof PROVIDER_DEFAULTS | "auto" {
-  const normalized = (value ?? "auto").trim().toLowerCase();
-  return PROVIDER_ALIASES[normalized] ?? (normalized as keyof typeof PROVIDER_DEFAULTS);
-}
-
-function detectProviderFromEnv(): keyof typeof PROVIDER_DEFAULTS {
-  const explicit = normalizeProviderId(process.env.LLM_PROVIDER);
-  if (explicit !== "auto" && explicit in PROVIDER_DEFAULTS) return explicit;
-
-  const detected = Object.entries(PROVIDER_DEFAULTS)
-    .filter(([, provider]) => Boolean(process.env[provider.apiKeyEnv]?.trim()))
-    .map(([id]) => id as keyof typeof PROVIDER_DEFAULTS);
-
-  return detected.length === 1 ? detected[0]! : "openai";
+  const detected = MODEL_PROVIDERS.filter((provider) => Boolean(process.env[provider.keyEnv]?.trim()));
+  return detected.length === 1 ? detected[0]! : MODEL_PROVIDERS[0]!;
 }
 
 function resolveApiKey(apiKeyEnv: string): string {
@@ -71,41 +35,11 @@ function resolveApiKey(apiKeyEnv: string): string {
 }
 
 function resolveLlmEnv(): { baseUrl: string; apiKey: string; defaultModel: string } {
-  const provider = PROVIDER_DEFAULTS[detectProviderFromEnv()];
-  const baseUrl = (process.env.LLM_BASE_URL || provider.baseUrl)
-    .trim()
-    .replace(/\/$/, "");
-  const apiKey = resolveApiKey(provider.apiKeyEnv);
+  const provider = detectProviderFromEnv();
+  const baseUrl = trimTrailingSlash((process.env.LLM_BASE_URL || provider.baseUrl).trim());
+  const apiKey = resolveApiKey(provider.keyEnv);
   const defaultModel = (process.env.LLM_MODEL || provider.defaultModel).trim();
   return { baseUrl, apiKey, defaultModel };
-}
-
-function buildOpenAICompatibleUrl(baseUrl: string, endpointPath: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/u, "");
-  const path = `/${endpointPath.replace(/^\/+/u, "")}`;
-  if (trimmed.endsWith(path)) return trimmed;
-
-  const url = new URL(trimmed);
-  const host = url.hostname.toLowerCase();
-  const currentPath = url.pathname.replace(/\/+$/u, "");
-
-  let apiPath: string;
-  if (VERSIONED_BASE_SUFFIXES.some((suffix) => currentPath.endsWith(suffix))) {
-    apiPath = currentPath;
-  } else if (host === "api.openai.com") {
-    apiPath = `${currentPath}/v1`;
-  } else if (host === "api.deepseek.com") {
-    apiPath = currentPath;
-  } else if (host.endsWith("dashscope.aliyuncs.com")) {
-    apiPath = `${currentPath}/compatible-mode/v1`;
-  } else if (host === "ark.cn-beijing.volces.com") {
-    apiPath = `${currentPath}/api/v3`;
-  } else {
-    apiPath = `${currentPath}/v1`;
-  }
-
-  url.pathname = `${apiPath.replace(/\/+$/u, "")}${path}`;
-  return url.toString();
 }
 
 function extractText(data: {

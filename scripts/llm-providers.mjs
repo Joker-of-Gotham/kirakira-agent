@@ -1,66 +1,16 @@
+import providerCatalog from "../packages/core/src/model-providers.catalog.json" with { type: "json" };
+
 const DEFAULT_TIMEOUT_MS = 15000;
 
-export const LLM_PROVIDERS = Object.freeze([
-  {
-    id: "openai",
-    label: "OpenAI Platform",
-    keyEnv: "OPENAI_API_KEY",
-    baseURL: "https://api.openai.com/v1",
-    modelsEndpoint: "/models",
-    fallbackModels: ["gpt-5.2", "gpt-5.2-codex", "gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o-mini"],
-  },
-  {
-    id: "aliyun-bailian",
-    label: "Alibaba Bailian / DashScope",
-    keyEnv: "DASHSCOPE_API_KEY",
-    baseURL: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    modelsEndpoint: "/models",
-    fallbackModels: [
-      "qwen3.6-plus",
-      "qwen3.6-flash",
-      "qwen3.6-max-preview",
-      "qwen3.5-plus",
-      "qwen3-coder-plus",
-      "qwen-plus",
-      "qwen-turbo",
-      "qwen-long",
-      "qwq-plus",
-    ],
-  },
-  {
-    id: "volcengine-ark",
-    label: "ByteDance Volcano Ark",
-    keyEnv: "ARK_API_KEY",
-    baseURL: "https://ark.cn-beijing.volces.com/api/v3",
-    modelsEndpoint: "/models",
-    fallbackModels: [
-      "doubao-seed-1-6-250615",
-      "doubao-seed-1-6-251015",
-      "doubao-seed-1-6-flash-250828",
-    ],
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek Official API",
-    keyEnv: "DEEPSEEK_API_KEY",
-    baseURL: "https://api.deepseek.com",
-    modelsEndpoint: "/models",
-    fallbackModels: ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
-  },
-]);
+export const LLM_PROVIDERS = Object.freeze(
+  providerCatalog.providers.map((provider) => Object.freeze({
+    ...provider,
+    baseURL: provider.baseUrl,
+    fallbackModels: Object.freeze([...provider.fallbackModels]),
+  })),
+);
 
-const PROVIDER_ALIASES = new Map([
-  ["openai-platform", "openai"],
-  ["bailian", "aliyun-bailian"],
-  ["alibaba-bailian", "aliyun-bailian"],
-  ["dashscope", "aliyun-bailian"],
-  ["aliyun", "aliyun-bailian"],
-  ["ark", "volcengine-ark"],
-  ["volcano-ark", "volcengine-ark"],
-  ["bytedance", "volcengine-ark"],
-  ["byte", "volcengine-ark"],
-  ["deepseek-official", "deepseek"],
-]);
+const PROVIDER_ALIASES = new Map(Object.entries(providerCatalog.aliases));
 
 export function normalizeProviderId(providerId) {
   if (!providerId) return undefined;

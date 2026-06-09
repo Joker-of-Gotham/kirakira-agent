@@ -6,6 +6,8 @@
  * separately from content.
  */
 
+import { buildOpenAICompatibleUrl } from "@kirakira/core";
+
 import {
   detectProvider,
   getProviderKey,
@@ -46,7 +48,6 @@ export interface ChatCompleteMultiTurnOptions {
 }
 
 const DEFAULT_BASE = "http://127.0.0.1:30000/v1";
-const VERSIONED_BASE_SUFFIXES = ["/v1", "/api/v3", "/compatible-mode/v1"] as const;
 
 export function resolveLlmRuntimeEnv(): ProviderConfig {
   const provider = detectProvider();
@@ -60,35 +61,6 @@ function assertProviderConfigured(provider: ProviderConfig): void {
   if (!isUsableApiKey(provider.apiKey)) {
     throw new Error("LLM provider is not configured. Open /config in the TUI or run `pnpm.cmd llm:select` to choose a provider, paste an API key, and select a model.");
   }
-}
-
-export function buildOpenAICompatibleUrl(baseUrl: string, endpointPath: string): string {
-  const trimmed = baseUrl.trim().replace(/\/+$/u, "");
-  const path = `/${endpointPath.replace(/^\/+/u, "")}`;
-  if (!trimmed) return "";
-  if (trimmed.endsWith(path)) return trimmed;
-
-  const url = new URL(trimmed);
-  const host = url.hostname.toLowerCase();
-  const currentPath = url.pathname.replace(/\/+$/u, "");
-
-  let apiPath: string;
-  if (VERSIONED_BASE_SUFFIXES.some((suffix) => currentPath.endsWith(suffix))) {
-    apiPath = currentPath;
-  } else if (host === "api.openai.com") {
-    apiPath = `${currentPath}/v1`;
-  } else if (host === "api.deepseek.com") {
-    apiPath = currentPath;
-  } else if (host.endsWith("dashscope.aliyuncs.com")) {
-    apiPath = `${currentPath}/compatible-mode/v1`;
-  } else if (host === "ark.cn-beijing.volces.com") {
-    apiPath = `${currentPath}/api/v3`;
-  } else {
-    apiPath = `${currentPath}/v1`;
-  }
-
-  url.pathname = `${apiPath.replace(/\/+$/u, "")}${path}`;
-  return url.toString();
 }
 
 /**

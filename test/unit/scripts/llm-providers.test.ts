@@ -1,13 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  LLM_PROVIDERS,
   detectProviders,
   getProvider,
   getProviderKey,
   isUsableApiKey,
   normalizeProviderId,
 } from "../../../scripts/llm-providers.mjs";
+import { MODEL_PROVIDERS } from "../../../packages/core/src/model-providers.js";
 
 describe("scripts/llm-providers", () => {
+  it("stays aligned with the core provider catalog", () => {
+    expect(LLM_PROVIDERS.map((provider) => ({
+      id: provider.id,
+      keyEnv: provider.keyEnv,
+      baseURL: provider.baseURL,
+      fallbackModels: provider.fallbackModels,
+    }))).toEqual(MODEL_PROVIDERS.map((provider) => ({
+      id: provider.id,
+      keyEnv: provider.keyEnv,
+      baseURL: provider.baseUrl,
+      fallbackModels: provider.fallbackModels,
+    })));
+  });
+
   it("normalizes aliases shared with the CLI provider catalog", () => {
     expect(normalizeProviderId("aliyun")).toBe("aliyun-bailian");
     expect(normalizeProviderId("dashscope")).toBe("aliyun-bailian");
