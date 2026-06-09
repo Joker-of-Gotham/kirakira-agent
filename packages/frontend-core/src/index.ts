@@ -33,9 +33,22 @@ export {
   fetchBrowserGatewayManifest,
 } from "./browser-gateway-health.js";
 export {
+  runtimeTransportOrchestration,
   runtimeTransportManifest,
   runtimeTransportSupportsArtifactContent,
 } from "./runtime-capabilities.js";
+
+export { createSubagentTopologyView } from "./topology.js";
+
+export type {
+  SubagentTopologyLane,
+  SubagentTopologyRole,
+  SubagentTopologySource,
+  SubagentTopologySummary,
+  SubagentTopologyTask,
+  SubagentTopologyView,
+  SubagentTopologyWorker,
+} from "./topology.js";
 
 export { createRunInspector } from "./inspector.js";
 

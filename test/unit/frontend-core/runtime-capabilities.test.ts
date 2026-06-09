@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   runtimeTransportManifest,
+  runtimeTransportOrchestration,
   runtimeTransportSupportsArtifactContent,
 } from "../../../packages/frontend-core/src/index.js";
 import {
@@ -32,6 +33,32 @@ describe("frontend runtime capability selectors", () => {
 
     expect(runtimeTransportManifest(status)?.runtime).toBe("kirakira-agent");
     expect(runtimeTransportSupportsArtifactContent(status)).toBe(true);
+  });
+
+  it("selects public orchestration topology from runtime health", () => {
+    const status: RuntimeTransportStatus = {
+      mode: "browser-gateway",
+      state: "healthy",
+      label: "Browser gateway",
+      health: runtimeBrowserGatewayHealth({
+        endpoint,
+        tokenRequired: false,
+        manifest: runtimeManifest({
+          browserGateway: { endpoint, tokenRequired: false },
+          orchestration: {
+            profileName: "workbench-host",
+            defaultRole: "planner",
+            roles: [{ id: "planner", lane: "foreground" }],
+          },
+        }),
+      }),
+    };
+
+    expect(runtimeTransportOrchestration(status)).toMatchObject({
+      profileName: "workbench-host",
+      defaultRole: "planner",
+      roles: [{ id: "planner", lane: "foreground" }],
+    });
   });
 
   it("reads capabilities from daemon health", () => {

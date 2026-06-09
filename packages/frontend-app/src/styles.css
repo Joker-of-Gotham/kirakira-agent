@@ -458,6 +458,211 @@ a:focus-visible {
   font-size: 0.85rem;
 }
 
+.kk-topology-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.kk-topology-summary,
+.kk-topology-lanes,
+.kk-topology-roles,
+.kk-topology-role,
+.kk-topology-workers,
+.kk-topology-chips {
+  display: grid;
+}
+
+.kk-topology-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.kk-topology-summary div {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.kk-topology-summary dt,
+.kk-topology-summary dd {
+  margin: 0;
+}
+
+.kk-topology-summary dt {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.kk-topology-summary dd {
+  color: var(--kk-ink);
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.kk-topology-lanes {
+  min-height: 0;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.kk-topology-lane {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+  padding-top: 9px;
+  border-top: 1px solid var(--kk-border);
+}
+
+.kk-topology-lane:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.kk-topology-lane > header,
+.kk-topology-role-head,
+.kk-topology-worker {
+  display: flex;
+  align-items: center;
+}
+
+.kk-topology-lane > header {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.kk-topology-lane > header strong,
+.kk-topology-lane > header small {
+  display: block;
+}
+
+.kk-topology-lane > header strong {
+  color: var(--kk-ink);
+  font-size: 0.9rem;
+}
+
+.kk-topology-lane > header small,
+.kk-topology-lane > header span {
+  color: var(--kk-text-muted);
+  font-size: 0.76rem;
+}
+
+.kk-topology-roles {
+  gap: 8px;
+}
+
+.kk-topology-role {
+  min-width: 0;
+  gap: 7px;
+  padding: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: #fbfcfc;
+}
+
+.kk-topology-role-head {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.kk-topology-role-head > div {
+  min-width: 0;
+}
+
+.kk-topology-role-head strong,
+.kk-topology-role-head small,
+.kk-topology-worker strong,
+.kk-topology-worker small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-topology-role-head strong,
+.kk-topology-worker strong {
+  color: var(--kk-ink);
+  font-size: 0.86rem;
+}
+
+.kk-topology-role-head small,
+.kk-topology-worker small {
+  color: var(--kk-text-muted);
+  font-size: 0.76rem;
+}
+
+.kk-topology-role-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+  color: var(--kk-text-muted);
+  font-size: 0.73rem;
+}
+
+.kk-topology-chips {
+  grid-template-columns: repeat(auto-fit, minmax(74px, max-content));
+  gap: 5px;
+}
+
+.kk-topology-chips span {
+  min-width: 0;
+  max-width: 146px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--kk-border);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--kk-blue);
+  background: var(--kk-surface);
+  font-size: 0.7rem;
+}
+
+.kk-topology-workers {
+  gap: 5px;
+}
+
+.kk-topology-worker {
+  width: 100%;
+  min-width: 0;
+  justify-content: space-between;
+  gap: 7px;
+  padding: 7px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: var(--kk-surface);
+  text-align: left;
+  cursor: pointer;
+}
+
+.kk-topology-worker:hover,
+.kk-topology-worker:focus-visible {
+  border-color: var(--kk-border-strong);
+  background: var(--kk-surface-muted);
+}
+
+.kk-topology-worker > span:nth-child(2) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.kk-topology-worker > span:last-child {
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+}
+
+.kk-topology-warn,
+.kk-topology-warn dd {
+  color: var(--kk-amber);
+}
+
 .kk-count,
 .kk-pill {
   border-radius: 999px;

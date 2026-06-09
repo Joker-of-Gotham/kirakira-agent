@@ -11,11 +11,58 @@ import type {
   SubscribeRunOptions,
   Unsubscribe,
 } from "@kirakira/frontend-core";
-import type { RunEvent, RunEventKind } from "@kirakira/runtime-contracts";
+import {
+  runtimeDaemonHealth,
+  type RunEvent,
+  type RunEventKind,
+  type RuntimeOrchestrationManifest,
+} from "@kirakira/runtime-contracts";
 
 type Listener = (event: RuntimeTransportEvent) => void;
 
 const now = () => new Date().toISOString();
+
+const mockOrchestration: RuntimeOrchestrationManifest = {
+  profileName: "mock-workbench",
+  handoffMode: "swarm",
+  defaultRole: "planner",
+  lanes: {
+    foreground: { capacity: 1 },
+    delegated: { capacity: 4 },
+    background: { capacity: 2 },
+  },
+  roles: [
+    {
+      id: "planner",
+      description: "Keeps the run plan coherent and owns final synthesis",
+      lane: "foreground",
+      context: "inherit",
+      toolScope: ["repo.read", "runtime.status"],
+      permissionLabels: ["workspace-read"],
+    },
+    {
+      id: "researcher",
+      description: "Collects source-backed evidence for runtime and UI decisions",
+      lane: "delegated",
+      context: "filtered",
+      skillScope: ["deep-research", "frontend-review"],
+      mcpServers: ["docs", "filesystem-core"],
+      permissionLabels: ["network-docs-only"],
+    },
+    {
+      id: "verifier",
+      description: "Checks artifacts, approvals, and runtime readiness before release",
+      lane: "background",
+      context: "isolated",
+      toolScope: ["test.run", "runtime.doctor"],
+      permissionLabels: ["workspace-write-gated"],
+    },
+  ],
+  handoffs: [
+    { from: "planner", to: "researcher", mode: "swarm", inputFilter: "research-brief" },
+    { from: "researcher", to: "verifier", mode: "supervisor", approvalRequired: true },
+  ],
+};
 
 export function createMockRuntimeTransport(): RuntimeTransport {
   let counter = 0;
@@ -125,6 +172,8 @@ export function createMockRuntimeTransport(): RuntimeTransport {
               id: "delegated-research",
               kind: "subagent",
               status: "pending",
+              role: "researcher",
+              requestedLane: "delegated",
               description: "Delegate source-backed research",
             },
             {
@@ -174,7 +223,9 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         {
           subagentId,
           parentTaskId: "workspace-scan",
-          lane: "research",
+          role: "researcher",
+          lane: "delegated",
+          requestedLane: "delegated",
           taskPreview: "Map runtime contracts and UI surface gaps",
           capabilities: [
             { kind: "tool", name: "repo.read" },
@@ -320,6 +371,13 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         state: "healthy",
         label: "Mock preview",
         detail: connected ? "Connected" : "Idle",
+        health: runtimeDaemonHealth({
+          gateway: true,
+          kernel: true,
+          socket: true,
+          capabilities: { artifacts: { state: "enabled" } },
+          orchestration: mockOrchestration,
+        }),
       };
     },
     async submitPrompt(request) {

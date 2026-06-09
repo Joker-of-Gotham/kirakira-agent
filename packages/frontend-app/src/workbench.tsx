@@ -19,7 +19,9 @@ import {
 import {
   createEmptyRunDashboard,
   createRunInspector,
+  createSubagentTopologyView,
   projectRunDashboard,
+  runtimeTransportOrchestration,
   runtimeTransportSupportsArtifactContent,
   type RuntimeArtifactContent,
   type RunDashboardArtifact,
@@ -32,6 +34,7 @@ import {
   type RuntimeTransport,
   type RuntimeTransportEvent,
   type RuntimeTransportStatus,
+  type SubagentTopologyView,
 } from "@kirakira/frontend-core";
 import type { FormEvent, ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -235,7 +238,11 @@ export function KirakiraWorkbench({
     await runtime.cancel(runId, "Cancelled from Kirakira workbench");
   };
 
-  const subagents = Object.values(projection.subagentDetails);
+  const topologyManifest = runtimeTransportOrchestration(runtimeStatus);
+  const topology = useMemo(
+    () => createSubagentTopologyView(projection, topologyManifest),
+    [projection, topologyManifest],
+  );
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
   const artifacts = Object.values(projection.artifactDetails).sort((a, b) =>
@@ -429,31 +436,10 @@ export function KirakiraWorkbench({
             </ol>
           </div>
 
-          <div className="kk-agent-pane">
-            <div className="kk-pane-header">
-              <div>
-                <p className="kk-kicker">Subagents</p>
-                <h2>Delegation</h2>
-              </div>
-              <span className="kk-count">{subagents.length}</span>
-            </div>
-            <div className="kk-agent-list">
-              {subagents.length === 0 ? (
-                <div className="kk-empty">No delegated workers</div>
-              ) : (
-                subagents.map((agent) => (
-                  <article key={agent.id} className="kk-agent-row">
-                    <Bot size={18} />
-                    <div>
-                      <strong>{agent.id}</strong>
-                      <span>{agent.contract?.taskPreview ?? agent.lane ?? agent.phase}</span>
-                    </div>
-                    <span className={`kk-pill kk-pill-${agent.phase}`}>{agent.phase}</span>
-                  </article>
-                ))
-              )}
-            </div>
-          </div>
+          <SwarmTopologyPanel
+            topology={topology}
+            onSelectFocus={setSelectedFocusId}
+          />
         </section>
 
         <RunInspectorPanel
@@ -646,6 +632,123 @@ export function KirakiraWorkbench({
         </section>
       </aside>
     </main>
+  );
+}
+
+function SwarmTopologyPanel({
+  topology,
+  onSelectFocus,
+}: {
+  topology: SubagentTopologyView;
+  onSelectFocus: (id: string) => void;
+}) {
+  return (
+    <section className="kk-agent-pane kk-topology-panel" aria-label="Subagent swarm topology">
+      <div className="kk-pane-header">
+        <div>
+          <p className="kk-kicker">Swarm</p>
+          <h2>Topology</h2>
+        </div>
+        <span className="kk-count">
+          {topology.summary.activeWorkerCount}/{topology.summary.workerCount}
+        </span>
+      </div>
+
+      <dl className="kk-topology-summary">
+        <div>
+          <dt>Roles</dt>
+          <dd>{topology.summary.roleCount}</dd>
+        </div>
+        <div>
+          <dt>Planned</dt>
+          <dd>{topology.summary.plannedTaskCount}</dd>
+        </div>
+        <div>
+          <dt>Handoffs</dt>
+          <dd>{topology.summary.handoffCount}</dd>
+        </div>
+        <div className={topology.summary.mismatchCount > 0 ? "kk-topology-warn" : ""}>
+          <dt>Mismatch</dt>
+          <dd>{topology.summary.mismatchCount}</dd>
+        </div>
+      </dl>
+
+      {topology.roles.length === 0 ? (
+        <div className="kk-empty">No topology published</div>
+      ) : (
+        <div className="kk-topology-lanes">
+          {topology.lanes.map((lane) => (
+            <section key={lane.id} className="kk-topology-lane" aria-label={`${lane.label} lane`}>
+              <header>
+                <div>
+                  <strong>{lane.label}</strong>
+                  <small>
+                    {lane.capacity !== undefined ? `capacity ${lane.capacity}` : "elastic"}
+                  </small>
+                </div>
+                <span>{lane.activeWorkerCount}/{lane.workerCount}</span>
+              </header>
+
+              <div className="kk-topology-roles">
+                {lane.roles.map((role) => (
+                  <article key={role.id} className="kk-topology-role">
+                    <div className="kk-topology-role-head">
+                      <div>
+                        <strong>{role.label}</strong>
+                        <small>{role.description ?? role.sources.join(" / ")}</small>
+                      </div>
+                      <span className={`kk-pill kk-pill-${role.phase}`}>{role.phase}</span>
+                    </div>
+
+                    <div className="kk-topology-role-meta">
+                      <span>{role.sources.join(" / ") || "manifest"}</span>
+                      <span>{role.plannedTaskCount} planned</span>
+                      <span>{role.activeWorkerCount} active</span>
+                      {role.mismatchCount > 0 ? (
+                        <span className="kk-topology-warn">{role.mismatchCount} lane drift</span>
+                      ) : null}
+                    </div>
+
+                    {role.capabilityLabels.length > 0 ? (
+                      <div className="kk-topology-chips" aria-label={`${role.label} capabilities`}>
+                        {role.capabilityLabels.slice(0, 5).map((label) => (
+                          <span key={label}>{label}</span>
+                        ))}
+                        {role.capabilityLabels.length > 5 ? (
+                          <span>+{role.capabilityLabels.length - 5}</span>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    {role.workers.length > 0 ? (
+                      <div className="kk-topology-workers">
+                        {role.workers.slice(0, 3).map((worker) => (
+                          <button
+                            key={worker.id}
+                            type="button"
+                            className="kk-topology-worker"
+                            onClick={() => onSelectFocus(`subagent:${worker.id}`)}
+                          >
+                            <span className={`kk-dot kk-dot-${worker.phase}`} />
+                            <span>
+                              <strong>{worker.id}</strong>
+                              <small>
+                                {worker.taskPreview ?? worker.requestedLane ?? worker.lane ?? worker.phase}
+                              </small>
+                            </span>
+                            <span>{worker.phase}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

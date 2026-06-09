@@ -1,5 +1,6 @@
 import type {
   RuntimeManifest,
+  RuntimeOrchestrationManifest,
 } from "@kirakira/runtime-contracts";
 import type { RuntimeTransportStatus } from "./transport.js";
 
@@ -22,4 +23,10 @@ export function runtimeTransportSupportsArtifactContent(
     capability.state === "enabled" &&
     capability.clientMessageTypes?.includes("get_artifact") === true
   );
+}
+
+export function runtimeTransportOrchestration(
+  status: RuntimeTransportStatus | undefined,
+): RuntimeOrchestrationManifest | undefined {
+  return runtimeTransportManifest(status)?.orchestration;
 }

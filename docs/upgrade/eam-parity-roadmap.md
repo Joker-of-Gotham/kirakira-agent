@@ -16,6 +16,9 @@ change, a validation command, and a pushed commit.
 - Electron context isolation and security:
   https://www.electronjs.org/docs/latest/tutorial/context-isolation
   https://www.electronjs.org/docs/latest/tutorial/security
+- React derived rendering and accessible disclosure patterns:
+  https://react.dev/reference/react/useMemo
+  https://www.w3.org/WAI/ARIA/apg/patterns/accordion/
 - LangGraph multi-agent and handoff patterns:
   https://langchain-ai.github.io/langgraph/tutorials/multi_agent/multi-agent-collaboration/
   https://docs.langchain.com/oss/javascript/langchain/multi-agent/handoffs
@@ -38,10 +41,10 @@ change, a validation command, and a pushed commit.
 
 | Track | Current estimate | Evidence | Main remaining work |
 | --- | ---: | --- | --- |
-| EAM mechanism parity | 49% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, and topology PEP/audit context now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit/OTel closure; connect memory retain/reflect/checkpoint. |
-| Web and Electron presentation | 47% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, and runtime manifests can now expose sanitized topology for future web/desktop views. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed visual system, design tokens, topology panel, browser/desktop visual QA. |
-| Hardcoding, harness, SDK/API | 43% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, and PEP execution context are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish shared gateway trust/audit/OTel context. |
-| Docker/local ecosystem | 45% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, and profile-driven topology doctor checks exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end. |
+| EAM mechanism parity | 50% | EAM-like packages exist in `packages/*`; subagent, deep research, MCP, memory, policy, registry, and audit packages are present; MCP invocation, live discovery contracts, direct call event projection, daemon default memory recall construction, structured memory runtime profile state, declarative swarm topology projection, role-aware subagent lane routing/events, public topology manifest projection, topology PEP/audit context, and frontend topology view-model now exist. | Prove exact parity against `reference_project/eam-agent`; finish MCP gateway/trust/audit/OTel closure; connect memory retain/reflect/checkpoint; add unknown-role topology warnings. |
+| Web and Electron presentation | 49% | `apps/web`, `apps/desktop`, `packages/frontend-app`, and `packages/frontend-core` exist; workbench uses runtime gateway contracts, frontend-core preserves subagent role/requested-lane metadata, runtime manifests expose sanitized topology, and the shared workbench now renders a swarm topology panel from manifest + graph + runtime projection. | Full Electron app launch, richer multi-view workbench, OpenHuman-informed selected subagent activity, design-system docs, browser/desktop visual QA. |
+| Hardcoding, harness, SDK/API | 44% | Runtime env, artifact policy, daemon config, CLI config loading, MCP discovery/call results, daemon memory config construction, structured memory profile contracts, runtime ack parsing, topology-to-kernel lane compilation, role-derived subagent routing, manifest topology contracts, PEP execution context, and browser-safe topology selectors are being centralized through resolver/contract-backed APIs. | Replace switch-heavy routing where it blocks extensibility, harden test harnesses, finish shared gateway trust/audit/OTel context, and deduplicate runtime-profile/daemon manifest topology projection. |
+| Docker/local ecosystem | 46% | `configs/runtime/profiles.json`, workbench launcher, resolved runtime state, daemon resolved-config startup, memory-stack profile projection, shared runtime topology projection, daemon plan-context topology injection, profile-driven topology doctor checks, and mock/web/desktop topology consumption exist. | Reuse resolved memory/topology contracts in test harnesses, generate MCP config from profiles, verify Docker/local/desktop/web paths end-to-end, and add full Electron dev-shell launch. |
 
 ## Gap Matrix
 
@@ -56,7 +59,7 @@ change, a validation command, and a pushed commit.
 | Audit and tracing | `reference_project/eam-agent/packages/audit-ledger`, `docs/plane/eam-agent-tracing` | `packages/audit-ledger`, `docs/plane/kirakira-agent-tracing`, policy-engine ledger writer execution context | Advancing. Ledger package and tracing plane exist; policy decision/tool execution audit rows now preserve subagent role/lane execution context. | Emit OTel-compatible spans for run, tool, MCP, subagent, research, memory retrieval, and policy decisions. |
 | Runtime profiles | `reference_project/eam-agent/packages/config-resolver`, `agent.toml`, `policy.yaml` | `configs/runtime/profiles.json`, `packages/config-resolver`, `scripts/runtime-profile.mjs`, daemon resolved-config startup, CLI resolver adapter | Advancing. Daemon and CLI now consume resolved config. | Move remaining CLI config subcommands and init/doctor surfaces away from local helper duplication. |
 | Runtime protocol | `reference_project/eam-agent/packages/runtime-contracts`, daemon/browser/desktop clients | `packages/runtime-contracts`, daemon/browser/desktop clients, runtime manifest MCP projection | Advancing. Ack payload parsing, public MCP runtime directory, MCP tool invocation results, MCP discovery results, and desktop preload validation are centralized in runtime contracts. | Extend the same contract layer to richer gateway/audit/tracing results and live workbench projections. |
-| Presentation shell | `reference_project/openhuman/app`, `reference_project/openhuman/src`, `reference_project/openhuman/design-previews` | `apps/web`, `apps/desktop`, `packages/frontend-app`, `packages/frontend-core` | Partial. Shared workbench exists but is still a narrow runtime console. | Build product-grade navigation, inspector, research, memory, MCP, and settings views with design tokens and visual QA. |
+| Presentation shell | `reference_project/openhuman/app`, `reference_project/openhuman/src`, `reference_project/openhuman/design-previews` | `apps/web`, `apps/desktop`, `packages/frontend-app`, `packages/frontend-core` | Advancing. Shared workbench now has a manifest-aware swarm topology panel backed by frontend-core instead of a flat worker list. | Build product-grade navigation, inspector, research, memory, MCP, and settings views with design tokens and visual QA. |
 
 ## Agent Audit Intake
 
@@ -76,6 +79,18 @@ Latest four-lane audit intake on 2026-06-09:
   `styles.css` are too large and event-log oriented. The next UI slice should
   model OpenHuman-style tool timeline entries, citation chips, and artifact
   cards as first-class dashboard data.
+- **2026-06-09 topology UI slice:** four-agent audit confirmed the next
+  presentation step should replace the flat subagent list with a shared
+  topology projection. `packages/frontend-core/src/topology.ts` now merges
+  public orchestration manifest roles/lanes/handoffs with graph subagent nodes
+  and runtime subagent events. `packages/frontend-app/src/workbench.tsx` now
+  consumes that selector for Web and Electron renderer, and
+  `packages/frontend-app/src/mock-transport.ts` publishes a mock topology
+  manifest so local preview uses the same contract. Remaining risks from the
+  audit: unknown event-supplied roles still need explicit warnings, topology
+  manifest projection is still split across runtime-profile and daemon
+  lifecycle helpers, and `pnpm start:desktop` starts the renderer profile but
+  does not yet launch the full Electron shell.
 - **Runtime ecosystem:** `test/helpers/memory-env.ts` now derives the
   `test-host` memory stack fallback values from runtime profiles instead of
   local literals. Remaining work is direct daemon startup coverage and Compose
@@ -131,8 +146,9 @@ Latest four-lane audit intake on 2026-06-09:
    frontend topology panel, and gateway/OTel audit events.
 5. **Workbench IA pass:** split `packages/frontend-app/src/workbench.tsx` into
    durable views: runs, graph, research, memory, MCP, approvals, artifacts,
-   settings. First data-model slice: tool timeline entries, citation ledger,
-   and artifact cards.
+   settings. First topology slice is now wired through frontend-core. Next
+   data-model slice: selected subagent activity, tool timeline entries,
+   citation ledger, and artifact cards.
 6. **Electron full launch:** make `start:desktop` run daemon plus renderer plus
    Electron main, with context-isolated preload and smoke validation.
 
