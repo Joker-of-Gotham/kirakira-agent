@@ -19,6 +19,7 @@ import {
   DaemonMcpRuntime,
   type DaemonMcpRuntimeOptions,
 } from "../bridge/mcp-runtime.js";
+import { shouldCreateDaemonMemoryDependencies } from "../bridge/memory-runtime-deps.js";
 import { RuntimeBridge } from "../bridge/runtime-bridge.js";
 import { resolveDaemonSocketPath } from "../ipc/socket-path.js";
 import { eventMatchesSubscription } from "../server/event-utils.js";
@@ -61,7 +62,19 @@ function hasDeepResearchConfig(options: KernelBridgeOptions | undefined): boolea
 }
 
 function hasDeepResearchMemory(options: KernelBridgeOptions | undefined): boolean {
-  return Boolean(options?.deepResearch?.memory);
+  if (!options) return false;
+  return Boolean(
+    options.deepResearch?.memory ||
+      shouldCreateDaemonMemoryDependencies({
+        workspaceRoot:
+          options.workspaceRoot ?? process.env.KIRAKIRA_WORKSPACE_ROOT ?? process.cwd(),
+        env: options.memory?.env,
+        resolvedConfig: options.resolvedConfig,
+        runtimeProfileName: options.runtimeProfileName,
+        service: options.memory?.service,
+        serviceFactory: options.memory?.serviceFactory,
+      }),
+  );
 }
 
 function hasMcpRuntime(options: KernelBridgeOptions | undefined): boolean {

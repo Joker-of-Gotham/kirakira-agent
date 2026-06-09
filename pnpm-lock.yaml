@@ -723,6 +723,9 @@ importers:
       '@kirakira/mcp-adapter':
         specifier: workspace:*
         version: link:../mcp-adapter
+      '@kirakira/memory-service':
+        specifier: workspace:*
+        version: link:../memory-service
       '@kirakira/orchestrator-kernel':
         specifier: workspace:*
         version: link:../orchestrator-kernel

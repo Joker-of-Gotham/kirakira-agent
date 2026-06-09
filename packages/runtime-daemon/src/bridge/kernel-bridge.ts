@@ -25,6 +25,11 @@ import {
   createDaemonDeepResearchKernelOptions,
   type DaemonDeepResearchOptions,
 } from "./deep-research.js";
+import {
+  createDaemonMemoryDependencies,
+  type DaemonMemoryDependencies,
+  type DaemonMemoryDependencyOptions,
+} from "./memory-runtime-deps.js";
 
 type RunMode = RuntimeRunMode;
 type RunOptions = RuntimeRunOptions;
@@ -36,6 +41,10 @@ export interface KernelBridgeOptions {
   enableDaemonSubagents?: boolean;
   resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
   deepResearch?: DaemonDeepResearchOptions;
+  memory?: Omit<
+    DaemonMemoryDependencyOptions,
+    "workspaceRoot" | "resolvedConfig" | "runtimeProfileName"
+  >;
   kernelOptions?: Omit<OrchestratorKernelOptions, "subagentBridge">;
   delegateRuntimeFactory?: (
     options: DaemonDelegateRuntimeOptions,
@@ -47,6 +56,7 @@ export class KernelBridge {
   private readonly options: KernelBridgeOptions;
   private kernel: OrchestratorKernel | null = null;
   private delegateRuntime: DaemonDelegateRuntime | null = null;
+  private memoryDeps: DaemonMemoryDependencies | null = null;
   private unsubKernelEvents: (() => void) | null = null;
   private readonly eventHandlers = new Set<(event: RunEvent) => void>();
 
@@ -63,10 +73,27 @@ export class KernelBridge {
       this.options.workspaceRoot ??
       process.env.KIRAKIRA_WORKSPACE_ROOT ??
       process.cwd();
+    this.memoryDeps = createDaemonMemoryDependencies({
+      ...(this.options.memory ?? {}),
+      workspaceRoot,
+      ...(this.options.resolvedConfig !== undefined
+        ? { resolvedConfig: this.options.resolvedConfig }
+        : {}),
+      ...(this.options.runtimeProfileName !== undefined
+        ? { runtimeProfileName: this.options.runtimeProfileName }
+        : {}),
+    });
+    const daemonDeepResearch =
+      this.memoryDeps.researchSource && this.options.deepResearch?.memory === undefined
+        ? {
+            ...(this.options.deepResearch ?? {}),
+            memory: this.memoryDeps.researchSource,
+          }
+        : this.options.deepResearch;
     const deepResearch = createDaemonDeepResearchKernelOptions({
       resolvedConfig: this.options.resolvedConfig,
       kernelDeepResearch: kernelOptions.deepResearch,
-      daemonDeepResearch: this.options.deepResearch,
+      daemonDeepResearch,
     });
     let subagentBridge: DelegateRunnerSubagentBridge | undefined;
     if (this.options.enableDaemonSubagents !== false) {
@@ -118,6 +145,10 @@ export class KernelBridge {
     if (this.delegateRuntime) {
       await this.delegateRuntime.close();
       this.delegateRuntime = null;
+    }
+    if (this.memoryDeps) {
+      await this.memoryDeps.close();
+      this.memoryDeps = null;
     }
   }
 

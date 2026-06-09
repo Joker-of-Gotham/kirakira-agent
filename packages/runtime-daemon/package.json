@@ -22,6 +22,7 @@
     "@kirakira/agent-runtime": "workspace:*",
     "@kirakira/deep-research": "workspace:*",
     "@kirakira/event-store": "workspace:*",
+    "@kirakira/memory-service": "workspace:*",
     "@kirakira/mcp-adapter": "workspace:*",
     "@kirakira/orchestrator-kernel": "workspace:*",
     "@kirakira/policy-engine": "workspace:*",

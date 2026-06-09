@@ -428,4 +428,127 @@ describe("runtime daemon subagent bridge", () => {
       await rm(workspaceRoot, { recursive: true, force: true });
     }
   });
+
+  it("creates default daemon memory research source from runtime env", async () => {
+    const workspaceRoot = await mkdtemp(join(tmpdir(), "kirakira-kernel-default-memory-"));
+    const eventStorePath = join(workspaceRoot, "events");
+    const recallCalls: RecallRequest[] = [];
+    let factoryCalls = 0;
+    const resolvedConfig = {
+      agentToml: {
+        workspace_name: "default-memory-workspace",
+        deep_research: {
+          enabled: true,
+          source_policy: "workspace",
+          max_depth: 1,
+          max_breadth: 1,
+          max_tool_calls: 2,
+          require_citations: true,
+        },
+      },
+      runtimeState: {
+        default_profile: "workbench-host",
+        profiles: [
+          {
+            name: "workbench-host",
+            mode: "host",
+            workspace_root: workspaceRoot,
+            services: [
+              { name: "postgres" },
+              { name: "redis" },
+              { name: "minio" },
+            ],
+          },
+        ],
+      },
+    } as Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+    const bridge = new KernelBridge(eventStorePath, {
+      workspaceRoot,
+      enableDaemonSubagents: false,
+      resolvedConfig,
+      runtimeProfileName: "workbench-host",
+      memory: {
+        env: {
+          DATABASE_URL: "postgres://runtime:runtime@127.0.0.1:15432/runtime",
+          REDIS_URL: "redis://127.0.0.1:16379/0",
+          QDRANT_URL: "http://127.0.0.1:16333",
+          NEO4J_URI: "bolt://127.0.0.1:17687",
+          KIRAKIRA_NEO4J_USER: "neo4j-runtime",
+          KIRAKIRA_NEO4J_PASSWORD: "neo4j-secret",
+          S3_ENDPOINT: "http://127.0.0.1:19000",
+          S3_ACCESS_KEY_ID: "minio-access",
+          S3_SECRET_ACCESS_KEY: "minio-secret",
+        },
+        serviceFactory() {
+          factoryCalls += 1;
+          return {
+            async recall(request) {
+              recallCalls.push(request);
+              return bundle;
+            },
+            async explainRetrieval() {
+              return trace;
+            },
+          };
+        },
+      },
+      kernelOptions: {
+        planContext: {
+          workspace: workspaceRoot,
+          availableTools: [],
+          availableSkills: [],
+          availableMcpServers: [],
+        },
+        planner: {
+          async completeText() {
+            return JSON.stringify({
+              goal: "Collect default daemon memory",
+              steps: [
+                {
+                  id: "research",
+                  description: "Collect default daemon memory evidence",
+                  kind: "research",
+                  dependsOn: [],
+                  canParallelize: false,
+                  research: {
+                    question: "What default daemon memory is available?",
+                    requiredSourceKinds: ["memory"],
+                  },
+                },
+              ],
+              estimatedComplexity: "moderate",
+              requiresSubagents: false,
+            });
+          },
+        },
+      },
+    });
+
+    try {
+      await bridge.create();
+      const completed = waitForBridgeEvent(
+        bridge,
+        (event) => event.kind === "run.completed",
+      );
+
+      const runId = await bridge.submitRun("Collect default daemon memory", "headless", {
+        workspaceRoot,
+      });
+      await completed;
+
+      expect(factoryCalls).toBe(1);
+      expect(recallCalls).toHaveLength(1);
+      expect(recallCalls[0]).toMatchObject({
+        tenantId: "default-memory-workspace",
+        workspaceId: workspaceRoot,
+        query: "What default daemon memory is available?",
+        runId,
+        level: "L3",
+        includeRedacted: false,
+      });
+    } finally {
+      await bridge.destroy();
+      await rm(workspaceRoot, { recursive: true, force: true });
+    }
+  });
 });

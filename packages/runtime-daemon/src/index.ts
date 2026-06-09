@@ -78,6 +78,17 @@ export type {
   DaemonMemoryResearchSourceOptions,
 } from "./bridge/deep-research.js";
 export { createDaemonDeepResearchKernelOptions } from "./bridge/deep-research.js";
+export type {
+  DaemonMemoryDependencies,
+  DaemonMemoryDependencyOptions,
+  DaemonMemoryEnv,
+  DaemonMemoryService,
+} from "./bridge/memory-runtime-deps.js";
+export {
+  createDaemonMemoryDependencies,
+  memoryServiceConfigFromEnv,
+  shouldCreateDaemonMemoryDependencies,
+} from "./bridge/memory-runtime-deps.js";
 
 export type { ChildProcessHandle, ProcessInfo } from "./lifecycle/process-manager.js";
 export { ProcessManager } from "./lifecycle/process-manager.js";
