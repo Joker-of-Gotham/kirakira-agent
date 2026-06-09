@@ -3,6 +3,7 @@ import type { ProcessManager } from "../lifecycle/process-manager.js";
 const GATEWAY_PROCESS = "model-gateway";
 
 export interface GatewayBridgeOptions {
+  disabled?: boolean;
   pythonBin?: string;
   gatewayModule?: string;
   env?: Record<string, string>;
@@ -12,13 +13,17 @@ export interface GatewayBridgeOptions {
 export class GatewayBridge {
   private readonly processes: ProcessManager;
   private readonly opts: Required<
-    Pick<GatewayBridgeOptions, "pythonBin" | "gatewayModule" | "healthIntervalMs">
+    Pick<
+      GatewayBridgeOptions,
+      "disabled" | "pythonBin" | "gatewayModule" | "healthIntervalMs"
+    >
   > & { env?: Record<string, string> };
   private healthTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(processes: ProcessManager, options?: GatewayBridgeOptions) {
     this.processes = processes;
     this.opts = {
+      disabled: options?.disabled ?? false,
       pythonBin: options?.pythonBin ?? "python3",
       gatewayModule: options?.gatewayModule ?? "kirakira_model_gateway.server",
       env: options?.env,
@@ -27,6 +32,7 @@ export class GatewayBridge {
   }
 
   async start(): Promise<void> {
+    if (this.opts.disabled) return;
     this.processes.spawn(GATEWAY_PROCESS, this.opts.pythonBin, ["-m", this.opts.gatewayModule], {
       env: { PYTHONUNBUFFERED: "1", ...this.opts.env },
     });
@@ -38,6 +44,7 @@ export class GatewayBridge {
   }
 
   async stop(): Promise<void> {
+    if (this.opts.disabled) return;
     if (this.healthTimer) {
       clearInterval(this.healthTimer);
       this.healthTimer = null;
@@ -46,6 +53,7 @@ export class GatewayBridge {
   }
 
   async isHealthy(): Promise<boolean> {
+    if (this.opts.disabled) return false;
     const proc = this.processes.getChildProcess(GATEWAY_PROCESS);
     const stdin = proc?.stdin;
     const stdout = proc?.stdout;
@@ -94,6 +102,7 @@ export class GatewayBridge {
   }
 
   async restart(): Promise<void> {
+    if (this.opts.disabled) return;
     await this.processes.restart(GATEWAY_PROCESS);
   }
 }

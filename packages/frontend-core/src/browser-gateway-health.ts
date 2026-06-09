@@ -1,8 +1,10 @@
 import {
   isRuntimeBrowserGatewayHealth,
+  isRuntimeManifest,
   parseWebSocketRuntimeEndpoint,
   type RuntimeBrowserGatewayHealth,
   type RuntimeEndpointParts,
+  type RuntimeManifest,
 } from "@kirakira/runtime-contracts";
 
 export interface BrowserGatewayHealthOptions {
@@ -28,6 +30,16 @@ export function browserGatewayHealthUrl(endpoint: string | RuntimeEndpointParts)
   return url.toString();
 }
 
+export function browserGatewayManifestUrl(endpoint: string | RuntimeEndpointParts): string {
+  const parts = endpointParts(endpoint);
+  const url = new URL(parts.url);
+  url.protocol = parts.protocol === "wss" ? "https:" : "http:";
+  url.pathname = "/manifest";
+  url.search = "";
+  url.hash = "";
+  return url.toString();
+}
+
 export async function fetchBrowserGatewayHealth(
   options: BrowserGatewayHealthOptions,
 ): Promise<RuntimeBrowserGatewayHealth> {
@@ -39,6 +51,21 @@ export async function fetchBrowserGatewayHealth(
   const payload: unknown = await response.json();
   if (!isRuntimeBrowserGatewayHealth(payload)) {
     throw new Error("Runtime gateway health response is invalid");
+  }
+  return payload;
+}
+
+export async function fetchBrowserGatewayManifest(
+  options: BrowserGatewayHealthOptions,
+): Promise<RuntimeManifest> {
+  const fetcher = options.fetcher ?? globalThis.fetch;
+  const response = await fetcher(browserGatewayManifestUrl(options.endpoint));
+  if (!response.ok) {
+    throw new Error(`Runtime gateway manifest request failed: ${response.status}`);
+  }
+  const payload: unknown = await response.json();
+  if (!isRuntimeManifest(payload)) {
+    throw new Error("Runtime gateway manifest response is invalid");
   }
   return payload;
 }

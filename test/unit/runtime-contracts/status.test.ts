@@ -3,11 +3,14 @@ import {
   DEFAULT_BROWSER_GATEWAY_ENDPOINT,
   isRuntimeBrowserGatewayHealth,
   isRuntimeDaemonHealth,
+  isRuntimeManifest,
   renderRuntimeEndpoint,
   runtimeBrowserGatewayHealth,
   runtimeDaemonHealth,
+  runtimeManifest,
   runtimeServiceHealth,
   sanitizeRuntimeDaemonHealth,
+  sanitizeRuntimeManifest,
 } from "../../../packages/runtime-contracts/src/index.js";
 
 const collectKeys = (value: unknown): string[] => {
@@ -41,8 +44,43 @@ describe("runtime status contract", () => {
       tokenRequired: true,
     });
     expect(isRuntimeBrowserGatewayHealth(health)).toBe(true);
-    expect(JSON.stringify(health)).not.toContain("secret");
+    expect(JSON.stringify(health)).not.toContain("secret-token");
     expect(collectKeys(health)).not.toContain("token");
+    expect(isRuntimeManifest(health.manifest)).toBe(true);
+    expect(health.manifest.endpoints.browserGateway?.endpoint.url).toBe(
+      "ws://127.0.0.1:17373/runtime",
+    );
+  });
+
+  it("builds and sanitizes the public runtime manifest", () => {
+    const endpoint = renderRuntimeEndpoint(DEFAULT_BROWSER_GATEWAY_ENDPOINT);
+    const manifest = runtimeManifest({
+      socketPath: "\\\\.\\pipe\\kirakira-agent-test",
+      browserGateway: {
+        endpoint: { ...endpoint, token: "secret-token" },
+        tokenRequired: true,
+      },
+      capabilities: {
+        subagents: { state: "enabled" },
+        deep_research: { state: "enabled" },
+        memory: { state: "enabled" },
+        mcp: { state: "enabled" },
+      },
+    });
+
+    const sanitized = sanitizeRuntimeManifest(manifest);
+
+    expect(isRuntimeManifest(sanitized)).toBe(true);
+    expect(sanitized.runtime).toBe("kirakira-agent");
+    expect(sanitized.contract.protocol).toBe("runtime-v1");
+    expect(sanitized.endpoints.browserGateway?.endpoint.url).toBe(
+      "ws://127.0.0.1:17373/runtime",
+    );
+    expect(sanitized.capabilities.subagents.state).toBe("enabled");
+    expect(sanitized.capabilities.deep_research.eventKinds).toContain("research.completed");
+    expect(sanitized.security.explicitToolConsentRequired).toBe(true);
+    expect(JSON.stringify(sanitized)).not.toContain("secret-token");
+    expect(collectKeys(sanitized)).not.toContain("token");
   });
 
   it("builds daemon health with legacy booleans and typed service details", () => {
@@ -71,6 +109,9 @@ describe("runtime status contract", () => {
     ]);
     expect(collectKeys(health)).not.toContain("token");
     expect(isRuntimeDaemonHealth(health)).toBe(true);
+    expect(health.details.manifest.capabilities.event_stream.eventKinds).toContain(
+      "task.completed",
+    );
   });
 
   it("marks optional browser gateway as disabled without failing daemon health", () => {
@@ -121,6 +162,15 @@ describe("runtime status contract", () => {
         browserGateway: {
           endpoint: { ...endpoint, token: "secret-token" },
           tokenRequired: true,
+          token: "secret-token",
+        },
+        manifest: {
+          ...runtimeManifest({
+            browserGateway: {
+              endpoint: { ...endpoint, token: "secret-token" },
+              tokenRequired: true,
+            },
+          }),
           token: "secret-token",
         },
         token: "secret-token",

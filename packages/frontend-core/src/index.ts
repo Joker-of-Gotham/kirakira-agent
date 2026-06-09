@@ -16,7 +16,9 @@ export { createBrowserGatewayTransport } from "./browser-gateway-transport.js";
 export type { BrowserGatewayHealthOptions } from "./browser-gateway-health.js";
 export {
   browserGatewayHealthUrl,
+  browserGatewayManifestUrl,
   fetchBrowserGatewayHealth,
+  fetchBrowserGatewayManifest,
 } from "./browser-gateway-health.js";
 
 export { createRunInspector } from "./inspector.js";

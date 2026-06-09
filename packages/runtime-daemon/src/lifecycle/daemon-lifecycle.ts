@@ -1,10 +1,13 @@
 import { EventReader } from "@kirakira/event-store";
 import {
   runtimeDaemonHealth,
+  runtimeManifest,
   type ControlMessage,
   type EventFilter,
   type RunEvent,
+  type RuntimeCapabilityOverrides,
   type RuntimeDaemonHealth,
+  type RuntimeManifest,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
 import { GatewayBridge, type GatewayBridgeOptions } from "../bridge/gateway-bridge.js";
@@ -34,6 +37,41 @@ export interface DaemonConfig {
 
 export type HealthStatus = RuntimeDaemonHealth;
 
+function hasDeepResearchConfig(options: KernelBridgeOptions | undefined): boolean {
+  return Boolean(
+    options?.deepResearch ||
+      options?.kernelOptions?.deepResearch ||
+      options?.resolvedConfig?.agentToml.deep_research?.enabled,
+  );
+}
+
+function hasDeepResearchMemory(options: KernelBridgeOptions | undefined): boolean {
+  return Boolean(options?.deepResearch?.memory);
+}
+
+function hasMcpRuntime(options: KernelBridgeOptions | undefined): boolean {
+  return Boolean(options?.mcpConfigPath);
+}
+
+function daemonCapabilityOverrides(
+  options: KernelBridgeOptions | undefined,
+): RuntimeCapabilityOverrides {
+  return {
+    subagents: {
+      state: options?.enableDaemonSubagents === false ? "disabled" : "enabled",
+    },
+    deep_research: {
+      state: hasDeepResearchConfig(options) ? "enabled" : "available",
+    },
+    memory: {
+      state: hasDeepResearchMemory(options) ? "enabled" : "available",
+    },
+    mcp: {
+      state: hasMcpRuntime(options) ? "enabled" : "available",
+    },
+  };
+}
+
 export class DaemonLifecycle {
   private readonly sessions = new SessionManager();
   private readonly subs = new Map<
@@ -52,6 +90,7 @@ export class DaemonLifecycle {
   private socketPath = "";
   private eventStorePath = "";
   private shutdownTimeoutMs = 30_000;
+  private capabilities: RuntimeCapabilityOverrides = {};
 
   async start(config: DaemonConfig): Promise<void> {
     if (this._running) {
@@ -60,6 +99,7 @@ export class DaemonLifecycle {
     this.shutdownTimeoutMs = config.shutdownTimeoutMs ?? 30_000;
     this.socketPath = resolveDaemonSocketPath(config.socketPath);
     this.eventStorePath = config.eventStorePath ?? "";
+    this.capabilities = daemonCapabilityOverrides(config.kernel);
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
     await this.gateway.start();
@@ -92,6 +132,9 @@ export class DaemonLifecycle {
         },
         async onMessage(clientId, message) {
           await self.handleClientMessage(clientId, message);
+        },
+        manifest() {
+          return self.manifest();
         },
       });
       this.browserGatewayInfo = await this.browserGateway.start(config.browserGateway);
@@ -314,6 +357,22 @@ export class DaemonLifecycle {
       kernel,
       socket,
       socketPath: this.socketPath,
+      capabilities: this.capabilities,
+      ...(this._running && this.browserGatewayInfo
+        ? {
+            browserGateway: {
+              endpoint: this.browserGatewayInfo.endpoint,
+              tokenRequired: this.browserGatewayInfo.tokenRequired,
+            },
+          }
+        : {}),
+    });
+  }
+
+  manifest(): RuntimeManifest {
+    return runtimeManifest({
+      socketPath: this.socketPath || undefined,
+      capabilities: this.capabilities,
       ...(this._running && this.browserGatewayInfo
         ? {
             browserGateway: {
@@ -359,5 +418,6 @@ export class DaemonLifecycle {
     this.runtime = null;
     this.processes = null;
     this.subs.clear();
+    this.capabilities = {};
   }
 }

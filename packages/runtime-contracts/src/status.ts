@@ -1,6 +1,57 @@
 import type { RuntimeEndpointParts } from "./endpoint.js";
+import type { RunEventKind } from "./events.js";
 
 export type RuntimeHealthState = "healthy" | "unavailable" | "disabled";
+export type RuntimeCapabilityState = "enabled" | "available" | "disabled";
+
+export type RuntimeCapabilityId =
+  | "control"
+  | "event_stream"
+  | "state_snapshot"
+  | "approvals"
+  | "artifacts"
+  | "checkpoints"
+  | "subagents"
+  | "deep_research"
+  | "memory"
+  | "mcp";
+
+export interface RuntimeCapabilityRecord {
+  id: RuntimeCapabilityId;
+  state: RuntimeCapabilityState;
+  summary: string;
+  eventKinds?: RunEventKind[];
+  clientMessageTypes?: string[];
+}
+
+export interface RuntimeManifest {
+  schemaVersion: 1;
+  runtime: "kirakira-agent";
+  contract: {
+    protocol: "runtime-v1";
+    eventSchemaVersion: 1;
+  };
+  endpoints: {
+    socketPath?: string;
+    browserGateway?: {
+      endpoint: RuntimeEndpointParts;
+      tokenRequired: boolean;
+    };
+  };
+  capabilities: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>;
+  security: {
+    loopbackRecommended: true;
+    secretsRedacted: true;
+    explicitToolConsentRequired: true;
+  };
+}
+
+export type RuntimeCapabilityOverrides = Partial<
+  Record<
+    RuntimeCapabilityId,
+    Partial<Omit<RuntimeCapabilityRecord, "id">>
+  >
+>;
 
 export interface RuntimeServiceHealth {
   ok: boolean;
@@ -36,6 +87,7 @@ export interface RuntimeDaemonHealth {
       endpoint: RuntimeEndpointParts;
       tokenRequired: boolean;
     };
+    manifest: RuntimeManifest;
   };
 }
 
@@ -45,7 +97,94 @@ export interface RuntimeBrowserGatewayHealth {
   transport: "browser-gateway";
   endpoint: RuntimeEndpointParts;
   tokenRequired: boolean;
+  manifest: RuntimeManifest;
 }
+
+const DEFAULT_CAPABILITIES: Record<RuntimeCapabilityId, RuntimeCapabilityRecord> = {
+  control: {
+    id: "control",
+    state: "enabled",
+    summary: "Submit, steer, cancel, resume, drain, approve, and inspect runtime runs.",
+    clientMessageTypes: ["control", "ping"],
+  },
+  event_stream: {
+    id: "event_stream",
+    state: "enabled",
+    summary: "Subscribe to typed run events with replay checkpoints.",
+    clientMessageTypes: ["subscribe", "unsubscribe"],
+    eventKinds: [
+      "run.created",
+      "run.started",
+      "run.completed",
+      "run.failed",
+      "run.drained",
+      "task.ready",
+      "task.started",
+      "task.completed",
+      "task.failed",
+    ],
+  },
+  state_snapshot: {
+    id: "state_snapshot",
+    state: "enabled",
+    summary: "Fetch typed run state snapshots for web and desktop workbenches.",
+    clientMessageTypes: ["get_state"],
+  },
+  approvals: {
+    id: "approvals",
+    state: "available",
+    summary: "Represent human approval requests and decisions in the runtime event stream.",
+    eventKinds: ["approval.requested", "approval.resolved"],
+  },
+  artifacts: {
+    id: "artifacts",
+    state: "available",
+    summary: "Expose generated artifacts and updates through typed runtime events.",
+    eventKinds: ["artifact.created", "artifact.updated"],
+  },
+  checkpoints: {
+    id: "checkpoints",
+    state: "available",
+    summary: "Persist graph checkpoints for resumable orchestrator execution.",
+    eventKinds: ["checkpoint.saved"],
+  },
+  subagents: {
+    id: "subagents",
+    state: "available",
+    summary: "Delegate bounded work to subagent runtimes through explicit capability scopes.",
+    eventKinds: ["subagent.spawned", "subagent.completed"],
+  },
+  deep_research: {
+    id: "deep_research",
+    state: "available",
+    summary: "Run source-grounded research tasks over pluggable source adapters.",
+    eventKinds: [
+      "research.started",
+      "research.plan.created",
+      "research.task.started",
+      "research.task.completed",
+      "research.task.failed",
+      "research.source.started",
+      "research.source.completed",
+      "research.source.failed",
+      "research.evidence.collected",
+      "research.citation.added",
+      "research.limit.reached",
+      "research.completed",
+      "research.failed",
+    ],
+  },
+  memory: {
+    id: "memory",
+    state: "available",
+    summary: "Attach durable memory recall and retain planes through injected runtime services.",
+  },
+  mcp: {
+    id: "mcp",
+    state: "available",
+    summary: "Expose MCP tools, resources, prompts, audit metadata, and consent state as capabilities.",
+  },
+};
 
 export function runtimeServiceHealth(
   ok: boolean,
@@ -66,13 +205,23 @@ export function runtimeServiceHealth(
 export function runtimeBrowserGatewayHealth(input: {
   endpoint: RuntimeEndpointParts;
   tokenRequired: boolean;
+  manifest?: RuntimeManifest;
 }): RuntimeBrowserGatewayHealth {
+  const manifest =
+    input.manifest ??
+    runtimeManifest({
+      browserGateway: {
+        endpoint: input.endpoint,
+        tokenRequired: input.tokenRequired,
+      },
+    });
   return {
     schemaVersion: 1,
     ok: true,
     transport: "browser-gateway",
     endpoint: input.endpoint,
     tokenRequired: input.tokenRequired,
+    manifest,
   };
 }
 
@@ -85,6 +234,7 @@ export function runtimeDaemonHealth(input: {
     endpoint: RuntimeEndpointParts;
     tokenRequired: boolean;
   };
+  capabilities?: RuntimeCapabilityOverrides;
 }): RuntimeDaemonHealth {
   const gateway = runtimeServiceHealth(input.gateway);
   const kernel = runtimeServiceHealth(input.kernel);
@@ -99,6 +249,11 @@ export function runtimeDaemonHealth(input: {
         tokenRequired: input.browserGateway.tokenRequired,
       }
     : runtimeServiceHealth(false, { disabled: true });
+  const manifest = runtimeManifest({
+    socketPath: input.socketPath,
+    browserGateway: input.browserGateway,
+    capabilities: input.capabilities,
+  });
   return {
     schemaVersion: 1,
     ok: gateway.ok && kernel.ok && socket.ok,
@@ -116,12 +271,13 @@ export function runtimeDaemonHealth(input: {
       ...(input.socketPath ? { socketPath: input.socketPath } : {}),
       ...(input.browserGateway
         ? {
-            browserGateway: {
-              endpoint: input.browserGateway.endpoint,
-              tokenRequired: input.browserGateway.tokenRequired,
-            },
-          }
+        browserGateway: {
+          endpoint: input.browserGateway.endpoint,
+          tokenRequired: input.browserGateway.tokenRequired,
+        },
+      }
         : {}),
+      manifest,
     },
   };
 }
@@ -146,6 +302,114 @@ function sanitizeEndpointParts(endpoint: RuntimeEndpointParts): RuntimeEndpointP
     path: endpoint.path,
     url: endpoint.url,
     origin: endpoint.origin,
+  };
+}
+
+export function runtimeManifest(input: {
+  socketPath?: string;
+  browserGateway?: {
+    endpoint: RuntimeEndpointParts;
+    tokenRequired: boolean;
+  };
+  capabilities?: RuntimeCapabilityOverrides;
+} = {}): RuntimeManifest {
+  const capabilities = Object.fromEntries(
+    Object.entries(DEFAULT_CAPABILITIES).map(([id, record]) => {
+      const capabilityId = id as RuntimeCapabilityId;
+      const override = input.capabilities?.[capabilityId];
+      return [
+        capabilityId,
+        {
+          ...record,
+          ...(override ?? {}),
+          id: capabilityId,
+        },
+      ];
+    }),
+  ) as Record<RuntimeCapabilityId, RuntimeCapabilityRecord>;
+  return {
+    schemaVersion: 1,
+    runtime: "kirakira-agent",
+    contract: {
+      protocol: "runtime-v1",
+      eventSchemaVersion: 1,
+    },
+    endpoints: {
+      ...(input.socketPath !== undefined ? { socketPath: input.socketPath } : {}),
+      ...(input.browserGateway !== undefined
+        ? {
+            browserGateway: {
+              endpoint: sanitizeEndpointParts(input.browserGateway.endpoint),
+              tokenRequired: input.browserGateway.tokenRequired,
+            },
+          }
+        : {}),
+    },
+    capabilities,
+    security: {
+      loopbackRecommended: true,
+      secretsRedacted: true,
+      explicitToolConsentRequired: true,
+    },
+  };
+}
+
+function sanitizeRuntimeCapability(
+  capability: RuntimeCapabilityRecord,
+): RuntimeCapabilityRecord {
+  return {
+    id: capability.id,
+    state: capability.state,
+    summary: capability.summary,
+    ...(capability.eventKinds !== undefined
+      ? { eventKinds: capability.eventKinds.filter((kind) => typeof kind === "string") }
+      : {}),
+    ...(capability.clientMessageTypes !== undefined
+      ? {
+          clientMessageTypes: capability.clientMessageTypes.filter(
+            (messageType) => typeof messageType === "string",
+          ),
+        }
+      : {}),
+  };
+}
+
+export function sanitizeRuntimeManifest(manifest: RuntimeManifest): RuntimeManifest {
+  if (!isRuntimeManifest(manifest)) {
+    throw new Error("Runtime manifest response is invalid");
+  }
+  const capabilities = Object.fromEntries(
+    Object.entries(manifest.capabilities).map(([id, capability]) => [
+      id,
+      sanitizeRuntimeCapability(capability),
+    ]),
+  ) as Record<RuntimeCapabilityId, RuntimeCapabilityRecord>;
+  return {
+    schemaVersion: 1,
+    runtime: "kirakira-agent",
+    contract: {
+      protocol: "runtime-v1",
+      eventSchemaVersion: 1,
+    },
+    endpoints: {
+      ...(manifest.endpoints.socketPath !== undefined
+        ? { socketPath: manifest.endpoints.socketPath }
+        : {}),
+      ...(manifest.endpoints.browserGateway !== undefined
+        ? {
+            browserGateway: {
+              endpoint: sanitizeEndpointParts(manifest.endpoints.browserGateway.endpoint),
+              tokenRequired: manifest.endpoints.browserGateway.tokenRequired,
+            },
+          }
+        : {}),
+    },
+    capabilities,
+    security: {
+      loopbackRecommended: true,
+      secretsRedacted: true,
+      explicitToolConsentRequired: true,
+    },
   };
 }
 
@@ -201,6 +465,66 @@ const isRuntimeBrowserGatewayServiceHealth = (
   );
 };
 
+const isRuntimeCapabilityId = (value: unknown): value is RuntimeCapabilityId =>
+  typeof value === "string" && value in DEFAULT_CAPABILITIES;
+
+const isRuntimeCapabilityState = (value: unknown): value is RuntimeCapabilityState =>
+  value === "enabled" || value === "available" || value === "disabled";
+
+const isRuntimeCapabilityRecord = (
+  value: unknown,
+  expectedId?: string,
+): value is RuntimeCapabilityRecord => {
+  if (!isRecord(value)) return false;
+  return (
+    isRuntimeCapabilityId(value.id) &&
+    (expectedId === undefined || value.id === expectedId) &&
+    isRuntimeCapabilityState(value.state) &&
+    typeof value.summary === "string" &&
+    (value.eventKinds === undefined ||
+      (Array.isArray(value.eventKinds) &&
+        value.eventKinds.every((kind) => typeof kind === "string"))) &&
+    (value.clientMessageTypes === undefined ||
+      (Array.isArray(value.clientMessageTypes) &&
+        value.clientMessageTypes.every((messageType) => typeof messageType === "string")))
+  );
+};
+
+export function isRuntimeManifest(value: unknown): value is RuntimeManifest {
+  if (
+    !isRecord(value) ||
+    value.schemaVersion !== 1 ||
+    value.runtime !== "kirakira-agent" ||
+    !isRecord(value.contract) ||
+    value.contract.protocol !== "runtime-v1" ||
+    value.contract.eventSchemaVersion !== 1 ||
+    !isRecord(value.endpoints) ||
+    !isRecord(value.capabilities) ||
+    !isRecord(value.security)
+  ) {
+    return false;
+  }
+  const endpoint = value.endpoints.browserGateway;
+  const capabilities = value.capabilities;
+  const capabilityEntries = Object.entries(capabilities);
+  const expectedIds = Object.keys(DEFAULT_CAPABILITIES);
+  return (
+    (value.endpoints.socketPath === undefined ||
+      typeof value.endpoints.socketPath === "string") &&
+    (endpoint === undefined ||
+      (isRecord(endpoint) &&
+        isEndpointParts(endpoint.endpoint) &&
+        typeof endpoint.tokenRequired === "boolean")) &&
+    capabilityEntries.length === expectedIds.length &&
+    expectedIds.every((id) =>
+      isRuntimeCapabilityRecord(capabilities[id], id),
+    ) &&
+    value.security.loopbackRecommended === true &&
+    value.security.secretsRedacted === true &&
+    value.security.explicitToolConsentRequired === true
+  );
+}
+
 export function isRuntimeBrowserGatewayHealth(
   value: unknown,
 ): value is RuntimeBrowserGatewayHealth {
@@ -210,7 +534,8 @@ export function isRuntimeBrowserGatewayHealth(
     value.ok === true &&
     value.transport === "browser-gateway" &&
     isEndpointParts(value.endpoint) &&
-    typeof value.tokenRequired === "boolean"
+    typeof value.tokenRequired === "boolean" &&
+    isRuntimeManifest(value.manifest)
   );
 }
 
@@ -239,7 +564,8 @@ export function isRuntimeDaemonHealth(value: unknown): value is RuntimeDaemonHea
     (detailsGateway === undefined ||
       (isRecord(detailsGateway) &&
         isEndpointParts(detailsGateway.endpoint) &&
-        typeof detailsGateway.tokenRequired === "boolean"))
+        typeof detailsGateway.tokenRequired === "boolean")) &&
+    isRuntimeManifest(details.manifest)
   );
 }
 
@@ -272,6 +598,7 @@ export function sanitizeRuntimeDaemonHealth(health: RuntimeDaemonHealth): Runtim
             },
           }
         : {}),
+      manifest: sanitizeRuntimeManifest(health.details.manifest),
     },
   };
 }

@@ -71,19 +71,27 @@ export {
   stringifyRuntimeServerMessage,
 } from "./protocol.js";
 export type {
+  RuntimeCapabilityId,
+  RuntimeCapabilityOverrides,
+  RuntimeCapabilityRecord,
+  RuntimeCapabilityState,
   RuntimeBrowserGatewayHealth,
   RuntimeBrowserGatewayServiceHealth,
   RuntimeDaemonHealth,
   RuntimeHealthState,
+  RuntimeManifest,
   RuntimeServiceHealth,
   RuntimeSocketHealth,
 } from "./status.js";
 export {
   isRuntimeBrowserGatewayHealth,
   isRuntimeDaemonHealth,
+  isRuntimeManifest,
   runtimeBrowserGatewayHealth,
   runtimeDaemonHealth,
+  runtimeManifest,
   runtimeServiceHealth,
+  sanitizeRuntimeManifest,
   sanitizeRuntimeDaemonHealth,
 } from "./status.js";
 export type {

@@ -6,7 +6,9 @@ import {
   normalizeRuntimePath,
   renderRuntimeEndpoint,
   runtimeBrowserGatewayHealth,
+  runtimeManifest,
   type RuntimeEndpointParts,
+  type RuntimeManifest,
 } from "@kirakira/runtime-contracts";
 import { WebSocketServer } from "ws";
 import type { ServerMessage } from "./protocol.js";
@@ -34,7 +36,9 @@ export interface BrowserGatewayListenInfo {
   tokenRequired: boolean;
 }
 
-export type BrowserGatewayServerOptions = RuntimeSocketServerOptions;
+export interface BrowserGatewayServerOptions extends RuntimeSocketServerOptions {
+  manifest?: () => RuntimeManifest;
+}
 
 const originHost = (origin: string): string | null => {
   try {
@@ -66,14 +70,29 @@ const rejectUpgrade = (socket: Duplex, status: number, reason: string): void => 
   socket.destroy();
 };
 
+const browserGatewayManifest = (
+  endpoint: RuntimeEndpointParts,
+  tokenRequired: boolean,
+): RuntimeManifest =>
+  runtimeManifest({
+    browserGateway: {
+      endpoint,
+      tokenRequired,
+    },
+  });
+
 export class BrowserGatewayServer {
   private server: ReturnType<typeof createServer> | null = null;
   private wss: WebSocketServer | null = null;
   private readonly hub: RuntimeSocketHub;
   private listenInfo: BrowserGatewayListenInfo | null = null;
 
-  constructor(options: BrowserGatewayServerOptions) {
+  constructor(private readonly options: BrowserGatewayServerOptions) {
     this.hub = new RuntimeSocketHub(options);
+  }
+
+  private manifest(endpoint: RuntimeEndpointParts, tokenRequired: boolean): RuntimeManifest {
+    return this.options.manifest?.() ?? browserGatewayManifest(endpoint, tokenRequired);
   }
 
   async start(config: BrowserGatewayConfig = {}): Promise<BrowserGatewayListenInfo> {
@@ -98,14 +117,29 @@ export class BrowserGatewayServer {
             port,
             path,
           });
+        const manifest = this.manifest(endpoint, Boolean(config.token));
         response.end(
           JSON.stringify(
             runtimeBrowserGatewayHealth({
               endpoint,
               tokenRequired: Boolean(config.token),
+              manifest,
             }),
           ),
         );
+        return;
+      }
+      if (request.method === "GET" && request.url === "/manifest") {
+        response.writeHead(200, { "content-type": "application/json" });
+        const endpoint =
+          this.listenInfo?.endpoint ??
+          renderRuntimeEndpoint({
+            protocol: DEFAULT_BROWSER_GATEWAY_ENDPOINT.protocol,
+            host,
+            port,
+            path,
+          });
+        response.end(JSON.stringify(this.manifest(endpoint, Boolean(config.token))));
         return;
       }
       response.writeHead(404, { "content-type": "text/plain" });

@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   browserGatewayHealthUrl,
+  browserGatewayManifestUrl,
   fetchBrowserGatewayHealth,
+  fetchBrowserGatewayManifest,
 } from "../../../packages/frontend-core/src/index.js";
 import {
   DEFAULT_BROWSER_GATEWAY_ENDPOINT,
   renderRuntimeEndpoint,
   runtimeBrowserGatewayHealth,
+  runtimeManifest,
 } from "../../../packages/runtime-contracts/src/index.js";
 
 describe("browser gateway health client", () => {
@@ -16,6 +19,15 @@ describe("browser gateway health client", () => {
     );
     expect(browserGatewayHealthUrl("wss://example.test:9443/runtime?token=secret")).toBe(
       "https://example.test:9443/healthz",
+    );
+  });
+
+  it("derives the HTTP manifest URL from the websocket runtime endpoint", () => {
+    expect(browserGatewayManifestUrl("ws://127.0.0.1:17373/runtime")).toBe(
+      "http://127.0.0.1:17373/manifest",
+    );
+    expect(browserGatewayManifestUrl("wss://example.test:9443/runtime?token=secret")).toBe(
+      "https://example.test:9443/manifest",
     );
   });
 
@@ -41,6 +53,40 @@ describe("browser gateway health client", () => {
     expect(seen).toEqual(["http://127.0.0.1:17373/healthz"]);
     expect(health.endpoint.url).toBe("ws://127.0.0.1:17373/runtime");
     expect(health.tokenRequired).toBe(true);
+    expect(health.manifest.capabilities.event_stream.state).toBe("enabled");
+  });
+
+  it("fetches and validates the browser gateway manifest", async () => {
+    const endpoint = renderRuntimeEndpoint(DEFAULT_BROWSER_GATEWAY_ENDPOINT);
+    const seen: string[] = [];
+    const manifest = await fetchBrowserGatewayManifest({
+      endpoint,
+      fetcher: (async (url) => {
+        seen.push(String(url));
+        return {
+          ok: true,
+          status: 200,
+          json: async () =>
+            runtimeManifest({
+              browserGateway: {
+                endpoint,
+                tokenRequired: false,
+              },
+              capabilities: {
+                subagents: { state: "enabled" },
+                deep_research: { state: "enabled" },
+              },
+            }),
+        } as Response;
+      }) as typeof fetch,
+    });
+
+    expect(seen).toEqual(["http://127.0.0.1:17373/manifest"]);
+    expect(manifest.runtime).toBe("kirakira-agent");
+    expect(manifest.endpoints.browserGateway?.endpoint.url).toBe(
+      "ws://127.0.0.1:17373/runtime",
+    );
+    expect(manifest.capabilities.subagents.state).toBe("enabled");
   });
 
   it("rejects failed or malformed health responses", async () => {
@@ -67,5 +113,17 @@ describe("browser gateway health client", () => {
           }) as Response) as typeof fetch,
       }),
     ).rejects.toThrow("health response is invalid");
+
+    await expect(
+      fetchBrowserGatewayManifest({
+        endpoint: "ws://127.0.0.1:17373/runtime",
+        fetcher: (async () =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => ({ ok: true }),
+          }) as Response) as typeof fetch,
+      }),
+    ).rejects.toThrow("manifest response is invalid");
   });
 });

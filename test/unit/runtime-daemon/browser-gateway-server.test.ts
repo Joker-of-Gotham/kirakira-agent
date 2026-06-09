@@ -7,6 +7,8 @@ import {
 import {
   DEFAULT_BROWSER_GATEWAY_ENDPOINT,
   isRuntimeBrowserGatewayHealth,
+  isRuntimeManifest,
+  runtimeManifest,
 } from "../../../packages/runtime-contracts/src/index.js";
 
 const waitOpen = (ws: WebSocket) =>
@@ -51,6 +53,7 @@ describe("BrowserGatewayServer", () => {
       expect(health.ok).toBe(true);
       const payload: unknown = await health.json();
       expect(isRuntimeBrowserGatewayHealth(payload)).toBe(true);
+      if (!isRuntimeBrowserGatewayHealth(payload)) throw new Error("invalid health");
       expect(payload).toMatchObject({
         schemaVersion: 1,
         ok: true,
@@ -58,6 +61,8 @@ describe("BrowserGatewayServer", () => {
         endpoint: info.endpoint,
         tokenRequired: false,
       });
+      expect(isRuntimeManifest(payload.manifest)).toBe(true);
+      expect(payload.manifest.endpoints.browserGateway.endpoint.url).toBe(info.url);
 
       const ws = new WebSocket(info.url, {
         headers: { Origin: "http://127.0.0.1:5179" },
@@ -89,10 +94,53 @@ describe("BrowserGatewayServer", () => {
       const payload: unknown = JSON.parse(text);
 
       expect(isRuntimeBrowserGatewayHealth(payload)).toBe(true);
+      if (!isRuntimeBrowserGatewayHealth(payload)) throw new Error("invalid health");
       expect(payload).toMatchObject({
         endpoint: info.endpoint,
         tokenRequired: true,
       });
+      expect(payload.manifest.endpoints.browserGateway.tokenRequired).toBe(true);
+      expect(text).not.toContain("secret-token");
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("serves a sanitized manifest from an injected daemon manifest provider", async () => {
+    const server = new BrowserGatewayServer({
+      async onMessage() {},
+      manifest: () =>
+        runtimeManifest({
+          socketPath: "\\\\.\\pipe\\kirakira-agent-test",
+          capabilities: {
+            subagents: { state: "enabled" },
+            deep_research: { state: "enabled" },
+            memory: { state: "enabled" },
+            mcp: { state: "enabled" },
+          },
+        }),
+    });
+    const info = await server.start({
+      port: 0,
+      allowedOrigins: ["http://127.0.0.1:5179"],
+    });
+
+    try {
+      const response = await fetch(`http://${info.host}:${info.port}/manifest`);
+      const text = await response.text();
+      const payload: unknown = JSON.parse(text);
+
+      expect(response.ok).toBe(true);
+      expect(isRuntimeManifest(payload)).toBe(true);
+      expect(payload).toMatchObject({
+        runtime: "kirakira-agent",
+        endpoints: {
+          socketPath: "\\\\.\\pipe\\kirakira-agent-test",
+        },
+      });
+      expect(
+        (payload as ReturnType<typeof runtimeManifest>).capabilities.deep_research.state,
+      ).toBe("enabled");
       expect(text).not.toContain("secret-token");
     } finally {
       await server.stop();
