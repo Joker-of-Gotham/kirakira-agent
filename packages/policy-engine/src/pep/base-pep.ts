@@ -27,6 +27,7 @@ export abstract class BasePep {
       traceId: context.traceId,
       sessionId: context.sessionId,
       userId: context.userId,
+      agent: context.agent,
     };
 
     const normalized = this.normalize(rawAction, context);

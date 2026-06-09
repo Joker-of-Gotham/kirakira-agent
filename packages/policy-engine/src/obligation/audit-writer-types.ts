@@ -1,9 +1,11 @@
 import type { PolicyDecision } from "@kirakira/core";
+import type { PepAgentContext } from "../pep/pep-types.js";
 
 export interface AuditWriterContext {
   traceId: string;
   sessionId: string;
   userId: string;
+  agent?: PepAgentContext;
 }
 
 /** Pluggable persistence for enforcement traces (implement on the host runtime). */

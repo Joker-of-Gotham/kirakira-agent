@@ -127,6 +127,15 @@ export class DaemonMcpRuntime {
       workspaceRoot: this.workspaceRoot,
       interactive: false,
       roles: [],
+      ...(input.subagentId !== undefined || input.role !== undefined || input.requestedLane !== undefined
+        ? {
+            agent: {
+              ...(input.subagentId !== undefined ? { subagentId: input.subagentId } : {}),
+              ...(input.role !== undefined ? { role: input.role } : {}),
+              ...(input.requestedLane !== undefined ? { lane: input.requestedLane, requestedLane: input.requestedLane } : {}),
+            },
+          }
+        : {}),
     };
   }
 

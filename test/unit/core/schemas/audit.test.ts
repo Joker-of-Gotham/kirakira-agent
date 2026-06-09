@@ -17,6 +17,11 @@ describe("auditEventSchema", () => {
         interactive: true,
         agent_id: "kirakira-agent@v0.1.0",
         subagent_id: "sub-planner-04",
+        agent_role: "reviewer",
+        agent_lane: "queued",
+        requested_lane: "queued",
+        topology_id: "workbench-host",
+        handoff_id: "supervisor->reviewer",
       },
       subject: {
         tool_type: "shell",
@@ -43,6 +48,16 @@ describe("auditEventSchema", () => {
         input_hash: "sha256:inputCanonicalizedJson",
         output_hash: "sha256:decisionEnvelopeJson",
       },
+      context: {
+        execution: {
+          subagent_id: "sub-planner-04",
+          role: "reviewer",
+          lane: "queued",
+          requested_lane: "queued",
+          topology_id: "workbench-host",
+          handoff_id: "supervisor->reviewer",
+        },
+      },
     };
     const r = auditEventSchema.safeParse(raw);
     expect(r.success).toBe(true);
@@ -50,6 +65,9 @@ describe("auditEventSchema", () => {
       expect(r.data.version).toBe("kirakira.audit.v1");
       expect(r.data.kind).toBe("policy.decision");
       expect(r.data.decision_id).toBe("dec-allow-sbx-001");
+      expect(r.data.actor.agent_role).toBe("reviewer");
+      expect(r.data.actor.requested_lane).toBe("queued");
+      expect(r.data.context?.execution?.role).toBe("reviewer");
     }
   });
 

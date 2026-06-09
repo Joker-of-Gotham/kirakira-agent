@@ -14,12 +14,25 @@ function dateSegment(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+function executionContext(ctx: AuditWriterContext): Record<string, string> | undefined {
+  const execution = {
+    ...(ctx.agent?.subagentId !== undefined ? { subagent_id: ctx.agent.subagentId } : {}),
+    ...(ctx.agent?.role !== undefined ? { role: ctx.agent.role } : {}),
+    ...(ctx.agent?.lane !== undefined ? { lane: ctx.agent.lane } : {}),
+    ...(ctx.agent?.requestedLane !== undefined ? { requested_lane: ctx.agent.requestedLane } : {}),
+    ...(ctx.agent?.topologyId !== undefined ? { topology_id: ctx.agent.topologyId } : {}),
+    ...(ctx.agent?.handoffId !== undefined ? { handoff_id: ctx.agent.handoffId } : {}),
+  };
+  return Object.keys(execution).length > 0 ? execution : undefined;
+}
+
 function buildAuditEvent(
   ctx: AuditWriterContext,
   decision: PolicyDecision,
   kind: string,
   extra?: Record<string, unknown>,
 ): Record<string, unknown> {
+  const execution = executionContext(ctx);
   return {
     version: "kirakira.audit.v1",
     event_id: `evt_${randomUUID().replace(/-/g, "").slice(0, 20)}`,
@@ -32,6 +45,12 @@ function buildAuditEvent(
     actor: {
       user_id: ctx.userId,
       interactive: true,
+      ...(ctx.agent?.subagentId !== undefined ? { subagent_id: ctx.agent.subagentId } : {}),
+      ...(ctx.agent?.role !== undefined ? { agent_role: ctx.agent.role } : {}),
+      ...(ctx.agent?.lane !== undefined ? { agent_lane: ctx.agent.lane } : {}),
+      ...(ctx.agent?.requestedLane !== undefined ? { requested_lane: ctx.agent.requestedLane } : {}),
+      ...(ctx.agent?.topologyId !== undefined ? { topology_id: ctx.agent.topologyId } : {}),
+      ...(ctx.agent?.handoffId !== undefined ? { handoff_id: ctx.agent.handoffId } : {}),
     },
     subject: {
       tool_type: decision.policy?.package ?? "unknown",
@@ -47,6 +66,7 @@ function buildAuditEvent(
       bundle_id: decision.policy?.bundle_id ?? "unknown",
       bundle_digest: decision.policy?.revision ?? "unknown",
     },
+    ...(execution !== undefined ? { context: { execution } } : {}),
     ...extra,
   };
 }

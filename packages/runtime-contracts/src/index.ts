@@ -128,6 +128,13 @@ export type {
   RuntimeManifest,
   RuntimeMcpManifest,
   RuntimeMcpServerManifest,
+  RuntimeOrchestrationContextMode,
+  RuntimeOrchestrationHandoffManifest,
+  RuntimeOrchestrationHandoffMode,
+  RuntimeOrchestrationLaneManifest,
+  RuntimeOrchestrationLaneName,
+  RuntimeOrchestrationManifest,
+  RuntimeOrchestrationRoleManifest,
   RuntimeServiceHealth,
   RuntimeSocketHealth,
 } from "./status.js";

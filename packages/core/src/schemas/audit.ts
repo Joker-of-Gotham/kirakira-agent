@@ -32,6 +32,11 @@ export const auditActorSchema = z.object({
   interactive: z.boolean(),
   agent_id: z.string().optional(),
   subagent_id: z.string().optional(),
+  agent_role: z.string().optional(),
+  agent_lane: z.string().optional(),
+  requested_lane: z.string().optional(),
+  topology_id: z.string().optional(),
+  handoff_id: z.string().optional(),
 });
 
 export const auditSubjectSchema = z.object({
@@ -68,6 +73,15 @@ export const auditIntegritySchema = z.object({
   output_hash: z.string().optional(),
 });
 
+export const auditExecutionContextSchema = z.object({
+  subagent_id: z.string().optional(),
+  role: z.string().optional(),
+  lane: z.string().optional(),
+  requested_lane: z.string().optional(),
+  topology_id: z.string().optional(),
+  handoff_id: z.string().optional(),
+});
+
 export const auditEventSchema = z.object({
   version: z.literal("kirakira.audit.v1").default("kirakira.audit.v1"),
   event_id: z.string(),
@@ -83,6 +97,11 @@ export const auditEventSchema = z.object({
   result: auditResultSchema,
   metrics: auditMetricsSchema.optional(),
   integrity: auditIntegritySchema.optional(),
+  context: z
+    .object({
+      execution: auditExecutionContextSchema.optional(),
+    })
+    .optional(),
 });
 
 export const auditCheckpointSchema = z.object({

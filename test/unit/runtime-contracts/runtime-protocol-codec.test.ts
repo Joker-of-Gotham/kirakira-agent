@@ -101,6 +101,9 @@ describe("runtime protocol codec", () => {
         arguments: { path: "README.md" },
         runId: "run-1",
         traceId: "trace-1",
+        subagentId: "sub-implementer-1",
+        role: "implementer",
+        requestedLane: "delegated",
       }),
     ).toEqual({
       ok: true,
@@ -112,6 +115,9 @@ describe("runtime protocol codec", () => {
         arguments: { path: "README.md" },
         runId: "run-1",
         traceId: "trace-1",
+        subagentId: "sub-implementer-1",
+        role: "implementer",
+        requestedLane: "delegated",
       },
     });
 

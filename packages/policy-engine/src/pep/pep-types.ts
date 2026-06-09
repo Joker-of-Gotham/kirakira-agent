@@ -7,6 +7,15 @@ export interface EnforcementResult {
   traceId: string;
 }
 
+export interface PepAgentContext {
+  subagentId?: string;
+  role?: string;
+  lane?: string;
+  requestedLane?: string;
+  topologyId?: string;
+  handoffId?: string;
+}
+
 export interface PepContext {
   sessionId: string;
   traceId: string;
@@ -14,4 +23,5 @@ export interface PepContext {
   workspaceRoot: string;
   interactive: boolean;
   roles: string[];
+  agent?: PepAgentContext;
 }

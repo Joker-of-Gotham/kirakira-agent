@@ -546,6 +546,81 @@ function browserGatewayHealthUrl(endpoint) {
   }
 }
 
+const ORCHESTRATION_LANE_NAMES = ["foreground", "queued", "background", "delegated"];
+const ORCHESTRATION_MODES = ["tool", "supervisor", "swarm"];
+const ORCHESTRATION_CONTEXT_MODES = ["isolated", "filtered", "inherit"];
+
+function publicTopologySummary(topology) {
+  if (!isRecord(topology)) return undefined;
+  const lanes = isRecord(topology.lanes)
+    ? Object.fromEntries(
+        Object.entries(topology.lanes)
+          .filter(([lane, value]) => ORCHESTRATION_LANE_NAMES.includes(lane) && isRecord(value))
+          .map(([lane, value]) => [
+            lane,
+            {
+              ...(Number.isInteger(value.capacity) && value.capacity >= 0
+                ? { capacity: value.capacity }
+                : {}),
+            },
+          ]),
+      )
+    : undefined;
+  const roles = Array.isArray(topology.roles)
+    ? topology.roles
+        .filter((role) => isRecord(role) && typeof role.id === "string" && role.id.length > 0)
+        .map((role) => ({
+          id: role.id,
+          ...(typeof role.description === "string" ? { description: role.description } : {}),
+          ...(ORCHESTRATION_LANE_NAMES.includes(role.lane) ? { lane: role.lane } : {}),
+          ...(ORCHESTRATION_CONTEXT_MODES.includes(role.context) ? { context: role.context } : {}),
+          ...(typeof role.model === "string" ? { model: role.model } : {}),
+          ...(Number.isInteger(role.maxTurns ?? role.max_turns) && (role.maxTurns ?? role.max_turns) > 0
+            ? { maxTurns: role.maxTurns ?? role.max_turns }
+            : {}),
+          ...(Array.isArray(role.toolScope ?? role.tool_scope)
+            ? { toolScope: uniqueStrings(role.toolScope ?? role.tool_scope) }
+            : {}),
+          ...(Array.isArray(role.skillScope ?? role.skill_scope)
+            ? { skillScope: uniqueStrings(role.skillScope ?? role.skill_scope) }
+            : {}),
+          ...(Array.isArray(role.mcpServers ?? role.mcp_servers)
+            ? { mcpServers: uniqueStrings(role.mcpServers ?? role.mcp_servers) }
+            : {}),
+          ...(Array.isArray(role.permissions) ? { permissionLabels: uniqueStrings(role.permissions) } : {}),
+        }))
+    : undefined;
+  const handoffs = Array.isArray(topology.handoffs)
+    ? topology.handoffs
+        .filter((handoff) =>
+          isRecord(handoff) &&
+          typeof handoff.from === "string" &&
+          typeof handoff.to === "string",
+        )
+        .map((handoff) => ({
+          from: handoff.from,
+          to: handoff.to,
+          ...(ORCHESTRATION_MODES.includes(handoff.mode) ? { mode: handoff.mode } : {}),
+          ...(typeof (handoff.inputFilter ?? handoff.input_filter) === "string"
+            ? { inputFilter: handoff.inputFilter ?? handoff.input_filter }
+            : {}),
+          ...(typeof (handoff.approvalRequired ?? handoff.approval_required) === "boolean"
+            ? { approvalRequired: handoff.approvalRequired ?? handoff.approval_required }
+            : {}),
+          ...(Array.isArray(handoff.conditions) ? { conditions: uniqueStrings(handoff.conditions) } : {}),
+        }))
+    : undefined;
+  return {
+    ...(ORCHESTRATION_MODES.includes(topology.mode) ? { handoffMode: topology.mode } : {}),
+    ...(typeof (topology.defaultRole ?? topology.default_role) === "string"
+      ? { defaultRole: topology.defaultRole ?? topology.default_role }
+      : {}),
+    ...(lanes && Object.keys(lanes).length > 0 ? { lanes } : {}),
+    ...(roles && roles.length > 0 ? { roles } : {}),
+    ...(handoffs && handoffs.length > 0 ? { handoffs } : {}),
+  };
+}
+
 function serviceReadinessCheck(config, profile, serviceName, composeEnabled) {
   const target = sanitizedReadinessUrl(profile.services?.[serviceName]);
   const composeService = runtimeComposeServiceName(config, serviceName);
@@ -621,6 +696,17 @@ export function buildRuntimeReadinessPlan(profile = resolveRuntimeProfile(), opt
       source: "presentation.desktop.rendererUrl",
       target: desktopUrl,
       required: true,
+    });
+  }
+
+  const topology = publicTopologySummary(profile.orchestration?.topology);
+  if (topology && Object.keys(topology).length > 0) {
+    checks.push({
+      name: "orchestration:topology",
+      type: "orchestration-topology",
+      source: "orchestration.topology",
+      required: true,
+      topology,
     });
   }
 

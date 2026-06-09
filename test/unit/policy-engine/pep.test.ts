@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { PolicyInput } from "@kirakira/core";
@@ -123,11 +123,54 @@ describe("PEP registry and policy inputs", () => {
     const embedded = new EmbeddedPdp(join(workspaceRoot, "b.json"));
     const cap = new CaptureInputPdp(embedded);
     const pep = new McpPep(cap, makeExecutor(registry), new LedgerAuditWriter(tempAuditDir));
+    const subagentContext: PepContext = {
+      ...context,
+      agent: {
+        subagentId: "sub-implementer-1",
+        role: "implementer",
+        lane: "delegated",
+        requestedLane: "delegated",
+        topologyId: "workbench-host",
+        handoffId: "supervisor->implementer",
+      },
+    };
     await pep.enforce(
       { server: "demo.mcp.local", tool: "resources.read_text", operation: "resources.read_text" },
-      context,
+      subagentContext,
     );
     expect(cap.lastInput!.action.tool_type).toBe("mcp");
+    expect(cap.lastInput!.context?.execution).toMatchObject({
+      subagent_id: "sub-implementer-1",
+      role: "implementer",
+      lane: "delegated",
+      requested_lane: "delegated",
+      topology_id: "workbench-host",
+      handoff_id: "supervisor->implementer",
+    });
+    expect(cap.lastInput!.principal.roles).not.toContain("implementer");
+
+    const [auditFile] = await readdir(tempAuditDir);
+    expect(auditFile).toBeDefined();
+    if (!auditFile) throw new Error("expected policy audit file");
+    const rows = (await readFile(join(tempAuditDir, auditFile), "utf-8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        actor: expect.objectContaining({
+          subagent_id: "sub-implementer-1",
+          agent_role: "implementer",
+          requested_lane: "delegated",
+        }),
+        context: {
+          execution: expect.objectContaining({
+            role: "implementer",
+            requested_lane: "delegated",
+          }),
+        },
+      }),
+    );
     await embedded.close();
   });
 

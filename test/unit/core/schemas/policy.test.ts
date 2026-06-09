@@ -78,6 +78,14 @@ describe("policyInputSchema", () => {
         source: "kirakira.cli",
         invoker: "kirakira-agent@v0.1.0",
         subagent_id: "sub-codegen-002",
+        execution: {
+          subagent_id: "sub-codegen-002",
+          role: "implementer",
+          lane: "delegated",
+          requested_lane: "delegated",
+          topology_id: "workbench-host",
+          handoff_id: "supervisor->implementer",
+        },
         prior_decisions: {
           fingerprint_hit: false,
           approval_template_hit: true,
@@ -96,6 +104,9 @@ describe("policyInputSchema", () => {
       expect(r.data.action.normalized?.write_paths).toContain(
         "/repo/260503_FG_Construct_V4/coverage/",
       );
+      expect(r.data.context?.execution?.role).toBe("implementer");
+      expect(r.data.context?.execution?.requested_lane).toBe("delegated");
+      expect(r.data.principal.roles).not.toContain("implementer");
     }
   });
 

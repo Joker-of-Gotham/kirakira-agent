@@ -47,6 +47,50 @@ export interface RuntimeMcpManifest {
   };
 }
 
+export type RuntimeOrchestrationLaneName =
+  | "foreground"
+  | "queued"
+  | "background"
+  | "delegated";
+
+export type RuntimeOrchestrationHandoffMode = "tool" | "supervisor" | "swarm";
+export type RuntimeOrchestrationContextMode = "isolated" | "filtered" | "inherit";
+
+export interface RuntimeOrchestrationLaneManifest {
+  capacity?: number;
+}
+
+export interface RuntimeOrchestrationRoleManifest {
+  id: string;
+  description?: string;
+  lane?: RuntimeOrchestrationLaneName;
+  model?: string;
+  maxTurns?: number;
+  context?: RuntimeOrchestrationContextMode;
+  toolScope?: string[];
+  skillScope?: string[];
+  mcpServers?: string[];
+  permissionLabels?: string[];
+}
+
+export interface RuntimeOrchestrationHandoffManifest {
+  from: string;
+  to: string;
+  mode?: RuntimeOrchestrationHandoffMode;
+  inputFilter?: string;
+  approvalRequired?: boolean;
+  conditions?: string[];
+}
+
+export interface RuntimeOrchestrationManifest {
+  profileName?: string;
+  handoffMode?: RuntimeOrchestrationHandoffMode;
+  defaultRole?: string;
+  lanes?: Partial<Record<RuntimeOrchestrationLaneName, RuntimeOrchestrationLaneManifest>>;
+  roles?: RuntimeOrchestrationRoleManifest[];
+  handoffs?: RuntimeOrchestrationHandoffManifest[];
+}
+
 export interface RuntimeManifest {
   schemaVersion: 1;
   runtime: "kirakira-agent";
@@ -63,6 +107,7 @@ export interface RuntimeManifest {
   };
   capabilities: Record<RuntimeCapabilityId, RuntimeCapabilityRecord>;
   mcp?: RuntimeMcpManifest;
+  orchestration?: RuntimeOrchestrationManifest;
   security: {
     loopbackRecommended: true;
     secretsRedacted: true;
@@ -265,6 +310,7 @@ export function runtimeDaemonHealth(input: {
   };
   capabilities?: RuntimeCapabilityOverrides;
   mcp?: RuntimeMcpManifest;
+  orchestration?: RuntimeOrchestrationManifest;
 }): RuntimeDaemonHealth {
   const gateway = runtimeServiceHealth(input.gateway);
   const kernel = runtimeServiceHealth(input.kernel);
@@ -284,6 +330,7 @@ export function runtimeDaemonHealth(input: {
     browserGateway: input.browserGateway,
     capabilities: input.capabilities,
     mcp: input.mcp,
+    orchestration: input.orchestration,
   });
   return {
     schemaVersion: 1,
@@ -378,6 +425,121 @@ function sanitizeRuntimeMcpManifest(mcp: RuntimeMcpManifest): RuntimeMcpManifest
   };
 }
 
+const ORCHESTRATION_LANES = new Set<RuntimeOrchestrationLaneName>([
+  "foreground",
+  "queued",
+  "background",
+  "delegated",
+]);
+
+const HANDOFF_MODES = new Set<RuntimeOrchestrationHandoffMode>([
+  "tool",
+  "supervisor",
+  "swarm",
+]);
+
+const CONTEXT_MODES = new Set<RuntimeOrchestrationContextMode>([
+  "isolated",
+  "filtered",
+  "inherit",
+]);
+
+function optionalPositiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value > 0
+    ? value
+    : undefined;
+}
+
+function optionalNonnegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? value
+    : undefined;
+}
+
+function sanitizeRuntimeOrchestrationManifest(
+  orchestration: RuntimeOrchestrationManifest,
+): RuntimeOrchestrationManifest {
+  const lanes =
+    orchestration.lanes !== undefined
+      ? Object.fromEntries(
+          Object.entries(orchestration.lanes)
+            .filter(([lane, value]) => ORCHESTRATION_LANES.has(lane as RuntimeOrchestrationLaneName) && isRecord(value))
+            .map(([lane, value]) => {
+              const capacity = optionalNonnegativeInteger(value.capacity);
+              return [
+                lane,
+                {
+                  ...(capacity !== undefined ? { capacity } : {}),
+                },
+              ];
+            }),
+        ) as Partial<Record<RuntimeOrchestrationLaneName, RuntimeOrchestrationLaneManifest>>
+      : undefined;
+  const roles = Array.isArray(orchestration.roles)
+    ? orchestration.roles
+        .filter((role) => isRecord(role) && typeof role.id === "string" && role.id.length > 0)
+        .map((role) => {
+          const lane = ORCHESTRATION_LANES.has(role.lane as RuntimeOrchestrationLaneName)
+            ? role.lane as RuntimeOrchestrationLaneName
+            : undefined;
+          const context = CONTEXT_MODES.has(role.context as RuntimeOrchestrationContextMode)
+            ? role.context as RuntimeOrchestrationContextMode
+            : undefined;
+          const maxTurns = optionalPositiveInteger(role.maxTurns);
+          return {
+            id: role.id,
+            ...(typeof role.description === "string" ? { description: role.description } : {}),
+            ...(lane !== undefined ? { lane } : {}),
+            ...(typeof role.model === "string" ? { model: role.model } : {}),
+            ...(maxTurns !== undefined ? { maxTurns } : {}),
+            ...(context !== undefined ? { context } : {}),
+            ...(stringArray(role.toolScope) ? { toolScope: stringArray(role.toolScope) } : {}),
+            ...(stringArray(role.skillScope) ? { skillScope: stringArray(role.skillScope) } : {}),
+            ...(stringArray(role.mcpServers) ? { mcpServers: stringArray(role.mcpServers) } : {}),
+            ...(stringArray(role.permissionLabels)
+              ? { permissionLabels: stringArray(role.permissionLabels) }
+              : {}),
+          };
+        })
+    : undefined;
+  const handoffs = Array.isArray(orchestration.handoffs)
+    ? orchestration.handoffs
+        .filter((handoff) =>
+          isRecord(handoff) &&
+          typeof handoff.from === "string" &&
+          handoff.from.length > 0 &&
+          typeof handoff.to === "string" &&
+          handoff.to.length > 0,
+        )
+        .map((handoff) => {
+          const mode = HANDOFF_MODES.has(handoff.mode as RuntimeOrchestrationHandoffMode)
+            ? handoff.mode as RuntimeOrchestrationHandoffMode
+            : undefined;
+          return {
+            from: handoff.from,
+            to: handoff.to,
+            ...(mode !== undefined ? { mode } : {}),
+            ...(typeof handoff.inputFilter === "string" ? { inputFilter: handoff.inputFilter } : {}),
+            ...(typeof handoff.approvalRequired === "boolean"
+              ? { approvalRequired: handoff.approvalRequired }
+              : {}),
+            ...(stringArray(handoff.conditions) ? { conditions: stringArray(handoff.conditions) } : {}),
+          };
+        })
+    : undefined;
+  const handoffMode = HANDOFF_MODES.has(orchestration.handoffMode as RuntimeOrchestrationHandoffMode)
+    ? orchestration.handoffMode
+    : undefined;
+  return {
+    ...(typeof orchestration.profileName === "string" ? { profileName: orchestration.profileName } : {}),
+    ...(handoffMode !== undefined ? { handoffMode } : {}),
+    ...(typeof orchestration.defaultRole === "string" ? { defaultRole: orchestration.defaultRole } : {}),
+    ...(lanes !== undefined && Object.keys(lanes).length > 0 ? { lanes } : {}),
+    ...(roles !== undefined && roles.length > 0 ? { roles } : {}),
+    ...(handoffs !== undefined && handoffs.length > 0 ? { handoffs } : {}),
+  };
+}
+
 export function runtimeManifest(input: {
   socketPath?: string;
   browserGateway?: {
@@ -386,6 +548,7 @@ export function runtimeManifest(input: {
   };
   capabilities?: RuntimeCapabilityOverrides;
   mcp?: RuntimeMcpManifest;
+  orchestration?: RuntimeOrchestrationManifest;
 } = {}): RuntimeManifest {
   const capabilities = Object.fromEntries(
     Object.entries(DEFAULT_CAPABILITIES).map(([id, record]) => {
@@ -421,6 +584,9 @@ export function runtimeManifest(input: {
     },
     capabilities,
     ...(input.mcp !== undefined ? { mcp: sanitizeRuntimeMcpManifest(input.mcp) } : {}),
+    ...(input.orchestration !== undefined
+      ? { orchestration: sanitizeRuntimeOrchestrationManifest(input.orchestration) }
+      : {}),
     security: {
       loopbackRecommended: true,
       secretsRedacted: true,
@@ -492,6 +658,9 @@ export function sanitizeRuntimeManifest(manifest: RuntimeManifest): RuntimeManif
     },
     capabilities,
     ...(manifest.mcp !== undefined ? { mcp: sanitizeRuntimeMcpManifest(manifest.mcp) } : {}),
+    ...(manifest.orchestration !== undefined
+      ? { orchestration: sanitizeRuntimeOrchestrationManifest(manifest.orchestration) }
+      : {}),
     security: {
       loopbackRecommended: true,
       secretsRedacted: true,
@@ -620,6 +789,76 @@ const isRuntimeMcpManifest = (value: unknown): value is RuntimeMcpManifest => {
   );
 };
 
+const isRuntimeOrchestrationLaneManifest = (
+  value: unknown,
+): value is RuntimeOrchestrationLaneManifest =>
+  isRecord(value) &&
+  (value.capacity === undefined ||
+    (typeof value.capacity === "number" &&
+      Number.isInteger(value.capacity) &&
+      value.capacity >= 0));
+
+const isRuntimeOrchestrationRoleManifest = (
+  value: unknown,
+): value is RuntimeOrchestrationRoleManifest =>
+  isRecord(value) &&
+  typeof value.id === "string" &&
+  value.id.length > 0 &&
+  (value.description === undefined || typeof value.description === "string") &&
+  (value.lane === undefined || ORCHESTRATION_LANES.has(value.lane as RuntimeOrchestrationLaneName)) &&
+  (value.model === undefined || typeof value.model === "string") &&
+  (value.maxTurns === undefined ||
+    (typeof value.maxTurns === "number" && Number.isInteger(value.maxTurns) && value.maxTurns > 0)) &&
+  (value.context === undefined || CONTEXT_MODES.has(value.context as RuntimeOrchestrationContextMode)) &&
+  (value.toolScope === undefined ||
+    (Array.isArray(value.toolScope) && value.toolScope.every((item) => typeof item === "string"))) &&
+  (value.skillScope === undefined ||
+    (Array.isArray(value.skillScope) && value.skillScope.every((item) => typeof item === "string"))) &&
+  (value.mcpServers === undefined ||
+    (Array.isArray(value.mcpServers) && value.mcpServers.every((item) => typeof item === "string"))) &&
+  (value.permissionLabels === undefined ||
+    (Array.isArray(value.permissionLabels) &&
+      value.permissionLabels.every((item) => typeof item === "string")));
+
+const isRuntimeOrchestrationHandoffManifest = (
+  value: unknown,
+): value is RuntimeOrchestrationHandoffManifest =>
+  isRecord(value) &&
+  typeof value.from === "string" &&
+  value.from.length > 0 &&
+  typeof value.to === "string" &&
+  value.to.length > 0 &&
+  (value.mode === undefined || HANDOFF_MODES.has(value.mode as RuntimeOrchestrationHandoffMode)) &&
+  (value.inputFilter === undefined || typeof value.inputFilter === "string") &&
+  (value.approvalRequired === undefined || typeof value.approvalRequired === "boolean") &&
+  (value.conditions === undefined ||
+    (Array.isArray(value.conditions) && value.conditions.every((item) => typeof item === "string")));
+
+const isRuntimeOrchestrationManifest = (
+  value: unknown,
+): value is RuntimeOrchestrationManifest => {
+  if (!isRecord(value)) return false;
+  const lanes = value.lanes;
+  return (
+    (value.profileName === undefined || typeof value.profileName === "string") &&
+    (value.handoffMode === undefined ||
+      HANDOFF_MODES.has(value.handoffMode as RuntimeOrchestrationHandoffMode)) &&
+    (value.defaultRole === undefined || typeof value.defaultRole === "string") &&
+    (lanes === undefined ||
+      (isRecord(lanes) &&
+        Object.entries(lanes).every(
+          ([lane, record]) =>
+            ORCHESTRATION_LANES.has(lane as RuntimeOrchestrationLaneName) &&
+            isRuntimeOrchestrationLaneManifest(record),
+        ))) &&
+    (value.roles === undefined ||
+      (Array.isArray(value.roles) && value.roles.every(isRuntimeOrchestrationRoleManifest))) &&
+    (value.handoffs === undefined ||
+      (Array.isArray(value.handoffs) &&
+        value.handoffs.every(isRuntimeOrchestrationHandoffManifest)))
+  );
+};
+
 export function isRuntimeManifest(value: unknown): value is RuntimeManifest {
   if (
     !isRecord(value) ||
@@ -650,6 +889,7 @@ export function isRuntimeManifest(value: unknown): value is RuntimeManifest {
       isRuntimeCapabilityRecord(capabilities[id], id),
     ) &&
     (value.mcp === undefined || isRuntimeMcpManifest(value.mcp)) &&
+    (value.orchestration === undefined || isRuntimeOrchestrationManifest(value.orchestration)) &&
     value.security.loopbackRecommended === true &&
     value.security.secretsRedacted === true &&
     value.security.explicitToolConsentRequired === true

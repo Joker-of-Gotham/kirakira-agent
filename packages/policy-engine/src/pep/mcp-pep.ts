@@ -7,6 +7,7 @@ import { normalizeAction, type RawAction } from "../normalizer/action-normalizer
 import type { PdpClient } from "../pdp/pdp-types.js";
 import { BasePep } from "./base-pep.js";
 import type { PepContext } from "./pep-types.js";
+import { agentContextFrom } from "./policy-input-fields.js";
 import { asRecord, coerceEnv } from "./action-raw-parse.js";
 import { signalize } from "./risk-signals.js";
 
@@ -67,12 +68,18 @@ export class McpPep extends BasePep {
     if (typeof o.issuer === "string" && o.issuer.length > 0) mcp_server.issuer = o.issuer;
     const tier = coerceEnv(o)?.MCP_TRUST ?? coerceEnv(o)?.KIRAKIRA_MCP_TRUST ?? coerceEnv(o)?.KIRAKIRA_TRUST_TIER;
     if (tier !== undefined) mcp_server.trust_tier = tier;
+    const execution = agentContextFrom(context);
+    const policyContext: NonNullable<PolicyInput["context"]> = {
+      ...(Object.keys(mcp_server).length > 0 ? { mcp_server } : {}),
+      ...(execution !== undefined ? { execution } : {}),
+      ...(execution?.subagent_id !== undefined ? { subagent_id: execution.subagent_id } : {}),
+    };
 
     return {
       ...this.envelope(context),
       principal: this.principal(context),
       workspace: this.workspace(context),
-      ...(Object.keys(mcp_server).length > 0 ? { context: { mcp_server } } : {}),
+      ...(Object.keys(policyContext).length > 0 ? { context: policyContext } : {}),
       action: {
         kind: "tool.call",
         tool_type: "mcp",

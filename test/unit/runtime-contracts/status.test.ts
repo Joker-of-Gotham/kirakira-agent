@@ -83,6 +83,39 @@ describe("runtime status contract", () => {
           servers: ["filesystem-core"],
         },
       },
+      orchestration: {
+        profileName: "workbench-host",
+        handoffMode: "swarm",
+        defaultRole: "supervisor",
+        lanes: {
+          foreground: { capacity: 2 },
+          delegated: { capacity: 4 },
+        },
+        roles: [
+          {
+            id: "supervisor",
+            description: "Plans handoffs.",
+            lane: "foreground",
+            context: "filtered",
+            permissionLabels: ["plan", "delegate"],
+          },
+          {
+            id: "implementer",
+            lane: "delegated",
+            context: "isolated",
+            toolScope: ["filesystem-core.read_file"],
+            mcpServers: ["filesystem-core"],
+          },
+        ],
+        handoffs: [
+          {
+            from: "supervisor",
+            to: "implementer",
+            mode: "tool",
+            inputFilter: "scoped-task-brief",
+          },
+        ],
+      },
     });
 
     const sanitized = sanitizeRuntimeManifest(manifest);
@@ -105,8 +138,37 @@ describe("runtime status contract", () => {
       args: ["packages/mcp-filesystem-core/dist/index.js", "."],
       envKeys: ["KIRAKIRA_WORKSPACE_ROOT"],
     });
+    expect(sanitized.orchestration).toMatchObject({
+      profileName: "workbench-host",
+      handoffMode: "swarm",
+      defaultRole: "supervisor",
+      lanes: {
+        foreground: { capacity: 2 },
+        delegated: { capacity: 4 },
+      },
+      roles: [
+        expect.objectContaining({
+          id: "supervisor",
+          lane: "foreground",
+          permissionLabels: ["plan", "delegate"],
+        }),
+        expect.objectContaining({
+          id: "implementer",
+          lane: "delegated",
+          toolScope: ["filesystem-core.read_file"],
+        }),
+      ],
+      handoffs: [
+        expect.objectContaining({
+          from: "supervisor",
+          to: "implementer",
+          inputFilter: "scoped-task-brief",
+        }),
+      ],
+    });
     expect(sanitized.security.explicitToolConsentRequired).toBe(true);
     expect(JSON.stringify(sanitized)).not.toContain("secret-token");
+    expect(JSON.stringify(sanitized)).not.toContain("system_preamble");
     expect(collectKeys(sanitized)).not.toContain("token");
   });
 

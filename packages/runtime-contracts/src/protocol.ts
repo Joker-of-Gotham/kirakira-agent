@@ -355,6 +355,23 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
       if (raw.traceId !== undefined && traceId === undefined) {
         return error("invalid_message", "mcp_call traceId must be a string", raw, raw.traceId);
       }
+      const subagentId = optionalString(raw.subagentId);
+      if (raw.subagentId !== undefined && subagentId === undefined) {
+        return error("invalid_message", "mcp_call subagentId must be a string", raw, raw.subagentId);
+      }
+      const role = optionalString(raw.role);
+      if (raw.role !== undefined && role === undefined) {
+        return error("invalid_message", "mcp_call role must be a string", raw, raw.role);
+      }
+      const requestedLane = optionalString(raw.requestedLane);
+      if (raw.requestedLane !== undefined && requestedLane === undefined) {
+        return error(
+          "invalid_message",
+          "mcp_call requestedLane must be a string",
+          raw,
+          raw.requestedLane,
+        );
+      }
       return {
         ok: true,
         message: {
@@ -365,6 +382,9 @@ export function parseRuntimeClientMessage(raw: unknown): RuntimeClientMessagePar
           ...(args !== undefined ? { arguments: args } : {}),
           ...(runId !== undefined ? { runId } : {}),
           ...(traceId !== undefined ? { traceId } : {}),
+          ...(subagentId !== undefined ? { subagentId } : {}),
+          ...(role !== undefined ? { role } : {}),
+          ...(requestedLane !== undefined ? { requestedLane } : {}),
         },
       };
     }

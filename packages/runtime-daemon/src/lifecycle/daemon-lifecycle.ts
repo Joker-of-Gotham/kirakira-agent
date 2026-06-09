@@ -10,6 +10,7 @@ import {
   type RuntimeManifest,
   type RuntimeMcpListResult,
   type RuntimeMcpManifest,
+  type RuntimeOrchestrationManifest,
   type RuntimeMcpToolCallResult,
 } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
@@ -119,6 +120,53 @@ function runtimeMcpManifest(
   };
 }
 
+function runtimeOrchestrationManifest(
+  options: KernelBridgeOptions | undefined,
+): RuntimeOrchestrationManifest | undefined {
+  const runtimeState = options?.resolvedConfig?.runtimeState;
+  const profiles = runtimeState?.profiles ?? [];
+  const profileName = options?.runtimeProfileName ?? runtimeState?.default_profile;
+  const profile = profiles.find((item) => item.name === profileName) ?? profiles[0];
+  const orchestration = profile?.orchestration;
+  if (!profile || !orchestration) return undefined;
+  return {
+    profileName: profile.name,
+    ...(orchestration.handoff_mode ? { handoffMode: orchestration.handoff_mode } : {}),
+    ...(orchestration.default_role ? { defaultRole: orchestration.default_role } : {}),
+    ...(orchestration.lanes ? { lanes: orchestration.lanes } : {}),
+    ...(orchestration.roles
+      ? {
+          roles: orchestration.roles.map((role) => ({
+            id: role.id,
+            ...(role.description ? { description: role.description } : {}),
+            ...(role.lane ? { lane: role.lane } : {}),
+            ...(role.model ? { model: role.model } : {}),
+            ...(role.max_turns ? { maxTurns: role.max_turns } : {}),
+            ...(role.context ? { context: role.context } : {}),
+            ...(role.tool_scope ? { toolScope: role.tool_scope } : {}),
+            ...(role.skill_scope ? { skillScope: role.skill_scope } : {}),
+            ...(role.mcp_servers ? { mcpServers: role.mcp_servers } : {}),
+            ...(role.permissions ? { permissionLabels: role.permissions } : {}),
+          })),
+        }
+      : {}),
+    ...(orchestration.handoffs
+      ? {
+          handoffs: orchestration.handoffs.map((handoff) => ({
+            from: handoff.from,
+            to: handoff.to,
+            ...(handoff.mode ? { mode: handoff.mode } : {}),
+            ...(handoff.input_filter ? { inputFilter: handoff.input_filter } : {}),
+            ...(handoff.approval_required !== undefined
+              ? { approvalRequired: handoff.approval_required }
+              : {}),
+            ...(handoff.conditions ? { conditions: handoff.conditions } : {}),
+          })),
+        }
+      : {}),
+  };
+}
+
 function daemonCapabilityOverrides(
   options: KernelBridgeOptions | undefined,
 ): RuntimeCapabilityOverrides {
@@ -175,6 +223,7 @@ export class DaemonLifecycle {
   private shutdownTimeoutMs = 30_000;
   private capabilities: RuntimeCapabilityOverrides = {};
   private mcpManifest: RuntimeMcpManifest | undefined;
+  private orchestrationManifest: RuntimeOrchestrationManifest | undefined;
 
   async start(config: DaemonConfig): Promise<void> {
     if (this._running) {
@@ -189,6 +238,7 @@ export class DaemonLifecycle {
       process.cwd();
     this.capabilities = daemonCapabilityOverrides(config.kernel);
     this.mcpManifest = runtimeMcpManifest(config.kernel);
+    this.orchestrationManifest = runtimeOrchestrationManifest(config.kernel);
     this.mcpRuntime = new DaemonMcpRuntime({
       ...(config.mcpRuntime ?? {}),
       workspaceRoot: this.workspaceRoot,
@@ -500,6 +550,9 @@ export class DaemonLifecycle {
           source: "runtime.mcp_call",
           ...(msg.arguments !== undefined ? { args: msg.arguments } : {}),
           ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+          ...(msg.subagentId !== undefined ? { subagentId: msg.subagentId } : {}),
+          ...(msg.role !== undefined ? { role: msg.role } : {}),
+          ...(msg.requestedLane !== undefined ? { requestedLane: msg.requestedLane } : {}),
         },
       });
     }
@@ -510,6 +563,9 @@ export class DaemonLifecycle {
         ...(msg.arguments !== undefined ? { arguments: msg.arguments } : {}),
         ...(msg.runId !== undefined ? { runId: msg.runId } : {}),
         ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+        ...(msg.subagentId !== undefined ? { subagentId: msg.subagentId } : {}),
+        ...(msg.role !== undefined ? { role: msg.role } : {}),
+        ...(msg.requestedLane !== undefined ? { requestedLane: msg.requestedLane } : {}),
       });
       this.sendToClient(clientId, {
         type: "ack",
@@ -538,6 +594,9 @@ export class DaemonLifecycle {
             ...(result.error !== undefined ? { error: result.error } : {}),
             ...(preview !== undefined ? { resultPreview: preview } : {}),
             ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+            ...(msg.subagentId !== undefined ? { subagentId: msg.subagentId } : {}),
+            ...(msg.role !== undefined ? { role: msg.role } : {}),
+            ...(msg.requestedLane !== undefined ? { requestedLane: msg.requestedLane } : {}),
           },
         });
       }
@@ -558,6 +617,9 @@ export class DaemonLifecycle {
             source: "runtime.mcp_call",
             error: error instanceof Error ? error.message : String(error),
             ...(msg.traceId !== undefined ? { traceId: msg.traceId } : {}),
+            ...(msg.subagentId !== undefined ? { subagentId: msg.subagentId } : {}),
+            ...(msg.role !== undefined ? { role: msg.role } : {}),
+            ...(msg.requestedLane !== undefined ? { requestedLane: msg.requestedLane } : {}),
           },
         });
       }
@@ -681,6 +743,7 @@ export class DaemonLifecycle {
       socketPath: this.socketPath,
       capabilities: this.capabilities,
       mcp: this.mcpManifest,
+      orchestration: this.orchestrationManifest,
       ...(this._running && this.browserGatewayInfo
         ? {
             browserGateway: {
@@ -697,6 +760,7 @@ export class DaemonLifecycle {
       socketPath: this.socketPath || undefined,
       capabilities: this.capabilities,
       mcp: this.mcpManifest,
+      orchestration: this.orchestrationManifest,
       ...(this._running && this.browserGatewayInfo
         ? {
             browserGateway: {
@@ -746,5 +810,6 @@ export class DaemonLifecycle {
     this.subs.clear();
     this.capabilities = {};
     this.mcpManifest = undefined;
+    this.orchestrationManifest = undefined;
   }
 }

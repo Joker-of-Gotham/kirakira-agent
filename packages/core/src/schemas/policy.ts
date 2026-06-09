@@ -166,6 +166,26 @@ const policyInputContextSchema = z.object({
   source: z.string().optional(),
   invoker: z.string().optional(),
   subagent_id: z.string().optional(),
+  execution: z
+    .object({
+      subagent_id: z.string().optional(),
+      role: z.string().optional(),
+      lane: z.string().optional(),
+      requested_lane: z.string().optional(),
+      topology_id: z.string().optional(),
+      handoff_id: z.string().optional(),
+    })
+    .optional(),
+  agent: z
+    .object({
+      subagent_id: z.string().optional(),
+      role: z.string().optional(),
+      lane: z.string().optional(),
+      requested_lane: z.string().optional(),
+      topology_id: z.string().optional(),
+      handoff_id: z.string().optional(),
+    })
+    .optional(),
   mcp_server: z
     .object({
       id: z.string().optional(),

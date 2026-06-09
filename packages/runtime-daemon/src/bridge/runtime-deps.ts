@@ -50,6 +50,9 @@ export interface DaemonDelegateRuntime {
 interface RuntimeDepsInput {
   runId: string;
   traceId?: string;
+  subagentId?: string;
+  role?: string;
+  requestedLane?: string;
   capabilityScope?: RuntimeCapabilityScope;
 }
 
@@ -94,6 +97,17 @@ function createPepContext(
     workspaceRoot,
     interactive: false,
     roles: [],
+    ...(input.subagentId !== undefined || input.role !== undefined || input.requestedLane !== undefined
+      ? {
+          agent: {
+            ...(input.subagentId !== undefined ? { subagentId: input.subagentId } : {}),
+            ...(input.role !== undefined ? { role: input.role } : {}),
+            ...(input.requestedLane !== undefined
+              ? { lane: input.requestedLane, requestedLane: input.requestedLane }
+              : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -191,6 +205,9 @@ export async function createDaemonDelegateRuntime(
       return createRuntimeDeps(context, {
         runId: request.runId,
         traceId: request.traceId ?? request.subagentId,
+        subagentId: request.subagentId,
+        role: request.role,
+        requestedLane: request.requestedLane,
         capabilityScope,
       });
     },

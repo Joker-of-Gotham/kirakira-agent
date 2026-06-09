@@ -158,6 +158,9 @@ describe("DaemonMcpRuntime", () => {
         arguments: { path: "README.md" },
         runId: "run-1",
         traceId: "trace-1",
+        subagentId: "sub-implementer-1",
+        role: "implementer",
+        requestedLane: "delegated",
       });
 
       expect(pep.enforce).toHaveBeenCalledWith(
@@ -170,6 +173,12 @@ describe("DaemonMcpRuntime", () => {
           sessionId: "run-1",
           traceId: "trace-1",
           workspaceRoot,
+          agent: {
+            subagentId: "sub-implementer-1",
+            role: "implementer",
+            lane: "delegated",
+            requestedLane: "delegated",
+          },
         }),
       );
       expect(manager.startServer).toHaveBeenCalledWith("filesystem-core");

@@ -4,6 +4,9 @@ export interface RuntimeMcpToolCallRequest {
   arguments?: Record<string, unknown>;
   runId?: string;
   traceId?: string;
+  subagentId?: string;
+  role?: string;
+  requestedLane?: string;
 }
 
 export interface RuntimeMcpListRequest {

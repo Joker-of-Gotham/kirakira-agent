@@ -37,14 +37,24 @@ describe("runtime doctor", () => {
       ok: true,
       status: "ok",
       summary: {
-        total: 6,
-        ok: 0,
+        total: 7,
+        ok: 1,
         failed: 0,
         warned: 0,
         skipped: 6,
       },
     });
-    expect(report.checks.every((check) => check.status === "skipped")).toBe(true);
+    expect(report.checks).toContainEqual(
+      expect.objectContaining({
+        name: "orchestration:topology",
+        status: "ok",
+      }),
+    );
+    expect(
+      report.checks
+        .filter((check) => check.type === "compose-service")
+        .every((check) => check.status === "skipped"),
+    ).toBe(true);
     expect(JSON.stringify(report)).not.toContain("kirakira:kirakira");
     expect(JSON.stringify(report)).not.toContain("testpassword");
     expect(JSON.stringify(report)).not.toContain("5173");
@@ -192,6 +202,41 @@ describe("runtime doctor", () => {
       status: "fail",
       detail: "Runtime gateway health response is invalid",
     });
+  });
+
+  it("fails malformed orchestration topology checks before runtime startup", async () => {
+    const report = await evaluateRuntimeReadinessPlan(
+      {
+        schemaVersion: 1,
+        profile: "broken-topology",
+        mode: "host",
+        checks: [
+          {
+            name: "orchestration:topology",
+            type: "orchestration-topology",
+            source: "orchestration.topology",
+            required: true,
+            topology: {
+              defaultRole: "supervisor",
+              lanes: { delegated: { capacity: 2 } },
+              roles: [
+                { id: "supervisor", lane: "foreground" },
+                { id: "supervisor", lane: "delegated" },
+              ],
+              handoffs: [{ from: "supervisor", to: "missing", mode: "tool" }],
+            },
+          },
+        ],
+      },
+      { probe: true },
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.checks[0]).toMatchObject({
+      status: "fail",
+      detail: expect.stringContaining("Duplicate role supervisor"),
+    });
+    expect(report.checks[0].detail).toContain("unknown target role missing");
   });
 
   it("can render a plan-only report without invoking live probes", async () => {

@@ -36,3 +36,19 @@ export function workspaceFrom(context: PepContext): PolicyInput["workspace"] {
     root,
   };
 }
+
+export function agentContextFrom(
+  context: PepContext,
+): NonNullable<PolicyInput["context"]>["execution"] | undefined {
+  const agent = context.agent;
+  if (!agent) return undefined;
+  const output: NonNullable<PolicyInput["context"]>["execution"] = {
+    ...(agent.subagentId !== undefined ? { subagent_id: agent.subagentId } : {}),
+    ...(agent.role !== undefined ? { role: agent.role } : {}),
+    ...(agent.lane !== undefined ? { lane: agent.lane } : {}),
+    ...(agent.requestedLane !== undefined ? { requested_lane: agent.requestedLane } : {}),
+    ...(agent.topologyId !== undefined ? { topology_id: agent.topologyId } : {}),
+    ...(agent.handoffId !== undefined ? { handoff_id: agent.handoffId } : {}),
+  };
+  return Object.keys(output).length > 0 ? output : undefined;
+}

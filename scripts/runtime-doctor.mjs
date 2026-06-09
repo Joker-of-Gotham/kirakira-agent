@@ -64,6 +64,10 @@ function isRuntimeBrowserGatewayHealth(value) {
     && typeof value.tokenRequired === "boolean";
 }
 
+const ORCHESTRATION_LANE_NAMES = new Set(["foreground", "queued", "background", "delegated"]);
+const ORCHESTRATION_MODES = new Set(["tool", "supervisor", "swarm"]);
+const ORCHESTRATION_CONTEXT_MODES = new Set(["isolated", "filtered", "inherit"]);
+
 function hostReachableFromProfile(plan, url) {
   if (plan.mode !== "container") return true;
   return isLoopbackHost(url.hostname);
@@ -206,6 +210,76 @@ async function probeServiceCheck(plan, check, options) {
   }
 }
 
+function topologyIssues(topology) {
+  const issues = [];
+  if (!isRecord(topology)) return ["Topology summary is missing"];
+  const lanes = isRecord(topology.lanes) ? topology.lanes : {};
+  for (const [lane, value] of Object.entries(lanes)) {
+    if (!ORCHESTRATION_LANE_NAMES.has(lane)) {
+      issues.push(`Unknown lane ${lane}`);
+      continue;
+    }
+    if (
+      isRecord(value) &&
+      value.capacity !== undefined &&
+      (!Number.isInteger(value.capacity) || value.capacity < 0)
+    ) {
+      issues.push(`Lane ${lane} capacity must be a non-negative integer`);
+    }
+  }
+  if (topology.handoffMode !== undefined && !ORCHESTRATION_MODES.has(topology.handoffMode)) {
+    issues.push(`Unknown handoff mode ${topology.handoffMode}`);
+  }
+  const roles = Array.isArray(topology.roles) ? topology.roles.filter(isRecord) : [];
+  const roleIds = new Set();
+  for (const role of roles) {
+    if (typeof role.id !== "string" || role.id.length === 0) {
+      issues.push("Role id must be a non-empty string");
+      continue;
+    }
+    if (roleIds.has(role.id)) {
+      issues.push(`Duplicate role ${role.id}`);
+    }
+    roleIds.add(role.id);
+    if (role.lane !== undefined && !ORCHESTRATION_LANE_NAMES.has(role.lane)) {
+      issues.push(`Role ${role.id} references unknown lane ${role.lane}`);
+    }
+    if (role.context !== undefined && !ORCHESTRATION_CONTEXT_MODES.has(role.context)) {
+      issues.push(`Role ${role.id} has invalid context ${role.context}`);
+    }
+  }
+  if (
+    typeof topology.defaultRole === "string" &&
+    roles.length > 0 &&
+    !roleIds.has(topology.defaultRole)
+  ) {
+    issues.push(`Default role ${topology.defaultRole} is not declared`);
+  }
+  const handoffs = Array.isArray(topology.handoffs) ? topology.handoffs.filter(isRecord) : [];
+  for (const handoff of handoffs) {
+    if (typeof handoff.from !== "string" || !roleIds.has(handoff.from)) {
+      issues.push(`Handoff references unknown source role ${String(handoff.from)}`);
+    }
+    if (typeof handoff.to !== "string" || !roleIds.has(handoff.to)) {
+      issues.push(`Handoff references unknown target role ${String(handoff.to)}`);
+    }
+    if (handoff.mode !== undefined && !ORCHESTRATION_MODES.has(handoff.mode)) {
+      issues.push(`Handoff ${String(handoff.from)} -> ${String(handoff.to)} has invalid mode ${handoff.mode}`);
+    }
+  }
+  return issues;
+}
+
+async function probeTopologyCheck(check, options) {
+  const start = performance.now();
+  if (options.probe === false) {
+    return resultFor(check, "skipped", start, "Live probes disabled");
+  }
+  const issues = topologyIssues(check.topology);
+  if (issues.length === 0) return resultFor(check, "ok", start);
+  return resultFor(check, statusForFailure(check), start, issues.join("; "));
+}
+
 export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
   const started = performance.now();
   const normalizedOptions = {
@@ -227,6 +301,10 @@ export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
     }
     if (check.type === "compose-service" || check.type === "external-service") {
       checks.push(await probeServiceCheck(plan, check, normalizedOptions));
+      continue;
+    }
+    if (check.type === "orchestration-topology") {
+      checks.push(await probeTopologyCheck(check, normalizedOptions));
       continue;
     }
     checks.push(resultFor(check, statusForFailure(check), performance.now(), "Unknown check type"));

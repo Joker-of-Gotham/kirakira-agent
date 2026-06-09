@@ -391,7 +391,25 @@ describe("runtime profile rendering", () => {
         target: "http://127.0.0.1:5174/",
       }),
     );
+    expect(readiness.checks).toContainEqual(
+      expect.objectContaining({
+        name: "orchestration:topology",
+        type: "orchestration-topology",
+        source: "orchestration.topology",
+        topology: expect.objectContaining({
+          handoffMode: "swarm",
+          defaultRole: "supervisor",
+          roles: expect.arrayContaining([
+            expect.objectContaining({
+              id: "implementer",
+              lane: "delegated",
+            }),
+          ]),
+        }),
+      }),
+    );
     expect(JSON.stringify(readiness)).not.toContain("5173");
+    expect(JSON.stringify(readiness)).not.toContain("system_preamble");
   });
 
   it("renders test-host readiness from the memory stack compose file", () => {
