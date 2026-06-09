@@ -40,7 +40,7 @@ runtime validation before upgrade readiness can treat them as closed?
 | Drift row | Classification | Behavior status | Behavior evidence | Remaining gap |
 | --- | --- | --- | --- | --- |
 | `agent-runtime` | Intentional Kirakira extension | Partial | Runtime capability scoping and delegate runner are covered by `test/unit/agent-runtime/capability-scope.test.ts`, `react-loop-delegate.test.ts`, and `tool-executor-scope.test.ts`. | Concrete forked child runtime dependencies still need to replace parent dependency reuse where possible. |
-| `cli` | Intentional Kirakira extension | Partial | Runtime profile/doctor command bridge is covered by unit and contract CLI tests; runtime script names now sit behind a typed registry; read-only MCP commands and the TUI now resolve profile-projected MCP config with local custom-server overlay. | Provider setup and home-screen UI still need focused TUI coverage when the workbench IA changes. |
+| `cli` | Intentional Kirakira extension | Covered | Runtime profile/doctor command bridge is covered by unit and contract CLI tests; runtime script names now sit behind a typed registry; read-only MCP commands and the TUI now resolve profile-projected MCP config with local custom-server overlay; provider setup and home-screen states now have focused Ink render/input coverage. | None. |
 | `config-resolver` | Intentional Kirakira extension | Covered | `runtime-projection.ts` is covered by resolved-state, schema, and runtime-profile tests. | Caller migration remains sequencing work, not a parity gap in the projection behavior. |
 | `eamd -> kirakirad` | Intentional Kirakira extension | Covered | The rename rule maps EAM daemon files to `kirakirad`; only `go.sum` is extra. | None. |
 | `mcp-adapter` | Intentional Kirakira extension | Partial | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, profile/env-selected recorder plans, SDK/OTLP factory selection, daemon-hosted SDK export injection, and tool-result errors with `isError`. | Live propagation smoke coverage across daemon-owned MCP transports remains. |
@@ -64,7 +64,7 @@ parity failures:
 
 File-level parity no longer blocks on unknown drift: all eight drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
-continue to warn while six rows remain `partial`, because the remaining work is
+continue to warn while five rows remain `partial`, because the remaining work is
 live validation or integration closure rather than source inventory repair.
 The readiness report also expands these partial rows into machine-readable open
 work items so the high structural score is not mistaken for final completion.

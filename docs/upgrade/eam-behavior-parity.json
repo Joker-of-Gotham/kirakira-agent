@@ -61,7 +61,7 @@
       "sourceName": "cli",
       "targetName": "cli",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
+      "status": "covered",
       "behavior": "Kirakira adds runtime profile and doctor command bridges plus provider setup and TUI presentation surfaces while retaining the EAM CLI file set.",
       "extensionFiles": [
         "packages/cli/src/runtime/runtime-mcp-config.ts",
@@ -95,17 +95,24 @@
           "path": "test/tui/layout-stability.test.ts"
         },
         {
+          "kind": "test",
+          "path": "test/unit/cli/tui/provider-home-screen.test.ts",
+          "command": "pnpm exec vitest run test/unit/cli/tui/provider-home-screen.test.ts test/tui/layout-stability.test.ts test/unit/cli/tui/config.test.ts"
+        },
+        {
           "kind": "record",
           "path": "docs/change-records/2026-06-09-runtime-profile-cli.md"
         },
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-reflect-otel-cli-profile-smoke.md"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-cli-provider-home-screen-coverage.md"
         }
       ],
-      "remainingGaps": [
-        "Keep provider setup and home-screen UI covered by focused TUI tests when the workbench IA changes."
-      ]
+      "remainingGaps": []
     },
     {
       "kind": "package",
