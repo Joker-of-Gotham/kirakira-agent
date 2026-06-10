@@ -154,6 +154,35 @@ export interface ResolvedRuntimeBrowserGatewayState {
   path?: string;
 }
 
+export interface ResolvedRuntimeWorkbenchPackageState {
+  package: string;
+  script: string;
+}
+
+export interface ResolvedRuntimeWorkbenchWaitForState {
+  check: string;
+  skip_when?: string;
+}
+
+export interface ResolvedRuntimeWorkbenchStepState {
+  name?: string;
+  package_ref?: string;
+  command?: string;
+  args?: string[];
+  mode?: "run" | "background" | "foreground";
+  skip_when?: string;
+  wait_for?: Array<string | ResolvedRuntimeWorkbenchWaitForState>;
+  env?: Record<string, string>;
+}
+
+export interface ResolvedRuntimeWorkbenchState {
+  default_surface?: string;
+  infra_services?: string[];
+  packages?: Record<string, ResolvedRuntimeWorkbenchPackageState>;
+  surfaces?: Record<string, ResolvedRuntimeWorkbenchStepState[]>;
+  smoke_checks?: Record<string, string[]>;
+}
+
 export interface ResolvedRuntimeMemoryState {
   enabled?: boolean;
   services?: ResolvedRuntimeServiceState[];
@@ -238,6 +267,7 @@ export interface ResolvedRuntimeProfileState {
   mcp_servers?: ResolvedRuntimeMcpServerState[];
   presentation?: ResolvedRuntimePresentationState;
   browser_gateway?: ResolvedRuntimeBrowserGatewayState;
+  workbench?: ResolvedRuntimeWorkbenchState;
   memory?: ResolvedRuntimeMemoryState;
   orchestration?: ResolvedRuntimeOrchestrationState;
   deep_research?: ResolvedRuntimeDeepResearchState;

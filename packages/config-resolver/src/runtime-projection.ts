@@ -132,6 +132,8 @@ export interface RuntimeProjectionStartupStep {
   kind: "compose" | "daemon" | "presentation";
   mode: "run" | "background" | "foreground";
   surface?: string;
+  packageRef?: string;
+  skipWhen?: string;
   command?: string;
   args?: string[];
   waitFor?: string[];
@@ -673,6 +675,10 @@ function readinessHasCheck(readiness: RuntimeProjectionReadinessPlan, checkName:
   return readiness.checks.some((check) => check.name === checkName);
 }
 
+type ResolvedWorkbenchState = NonNullable<ResolvedRuntimeProfileState["workbench"]>;
+type ResolvedWorkbenchSurfaceMap = NonNullable<ResolvedWorkbenchState["surfaces"]>;
+type ResolvedWorkbenchStep = ResolvedWorkbenchSurfaceMap[string][number];
+
 function surfaceReadinessChecks(
   readiness: RuntimeProjectionReadinessPlan,
   surface: "web" | "desktop",
@@ -688,12 +694,44 @@ function surfaceReadinessChecks(
   ];
 }
 
+function normalizedWorkbenchWaitFor(
+  waitFor: ResolvedWorkbenchStep["wait_for"],
+): string[] {
+  if (!Array.isArray(waitFor)) return [];
+  return uniqueStrings(
+    waitFor.map((item) => typeof item === "string" ? item : item.check),
+  );
+}
+
+function workbenchSmokeChecks(
+  profile: ResolvedRuntimeProfileState,
+  readiness: RuntimeProjectionReadinessPlan,
+  surface: string,
+): string[] {
+  const configured = profile.workbench?.smoke_checks?.[surface];
+  if (configured && configured.length > 0) {
+    return uniqueStrings(configured).filter((check) => readinessHasCheck(readiness, check));
+  }
+  if (surface === "web" || surface === "desktop") {
+    return surfaceReadinessChecks(readiness, surface);
+  }
+  const presentationCheck = `presentation:${surface}`;
+  return [
+    ...(readinessHasCheck(readiness, "daemon:browser-gateway") ? ["daemon:browser-gateway"] : []),
+    ...(readinessHasCheck(readiness, presentationCheck) ? [presentationCheck] : []),
+  ];
+}
+
 function resolvedSurfaceStartupStep(
   name: string,
   kind: RuntimeProjectionStartupStep["kind"],
   mode: RuntimeProjectionStartupStep["mode"],
   options: {
     surface?: string;
+    packageRef?: string;
+    skipWhen?: string;
+    command?: string;
+    args?: string[];
     waitFor?: string[];
     readiness?: string[];
   } = {},
@@ -703,9 +741,85 @@ function resolvedSurfaceStartupStep(
     kind,
     mode,
     ...(options.surface ? { surface: options.surface } : {}),
+    ...(options.packageRef ? { packageRef: options.packageRef } : {}),
+    ...(options.skipWhen ? { skipWhen: options.skipWhen } : {}),
+    ...(options.command ? { command: options.command } : {}),
+    ...(options.args && options.args.length > 0 ? { args: options.args } : {}),
     ...(options.waitFor && options.waitFor.length > 0 ? { waitFor: options.waitFor } : {}),
     ...(options.readiness && options.readiness.length > 0 ? { readiness: options.readiness } : {}),
   };
+}
+
+function fallbackWorkbenchSurfaceSteps(
+  profile: ResolvedRuntimeProfileState,
+): ResolvedWorkbenchSurfaceMap {
+  const surfaces: ResolvedWorkbenchSurfaceMap = {};
+  if (profile.presentation?.web?.url) {
+    surfaces.web = [
+      { name: "daemon", package_ref: "daemon", mode: "background" },
+      {
+        name: "web",
+        package_ref: "web",
+        mode: "foreground",
+        wait_for: ["daemon:browser-gateway"],
+      },
+    ];
+  }
+  if (profile.presentation?.desktop?.renderer_url) {
+    surfaces.desktop = [
+      { name: "daemon", package_ref: "daemon", mode: "background" },
+      {
+        name: "desktop-renderer",
+        package_ref: "desktop-renderer",
+        mode: "background",
+      },
+      {
+        name: "desktop-shell",
+        package_ref: "desktop-shell",
+        mode: "foreground",
+        wait_for: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+      },
+    ];
+  }
+  return surfaces;
+}
+
+function workbenchSurfaceSteps(
+  profile: ResolvedRuntimeProfileState,
+): ResolvedWorkbenchSurfaceMap {
+  const configured = profile.workbench?.surfaces;
+  return configured && Object.keys(configured).length > 0
+    ? configured
+    : fallbackWorkbenchSurfaceSteps(profile);
+}
+
+function workbenchStepKind(packageRef?: string): RuntimeProjectionStartupStep["kind"] {
+  return packageRef === "daemon" ? "daemon" : "presentation";
+}
+
+function projectWorkbenchStartupStep(
+  surface: string,
+  index: number,
+  total: number,
+  step: ResolvedWorkbenchStep,
+  readinessChecks: string[],
+): RuntimeProjectionStartupStep {
+  const waitFor = normalizedWorkbenchWaitFor(step.wait_for);
+  const packageRef = step.package_ref;
+  return resolvedSurfaceStartupStep(
+    step.name ?? packageRef ?? step.command ?? `${surface}-step-${index + 1}`,
+    workbenchStepKind(packageRef),
+    step.mode ?? "foreground",
+    {
+      surface,
+      ...(packageRef ? { packageRef } : {}),
+      ...(step.skip_when ? { skipWhen: step.skip_when } : {}),
+      ...(step.command ? { command: step.command } : {}),
+      ...(step.args ? { args: step.args } : {}),
+      waitFor,
+      readiness: index === total - 1 ? readinessChecks : undefined,
+    },
+  );
 }
 
 function buildResolvedSurfaceStartupPlans(
@@ -713,56 +827,20 @@ function buildResolvedSurfaceStartupPlans(
   readiness: RuntimeProjectionReadinessPlan,
 ): Record<string, RuntimeProjectionSurfaceStartupPlan> {
   const surfaces: Record<string, RuntimeProjectionSurfaceStartupPlan> = {};
-  if (profile.presentation?.web?.url) {
-    const webChecks = surfaceReadinessChecks(readiness, "web");
-    const waits = webChecks.filter((check) => check !== "presentation:web");
-    surfaces.web = {
+  for (const [surface, steps] of Object.entries(workbenchSurfaceSteps(profile)).sort(([a], [b]) =>
+    a.localeCompare(b),
+  )) {
+    const readinessChecks = workbenchSmokeChecks(profile, readiness, surface);
+    surfaces[surface] = {
       schemaVersion: 1,
       profile: profile.name,
       mode: profile.mode,
       source: "resolved-runtime-state.startup.surface",
-      surface: "web",
+      surface,
       readiness,
-      steps: [
-        ...(readinessHasCheck(readiness, "daemon:browser-gateway")
-          ? [resolvedSurfaceStartupStep("daemon", "daemon", "background", {
-              readiness: ["daemon:browser-gateway"],
-            })]
-          : []),
-        resolvedSurfaceStartupStep("web", "presentation", "foreground", {
-          surface: "web",
-          waitFor: waits,
-          readiness: ["presentation:web"],
-        }),
-      ],
-    };
-  }
-  if (profile.presentation?.desktop?.renderer_url) {
-    const desktopChecks = surfaceReadinessChecks(readiness, "desktop");
-    const waits = desktopChecks.filter((check) => check !== "presentation:desktop");
-    surfaces.desktop = {
-      schemaVersion: 1,
-      profile: profile.name,
-      mode: profile.mode,
-      source: "resolved-runtime-state.startup.surface",
-      surface: "desktop",
-      readiness,
-      steps: [
-        ...(readinessHasCheck(readiness, "daemon:browser-gateway")
-          ? [resolvedSurfaceStartupStep("daemon", "daemon", "background", {
-              readiness: ["daemon:browser-gateway"],
-            })]
-          : []),
-        resolvedSurfaceStartupStep("desktop-renderer", "presentation", "background", {
-          surface: "desktop",
-          readiness: ["presentation:desktop"],
-        }),
-        resolvedSurfaceStartupStep("desktop-shell", "presentation", "foreground", {
-          surface: "desktop",
-          waitFor: waits,
-          readiness: ["presentation:desktop"],
-        }),
-      ],
+      steps: steps.map((step, index) =>
+        projectWorkbenchStartupStep(surface, index, steps.length, step, readinessChecks),
+      ),
     };
   }
   return surfaces;

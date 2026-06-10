@@ -13,6 +13,10 @@ import type {
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeServiceState,
+  ResolvedRuntimeWorkbenchPackageState,
+  ResolvedRuntimeWorkbenchState,
+  ResolvedRuntimeWorkbenchStepState,
+  ResolvedRuntimeWorkbenchWaitForState,
   ResolvedRuntimeState,
 } from "@kirakira/core";
 
@@ -31,6 +35,10 @@ export type {
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
   ResolvedRuntimeServiceState,
+  ResolvedRuntimeWorkbenchPackageState,
+  ResolvedRuntimeWorkbenchState,
+  ResolvedRuntimeWorkbenchStepState,
+  ResolvedRuntimeWorkbenchWaitForState,
   ResolvedRuntimeState,
 };
 

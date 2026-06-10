@@ -20,6 +20,10 @@ import type {
   ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
   ResolvedRuntimeProfileState,
+  ResolvedRuntimeWorkbenchPackageState,
+  ResolvedRuntimeWorkbenchState,
+  ResolvedRuntimeWorkbenchStepState,
+  ResolvedRuntimeWorkbenchWaitForState,
   ResolvedRuntimeState,
 } from "./types.js";
 import { deepMerge } from "./merger.js";
@@ -516,6 +520,100 @@ function projectRuntimeMemoryState(
   };
 }
 
+const WORKBENCH_STEP_MODES = new Set(["run", "background", "foreground"]);
+
+function projectWorkbenchWaitFor(value: unknown): string | ResolvedRuntimeWorkbenchWaitForState | undefined {
+  if (typeof value === "string" && value.length > 0) return value;
+  if (!isRecord(value) || typeof value.check !== "string" || value.check.length === 0) {
+    return undefined;
+  }
+  return {
+    check: value.check,
+    ...(typeof value.skipWhen === "string" ? { skip_when: value.skipWhen } : {}),
+  };
+}
+
+function projectWorkbenchEnv(value: unknown): Record<string, string> | undefined {
+  if (!isRecord(value)) return undefined;
+  const env = Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+  );
+  return Object.keys(env).length > 0 ? env : undefined;
+}
+
+function projectWorkbenchStep(value: unknown): ResolvedRuntimeWorkbenchStepState | undefined {
+  if (!isRecord(value)) return undefined;
+  const mode = typeof value.mode === "string" && WORKBENCH_STEP_MODES.has(value.mode)
+    ? value.mode as ResolvedRuntimeWorkbenchStepState["mode"]
+    : undefined;
+  const waitFor = Array.isArray(value.waitFor)
+    ? value.waitFor
+        .map(projectWorkbenchWaitFor)
+        .filter((item): item is string | ResolvedRuntimeWorkbenchWaitForState => item !== undefined)
+    : undefined;
+  const projected: ResolvedRuntimeWorkbenchStepState = {
+    ...(typeof value.name === "string" ? { name: value.name } : {}),
+    ...(typeof value.package === "string" ? { package_ref: value.package } : {}),
+    ...(typeof value.command === "string" ? { command: value.command } : {}),
+    ...(stringArray(value.args).length > 0 ? { args: stringArray(value.args) } : {}),
+    ...(mode !== undefined ? { mode } : {}),
+    ...(typeof value.skipWhen === "string" ? { skip_when: value.skipWhen } : {}),
+    ...(waitFor !== undefined && waitFor.length > 0 ? { wait_for: waitFor } : {}),
+    ...(projectWorkbenchEnv(value.env) ? { env: projectWorkbenchEnv(value.env) } : {}),
+  };
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
+function projectWorkbenchPackage(value: unknown): ResolvedRuntimeWorkbenchPackageState | undefined {
+  if (!isRecord(value) || typeof value.package !== "string" || typeof value.script !== "string") {
+    return undefined;
+  }
+  return {
+    package: value.package,
+    script: value.script,
+  };
+}
+
+function projectWorkbenchState(
+  workbench: Record<string, unknown>,
+  serviceGroupMap: Record<string, unknown>,
+): ResolvedRuntimeWorkbenchState | undefined {
+  if (Object.keys(workbench).length === 0) return undefined;
+  const infraRefs = [
+    ...groupRefs(workbench.infraServiceGroups),
+    ...stringArray(workbench.infraServices),
+  ];
+  const packageEntries: Array<[string, ResolvedRuntimeWorkbenchPackageState]> = [];
+  for (const [name, value] of Object.entries(recordMap(workbench.packages))) {
+    const packageState = projectWorkbenchPackage(value);
+    if (packageState) packageEntries.push([name, packageState]);
+  }
+  const surfaceEntries: Array<[string, ResolvedRuntimeWorkbenchStepState[]]> = [];
+  for (const [name, steps] of Object.entries(recordMap(workbench.surfaces))) {
+    if (!Array.isArray(steps)) continue;
+    const projectedSteps = steps
+      .map(projectWorkbenchStep)
+      .filter((step): step is ResolvedRuntimeWorkbenchStepState => step !== undefined);
+    if (projectedSteps.length > 0) surfaceEntries.push([name, projectedSteps]);
+  }
+  const smokeCheckEntries: Array<[string, string[]]> = [];
+  for (const [name, checks] of Object.entries(recordMap(workbench.smokeChecks))) {
+    const projectedChecks = stringArray(checks);
+    if (projectedChecks.length > 0) smokeCheckEntries.push([name, projectedChecks]);
+  }
+  const packages = Object.fromEntries(packageEntries);
+  const surfaces = Object.fromEntries(surfaceEntries);
+  const smokeChecks = Object.fromEntries(smokeCheckEntries);
+  const projected: ResolvedRuntimeWorkbenchState = {
+    ...(typeof workbench.defaultSurface === "string" ? { default_surface: workbench.defaultSurface } : {}),
+    ...(infraRefs.length > 0 ? { infra_services: expandRefs(infraRefs, serviceGroupMap) } : {}),
+    ...(Object.keys(packages).length > 0 ? { packages } : {}),
+    ...(Object.keys(surfaces).length > 0 ? { surfaces } : {}),
+    ...(Object.keys(smokeChecks).length > 0 ? { smoke_checks: smokeChecks } : {}),
+  };
+  return Object.keys(projected).length > 0 ? projected : undefined;
+}
+
 const ORCHESTRATION_LANES = ["foreground", "queued", "background", "delegated"] as const;
 const HANDOFF_MODES = new Set(["tool", "supervisor", "swarm"]);
 const SUBAGENT_CONTEXT_MODES = new Set(["isolated", "filtered", "inherit"]);
@@ -759,6 +857,7 @@ function projectRuntimeProfile(
     serviceEnv,
     serviceGroupMap,
   );
+  const workbenchState = projectWorkbenchState(workbench, serviceGroupMap);
   const orchestrationState = projectRuntimeOrchestrationState(orchestration);
   const deepResearchState = projectRuntimeDeepResearchState(deepResearch);
 
@@ -822,6 +921,7 @@ function projectRuntimeProfile(
         path: stringValue(browserGateway.path),
       },
     } : {}),
+    ...(workbenchState ? { workbench: workbenchState } : {}),
     ...(memoryState ? { memory: memoryState } : {}),
     ...(orchestrationState ? { orchestration: orchestrationState } : {}),
     ...(deepResearchState ? { deep_research: deepResearchState } : {}),

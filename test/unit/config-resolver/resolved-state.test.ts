@@ -101,6 +101,36 @@ describe("resolved runtime state", () => {
         }),
       ]),
     });
+    expect(workbench?.workbench).toMatchObject({
+      default_surface: "web",
+      infra_services: runtime?.service_catalog?.groups?.["runtime-stack"],
+      packages: {
+        daemon: {
+          package: "@kirakira/runtime-daemon",
+          script: "start",
+        },
+        web: {
+          package: "@kirakira/web",
+          script: "dev",
+        },
+      },
+      smoke_checks: {
+        web: ["daemon:browser-gateway", "presentation:web"],
+        desktop: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+      },
+    });
+    expect(workbench?.workbench?.surfaces?.web?.map((step) => step.package_ref)).toEqual([
+      "daemon",
+      "web",
+    ]);
+    expect(workbench?.workbench?.surfaces?.desktop?.at(-1)).toMatchObject({
+      package_ref: "desktop-shell",
+      wait_for: [
+        { check: "daemon:socket", skip_when: "skipDaemon" },
+        { check: "daemon:browser-gateway", skip_when: "skipDaemon" },
+        "presentation:desktop",
+      ],
+    });
     expect(workbench?.memory).toMatchObject({
       enabled: true,
       services: [
@@ -385,8 +415,9 @@ describe("resolved runtime state", () => {
     expect(workbench.fragments.startup.surfaces?.web.steps.at(-1)).toMatchObject({
       name: "web",
       kind: "presentation",
+      packageRef: "web",
       waitFor: ["daemon:browser-gateway"],
-      readiness: ["presentation:web"],
+      readiness: ["daemon:browser-gateway", "presentation:web"],
     });
     expect(workbench.fragments.startup.surfaces?.desktop.steps.map((step) => step.name)).toEqual([
       "daemon",
@@ -395,8 +426,9 @@ describe("resolved runtime state", () => {
     ]);
     expect(workbench.fragments.startup.surfaces?.desktop.steps.at(-1)).toMatchObject({
       name: "desktop-shell",
-      waitFor: ["daemon:browser-gateway"],
-      readiness: ["presentation:desktop"],
+      packageRef: "desktop-shell",
+      waitFor: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+      readiness: ["daemon:browser-gateway", "presentation:desktop"],
     });
     expect(host.fragments.memoryStack).toMatchObject({
       enabled: false,
