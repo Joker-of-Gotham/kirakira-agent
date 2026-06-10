@@ -37,9 +37,12 @@ def test_gateway_config_from_env_monkeypatch(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_gateway_config_provider_defaults(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
-    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "")
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_MODEL", "")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "")
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ARK_API_KEY", "")
     monkeypatch.setenv("LLM_PROVIDER", "deepseek")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-key")
 
@@ -52,14 +55,14 @@ def test_gateway_config_provider_defaults(monkeypatch: pytest.MonkeyPatch):
 
 
 def test_gateway_config_auto_detects_single_provider_key(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LLM_BASE_URL", raising=False)
-    monkeypatch.delenv("LLM_API_KEY", raising=False)
-    monkeypatch.delenv("LLM_MODEL", raising=False)
+    monkeypatch.setenv("LLM_BASE_URL", "")
+    monkeypatch.setenv("LLM_API_KEY", "")
+    monkeypatch.setenv("LLM_MODEL", "")
     monkeypatch.setenv("LLM_PROVIDER", "auto")
     monkeypatch.setenv("DASHSCOPE_API_KEY", "dashscope-key")
-    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("ARK_API_KEY", raising=False)
-    monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("ARK_API_KEY", "")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "")
 
     cfg = GatewayConfig.from_env()
 

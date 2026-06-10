@@ -9,21 +9,12 @@ from kirakira_model_gateway.providers.anthropic import AnthropicProvider
 from kirakira_model_gateway.providers.ollama import OllamaProvider
 from kirakira_model_gateway.providers.vllm import VllmProvider
 from kirakira_model_gateway.providers.litellm_proxy import LitellmProxyProvider
+from kirakira_model_gateway.model_provider_catalog import load_model_provider_catalog
 
-_PROVIDER_ALIASES: dict[str, type[ModelProvider]] = {
-    "openai": OpenAIProvider,
+
+_LOCAL_PROVIDER_ALIASES: dict[str, type[ModelProvider]] = {
     "openai_compat": OpenAIProvider,
     "compatible": OpenAIProvider,
-    "aliyun-bailian": OpenAIProvider,
-    "alibaba-bailian": OpenAIProvider,
-    "bailian": OpenAIProvider,
-    "dashscope": OpenAIProvider,
-    "volcengine-ark": OpenAIProvider,
-    "volcano-ark": OpenAIProvider,
-    "bytedance": OpenAIProvider,
-    "byte": OpenAIProvider,
-    "deepseek": OpenAIProvider,
-    "deepseek-official": OpenAIProvider,
     "azure": AzureProvider,
     "azure_openai": AzureProvider,
     "azure-openai": AzureProvider,
@@ -34,6 +25,13 @@ _PROVIDER_ALIASES: dict[str, type[ModelProvider]] = {
     "litellm": LitellmProxyProvider,
     "litellm_proxy": LitellmProxyProvider,
 }
+
+
+def _provider_aliases() -> dict[str, type[ModelProvider]]:
+    aliases = dict(_LOCAL_PROVIDER_ALIASES)
+    for alias in load_model_provider_catalog().openai_compatible_aliases():
+        aliases.setdefault(alias, OpenAIProvider)
+    return aliases
 
 
 def create_provider(
@@ -50,7 +48,7 @@ def create_provider(
     max_retries = max(0, min(int(num_retries), 10))
     key = name.strip().lower()
 
-    cls = _PROVIDER_ALIASES.get(key)
+    cls = _provider_aliases().get(key)
     if cls is None:
         raise ValueError(f"unknown provider: {name!r}")
 

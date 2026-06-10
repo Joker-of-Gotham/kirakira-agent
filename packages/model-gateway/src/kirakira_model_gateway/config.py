@@ -6,11 +6,20 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
+
+from kirakira_model_gateway.model_provider_catalog import (
+    detect_model_provider,
+    get_model_provider,
+    get_model_provider_key,
+    normalize_model_provider_id,
+)
+from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from kirakira_model_gateway.types import MirrorConfig
 
 logger = logging.getLogger(__name__)
-
-from pydantic import BaseModel, Field
 
 try:
     from dotenv import load_dotenv
@@ -23,44 +32,6 @@ except ImportError:
         pass
 
 _ENV_PATTERN = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
-
-_PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
-    "openai": {
-        "base_url": "https://api.openai.com/v1",
-        "api_key_env": "OPENAI_API_KEY",
-        "model": "gpt-5.2",
-    },
-    "aliyun-bailian": {
-        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
-        "api_key_env": "DASHSCOPE_API_KEY",
-        "model": "qwen3.6-plus",
-    },
-    "volcengine-ark": {
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-        "api_key_env": "ARK_API_KEY",
-        "model": "doubao-seed-1-6-250615",
-    },
-    "deepseek": {
-        "base_url": "https://api.deepseek.com",
-        "api_key_env": "DEEPSEEK_API_KEY",
-        "model": "deepseek-v4-flash",
-    },
-}
-
-_PROVIDER_ALIASES: dict[str, str] = {
-    "auto": "auto",
-    "openai-platform": "openai",
-    "bailian": "aliyun-bailian",
-    "alibaba-bailian": "aliyun-bailian",
-    "dashscope": "aliyun-bailian",
-    "aliyun": "aliyun-bailian",
-    "ark": "volcengine-ark",
-    "volcano-ark": "volcengine-ark",
-    "bytedance": "volcengine-ark",
-    "byte": "volcengine-ark",
-    "deepseek-official": "deepseek",
-}
-
 
 def _env_expand_str(value: str) -> str:
     """Expand ``${VAR}`` or ``${VAR:-default}`` in strings."""
@@ -117,35 +88,26 @@ def _get_env_str(name: str, default: str) -> str:
 
 
 def _normalize_provider_id(provider: str) -> str:
-    normalized = provider.strip().lower()
-    return _PROVIDER_ALIASES.get(normalized, normalized)
+    return normalize_model_provider_id(provider) or provider.strip().lower()
 
 
 def _detect_provider_from_env(provider: str) -> str:
     normalized = _normalize_provider_id(provider or "auto")
     if normalized != "auto":
         return normalized
-
-    detected = [
-        provider_id
-        for provider_id, defaults in _PROVIDER_DEFAULTS.items()
-        if _get_env_str(defaults["api_key_env"], "").strip()
-    ]
-    if len(detected) == 1:
-        return detected[0]
-    return "openai"
+    return detect_model_provider(os.environ).id
 
 
-def _provider_defaults(provider: str) -> dict[str, str]:
-    return _PROVIDER_DEFAULTS.get(provider, _PROVIDER_DEFAULTS["openai"])
+def _provider_defaults(provider: str):
+    return get_model_provider(provider) or detect_model_provider({})
 
 
-def _provider_api_key(provider: str, defaults: dict[str, str]) -> str:
-    generic = _get_env_str("LLM_API_KEY", "").strip()
-    specific = _get_env_str(defaults["api_key_env"], "").strip()
-    if generic and generic != "EMPTY":
-        return generic
-    return specific or generic or "EMPTY"
+def _provider_api_key(provider: str, defaults) -> str:
+    env = {
+        "LLM_API_KEY": _get_env_str("LLM_API_KEY", ""),
+        defaults.key_env: _get_env_str(defaults.key_env, ""),
+    }
+    return get_model_provider_key(defaults, env, prefer_generic=True)
 
 
 def _parse_mirror_urls(raw: str) -> list[str]:
@@ -197,8 +159,8 @@ class GatewayConfig(BaseModel):
 
         provider = _detect_provider_from_env(_get_env_str("LLM_PROVIDER", "auto"))
         defaults = _provider_defaults(provider)
-        base_url = _get_env_str("LLM_BASE_URL", "").strip().rstrip("/") or defaults["base_url"]
-        model = _get_env_str("LLM_MODEL", "").strip() or defaults["model"]
+        base_url = _get_env_str("LLM_BASE_URL", "").strip().rstrip("/") or defaults.base_url
+        model = _get_env_str("LLM_MODEL", "").strip() or defaults.default_model
 
         return cls(
             provider=provider,

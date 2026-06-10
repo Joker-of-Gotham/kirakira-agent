@@ -15,10 +15,10 @@ Command:
 node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100
 ```
 
-Current file inventory result: `exact=14`, `equivalent=8`, `drift=9`,
+Current file inventory result: `exact=13`, `equivalent=8`, `drift=10`,
 `missing=0`, `extra=4`.
 
-The nine drift rows are not missing EAM behavior. Each row has all source files
+The ten drift rows are not missing EAM behavior. Each row has all source files
 matched and only Kirakira-side extra files. The behavior question is therefore:
 which extras are intentional Kirakira extension surfaces, and which still need
 runtime validation before upgrade readiness can treat them as closed?
@@ -74,6 +74,15 @@ node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
   `jsonrpc.request.id`, `mcp.method.name`, and transport attributes as the
   expected tool-call span evidence:
   <https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/>.
+- OpenAI, Alibaba DashScope, Volcengine Ark, and DeepSeek publish
+  provider-owned OpenAI-compatible endpoint shapes; provider ids, aliases,
+  key env vars, and versioned base paths therefore belong in a shared catalog
+  instead of duplicated Python and TypeScript switch logic:
+  <https://developers.openai.com/api/reference/overview>,
+  <https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope>,
+  <https://www.volcengine.com/docs/82379/1298459>,
+  <https://www.volcengine.com/docs/82379/1330626>, and
+  <https://api-docs.deepseek.com/>.
 
 ## Drift Classification
 
@@ -86,6 +95,7 @@ node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
 | `eamd -> kirakirad` | Intentional Kirakira extension | Covered | The rename rule maps EAM daemon files to `kirakirad`; only `go.sum` is extra. | None. |
 | `mcp-adapter` | Intentional Kirakira extension | Covered | Gateway context, OTel bridge, and OTel profile tests cover trust/policy/audit metadata, W3C trace metadata, MCP `tools/call` span fields, profile/env-selected recorder plans, SDK/OTLP factory selection, daemon-hosted SDK export injection, tool-result errors with `isError`, and live stdio/HTTP daemon-owned propagation smoke coverage. | None. |
 | `memory-store` | Intentional Kirakira extension | Covered | Daemon checkpoint repository selection, checkpoint envelope compatibility, daemon retain/reflect service bridge contracts, reflect runtime event kinds, reflect started/completed/failed event emission, and the isolated `test-host` live gate are covered. `node scripts/memory-persistence-smoke.mjs --profile test-host --live` passed unit checkpoint/retain contracts plus live checkpoint, retain/recall, reflect observation, belief, and outbox persistence tests; durable evidence is in `docs/upgrade/gates/memory-persistence-smoke.json`. | None. |
+| `model-gateway` | Intentional Kirakira extension | Covered | Python model-gateway now loads OpenAI-compatible provider defaults, aliases, key env names, and endpoint path rules from `packages/core/src/model-providers.catalog.json`, with pytest coverage for catalog override, provider auto-detection, URL construction, and provider factory aliases plus TypeScript provider catalog tests. | Model aliases, capabilities, and price metadata still need their own model metadata catalog follow-up, but provider catalog parity is closed. |
 | `orchestrator-kernel` | Intentional Kirakira extension | Covered | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, async checkpoint events, and top-level agent-runtime delegate metadata fields. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, and multiple daemon memory source fanout through the orchestrator research executor. | None. |
 | `runtime-daemon` | Intentional Kirakira extension | Covered | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway; `runtimeProfileComposition` now feeds daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults; SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory; retain/reflect memory operations share the daemon memory service path with typed runtime events. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json`. | None. |
 
@@ -125,7 +135,7 @@ and MCP checks match the current gate contract.
 
 ## Readiness Interpretation
 
-File-level parity no longer blocks on unknown drift: all nine drift rows are
+File-level parity no longer blocks on unknown drift: all ten drift rows are
 classified as intentional Kirakira extension surfaces. Upgrade readiness should
 treat the EAM file-drift rows as closed when all classified package rows are
 `covered`; remaining product-level extension work belongs in targeted roadmap

@@ -3,9 +3,9 @@
   "updatedAt": "2026-06-10",
   "auditCommand": "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100",
   "auditBaseline": {
-    "exact": 14,
+    "exact": 13,
     "equivalent": 8,
-    "drift": 9,
+    "drift": 10,
     "missing": 0,
     "extra": 4
   },
@@ -24,6 +24,31 @@
       "title": "OpenTelemetry MCP semantic conventions",
       "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/",
       "expectation": "MCP tools/call spans map to execute_tool and should carry gen_ai.tool.name and jsonrpc.request.id when available."
+    },
+    {
+      "title": "OpenAI API reference",
+      "url": "https://developers.openai.com/api/reference/overview",
+      "expectation": "OpenAI-compatible clients use the documented API reference surface with versioned endpoint paths such as /v1/models."
+    },
+    {
+      "title": "Alibaba DashScope OpenAI compatibility",
+      "url": "https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope",
+      "expectation": "DashScope's OpenAI-compatible API uses the provider-specific /compatible-mode/v1 base path."
+    },
+    {
+      "title": "Volcengine Ark OpenAI SDK compatibility",
+      "url": "https://www.volcengine.com/docs/82379/1298459",
+      "expectation": "Volcengine Ark exposes an OpenAI-compatible SDK surface behind the Ark provider endpoint family."
+    },
+    {
+      "title": "Volcengine Ark base URL",
+      "url": "https://www.volcengine.com/docs/82379/1330626",
+      "expectation": "Volcengine Ark OpenAI-compatible API calls use the documented /api/v3 base URL."
+    },
+    {
+      "title": "DeepSeek API docs",
+      "url": "https://api-docs.deepseek.com/",
+      "expectation": "DeepSeek's OpenAI-compatible API documents provider-owned base URL behavior that must stay catalog-driven."
     }
   ],
   "readinessEvidence": {
@@ -497,6 +522,62 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-memory-live-gate-compose-isolation.md"
+        }
+      ],
+      "remainingGaps": []
+    },
+    {
+      "kind": "package",
+      "sourceName": "model-gateway",
+      "targetName": "model-gateway",
+      "classification": "intentional-kirakira-extension",
+      "status": "covered",
+      "behavior": "Kirakira Python model-gateway reads OpenAI-compatible provider defaults, aliases, key environment names, and endpoint path rules from the shared core provider catalog so TS and Python gateways share one provider source of truth. Model aliases, capabilities, and price metadata remain a separate model metadata catalog follow-up rather than provider catalog parity.",
+      "extensionFiles": [
+        "packages/model-gateway/src/kirakira_model_gateway/model_provider_catalog.py"
+      ],
+      "evidence": [
+        {
+          "kind": "source",
+          "path": "packages/core/src/model-providers.catalog.json"
+        },
+        {
+          "kind": "source",
+          "path": "packages/model-gateway/src/kirakira_model_gateway/model_provider_catalog.py"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/model-gateway/test_model_provider_catalog.py",
+          "command": "python -m pytest test/unit/model-gateway"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/core/model-providers.test.ts",
+          "command": "pnpm.cmd exec vitest run test/unit/core/model-providers.test.ts test/unit/config-resolver/model-config.test.ts test/unit/agent-runtime/model-client-provider-env.test.ts test/unit/scripts/llm-providers.test.ts"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-python-model-provider-catalog.md"
+        },
+        {
+          "kind": "spec",
+          "url": "https://developers.openai.com/api/reference/overview"
+        },
+        {
+          "kind": "spec",
+          "url": "https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope"
+        },
+        {
+          "kind": "spec",
+          "url": "https://www.volcengine.com/docs/82379/1298459"
+        },
+        {
+          "kind": "spec",
+          "url": "https://www.volcengine.com/docs/82379/1330626"
+        },
+        {
+          "kind": "spec",
+          "url": "https://api-docs.deepseek.com/"
         }
       ],
       "remainingGaps": []

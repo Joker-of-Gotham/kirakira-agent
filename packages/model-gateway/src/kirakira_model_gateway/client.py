@@ -7,49 +7,14 @@ import logging
 import re
 import time
 from typing import Any, Optional
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
+from kirakira_model_gateway.model_provider_catalog import (
+    build_openai_compatible_url,
+)
+
 logger = logging.getLogger(__name__)
-
-_VERSIONED_BASE_SUFFIXES = ("/v1", "/api/v3", "/compatible-mode/v1")
-
-
-def build_openai_compatible_url(base_url: str, endpoint_path: str) -> str:
-    """Build a provider-aware OpenAI-compatible endpoint URL.
-
-    Official providers do not all use the same version prefix:
-    OpenAI uses /v1, DashScope uses /compatible-mode/v1, Volcano Ark uses
-    /api/v3, and DeepSeek documents the root API base.
-    """
-    base = base_url.strip().rstrip("/")
-    if not base:
-        return ""
-
-    path = "/" + endpoint_path.strip("/")
-    if base.endswith(path):
-        return base
-
-    parsed = urlsplit(base)
-    host = parsed.netloc.lower()
-    base_path = parsed.path.rstrip("/")
-
-    if base_path.endswith(_VERSIONED_BASE_SUFFIXES):
-        api_path = base_path
-    elif host == "api.openai.com":
-        api_path = f"{base_path}/v1"
-    elif host == "api.deepseek.com":
-        api_path = base_path
-    elif host.endswith("dashscope.aliyuncs.com"):
-        api_path = f"{base_path}/compatible-mode/v1"
-    elif host == "ark.cn-beijing.volces.com":
-        api_path = f"{base_path}/api/v3"
-    else:
-        api_path = f"{base_path}/v1"
-
-    full_path = f"{api_path.rstrip('/')}{path}"
-    return urlunsplit((parsed.scheme, parsed.netloc, full_path, parsed.query, parsed.fragment))
 
 
 def _build_messages(

@@ -11,7 +11,9 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-_PROVIDER_PREFIXES = (
+from kirakira_model_gateway.model_provider_catalog import load_model_provider_catalog
+
+_LOCAL_PROVIDER_PREFIXES = (
     "openai/",
     "anthropic/",
     "azure/",
@@ -21,12 +23,13 @@ _PROVIDER_PREFIXES = (
     "local/",
     "groq/",
     "together/",
-    "aliyun/",
-    "dashscope/",
-    "volcengine/",
-    "bytedance/",
-    "deepseek/",
 )
+
+
+def _provider_prefixes() -> tuple[str, ...]:
+    catalog = load_model_provider_catalog()
+    catalog_prefixes = tuple(f"{alias}/" for alias in catalog.openai_compatible_aliases())
+    return (*_LOCAL_PROVIDER_PREFIXES, *catalog_prefixes)
 
 _ALIASES: dict[str, str] = {
     "gpt-4o": "gpt-4o-2024-11-20",
@@ -52,7 +55,7 @@ _ALIASES: dict[str, str] = {
 
 def strip_provider_prefix(model: str) -> str:
     """Remove LiteLLM-style ``provider/`` prefix."""
-    for prefix in _PROVIDER_PREFIXES:
+    for prefix in _provider_prefixes():
         if model.startswith(prefix):
             return model[len(prefix) :]
     return model
