@@ -200,6 +200,25 @@ export interface ResolvedRuntimeOrchestrationState {
   handoffs?: OrchestrationHandoffConfig[];
 }
 
+export interface ResolvedRuntimeDeepResearchMcpTargetState {
+  server: string;
+  tool: string;
+  title?: string;
+  uri?: string;
+  arguments?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ResolvedRuntimeDeepResearchMcpState {
+  targets?: ResolvedRuntimeDeepResearchMcpTargetState[];
+  include_error_evidence?: boolean;
+  max_evidence?: number;
+}
+
+export interface ResolvedRuntimeDeepResearchState {
+  mcp?: ResolvedRuntimeDeepResearchMcpState;
+}
+
 export interface ResolvedRuntimeProfileState {
   name: string;
   mode: "container" | "host" | "hybrid";
@@ -221,6 +240,7 @@ export interface ResolvedRuntimeProfileState {
   browser_gateway?: ResolvedRuntimeBrowserGatewayState;
   memory?: ResolvedRuntimeMemoryState;
   orchestration?: ResolvedRuntimeOrchestrationState;
+  deep_research?: ResolvedRuntimeDeepResearchState;
 }
 
 export interface ResolvedRuntimeState {

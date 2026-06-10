@@ -10,6 +10,7 @@ import {
   type OrchestratorKernelOptions,
 } from "@kirakira/orchestrator-kernel/daemon-orchestrator";
 import { DelegateRunnerSubagentBridge } from "@kirakira/orchestrator-kernel";
+import type { McpResearchToolCallPort } from "@kirakira/deep-research";
 import type {
   ControlMessage,
   RunEvent,
@@ -41,6 +42,7 @@ export interface KernelBridgeOptions {
   enableDaemonSubagents?: boolean;
   resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
   deepResearch?: DaemonDeepResearchOptions;
+  deepResearchMcpPort?: McpResearchToolCallPort;
   memory?: Omit<
     DaemonMemoryDependencyOptions,
     "workspaceRoot" | "resolvedConfig" | "runtimeProfileName"
@@ -96,8 +98,10 @@ export class KernelBridge {
         : this.options.deepResearch;
     const deepResearch = createDaemonDeepResearchKernelOptions({
       resolvedConfig: this.options.resolvedConfig,
+      runtimeProfileName: this.options.runtimeProfileName,
       kernelDeepResearch: kernelOptions.deepResearch,
       daemonDeepResearch,
+      mcpPort: this.options.deepResearchMcpPort,
       eventSink: async (event) => {
         this.dispatchEvent(writer.append(event));
       },

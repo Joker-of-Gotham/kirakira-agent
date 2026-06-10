@@ -174,7 +174,13 @@ export class DaemonLifecycle {
     this.processes = new ProcessManager();
     this.gateway = new GatewayBridge(this.processes, config.gateway);
     await this.gateway.start();
-    this.kernelBridge = new KernelBridge(this.eventStorePath, config.kernel);
+    const kernelConfig: KernelBridgeOptions | undefined = config.kernel
+      ? {
+          ...config.kernel,
+          deepResearchMcpPort: this.mcpRuntime,
+        }
+      : config.kernel;
+    this.kernelBridge = new KernelBridge(this.eventStorePath, kernelConfig);
     await this.kernelBridge.create();
     this.runtime = new RuntimeBridge(this.kernelBridge.getKernel());
     this.unsubEvents = this.kernelBridge.onEvent((ev) => {

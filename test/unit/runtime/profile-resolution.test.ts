@@ -718,6 +718,46 @@ describe("runtime profile rendering", () => {
     expect(env.KIRAKIRA_MEMORY_ENABLED).toBeUndefined();
   });
 
+  it("renders deep research MCP targets from the declarative profile contract", () => {
+    const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
+    const projection = buildRuntimeProfileProjection(profile);
+
+    expect(profile.deepResearch).toMatchObject({
+      mcp: {
+        defaultTargetGroups: ["workspace-readonly"],
+        groups: {
+          "workspace-readonly": ["workspace-search"],
+        },
+        targets: {
+          "workspace-search": {
+            server: "filesystem-search",
+            tool: "search",
+          },
+        },
+      },
+    });
+    expect(projection.deepResearch).toMatchObject({
+      mcp: {
+        includeErrorEvidence: true,
+        maxEvidence: 4,
+        targets: [
+          expect.objectContaining({
+            server: "filesystem-search",
+            tool: "search",
+            title: "Workspace search evidence",
+            metadata: expect.objectContaining({
+              source: "runtime-profile",
+              readOnly: true,
+              riskLevel: "low",
+            }),
+          }),
+        ],
+      },
+    });
+    expect(JSON.stringify(projection.deepResearch)).not.toContain(".mcp.json");
+    expect(JSON.stringify(projection)).not.toContain("5173");
+  });
+
   it("resolves swarm topology from the declarative profile contract", () => {
     const profile = resolveRuntimeProfile("workbench-host", loadRuntimeProfiles());
 

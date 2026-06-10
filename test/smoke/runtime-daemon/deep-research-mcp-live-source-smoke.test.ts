@@ -9,7 +9,6 @@ import { KernelBridge } from "../../../packages/runtime-daemon/src/bridge/kernel
 import {
   DEEP_RESEARCH_HTTP_SERVER,
   DEEP_RESEARCH_LIVE_MCP_TOOL,
-  DEEP_RESEARCH_LIVE_RETRIEVED_AT,
   DEEP_RESEARCH_STDIO_SERVER,
   startDeepResearchLiveMcpFixture,
   type DeepResearchLiveMcpFixture,
@@ -38,6 +37,34 @@ describe("KernelBridge deep research live MCP source gate", () => {
     const bridge = new KernelBridge(eventStorePath, {
       workspaceRoot,
       enableDaemonSubagents: false,
+      runtimeProfileName: "workbench-host",
+      resolvedConfig: {
+        agentToml: {
+          deep_research: {
+            enabled: true,
+            source_policy: "verified",
+            max_depth: 1,
+            max_breadth: 2,
+            max_tool_calls: 1,
+            require_citations: true,
+          },
+        },
+        runtimeState: {
+          default_profile: "workbench-host",
+          profiles: [
+            {
+              name: "workbench-host",
+              mode: "host",
+              deep_research: {
+                mcp: {
+                  targets: fixture.targets,
+                },
+              },
+            },
+          ],
+        },
+      },
+      deepResearchMcpPort: fixture.runtime,
       deepResearch: {
         config: {
           enabled: true,
@@ -46,11 +73,6 @@ describe("KernelBridge deep research live MCP source gate", () => {
           max_breadth: 2,
           max_tool_calls: 1,
           require_citations: true,
-        },
-        mcp: {
-          port: fixture.runtime,
-          targets: fixture.targets,
-          retrievedAt: DEEP_RESEARCH_LIVE_RETRIEVED_AT,
         },
       },
       kernelOptions: {

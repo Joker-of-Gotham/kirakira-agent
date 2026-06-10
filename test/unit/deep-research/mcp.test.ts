@@ -4,6 +4,7 @@ import {
   mcpProviderFromToolCalls,
   resolveDeepResearchOptions,
   type McpResearchToolCallPort,
+  type DeepResearchProgressEvent,
 } from "../../../packages/deep-research/src/index.js";
 
 const limits = { maxDepth: 2, maxBreadth: 4, maxToolCalls: 8 };
@@ -247,5 +248,47 @@ describe("MCP research source adapter", () => {
     expect(result.toolCalls).toBe(1);
     expect(result.evidence[0]?.sourceKind).toBe("mcp");
     expect(result.citations[0]?.uri).toBe("mcp://verified-docs/lookup");
+  });
+
+  it("propagates transport failures instead of converting them into evidence", async () => {
+    const adapter = mcpProviderFromToolCalls({
+      port: {
+        async callTool() {
+          throw new Error("transport offline");
+        },
+      },
+      targets: [{ server: "docs", tool: "search" }],
+      retrievedAt: "2026-06-10T00:00:00.000Z",
+    });
+    const progress: DeepResearchProgressEvent[] = [];
+    const runner = new DeepResearchRunner({
+      options: resolveDeepResearchOptions(
+        {
+          enabled: true,
+          source_policy: "verified",
+          max_tool_calls: 1,
+        },
+        "C:/workspace",
+        { availableSourceKinds: ["mcp"] },
+      ),
+      sourceAdapters: [adapter],
+      progressSink: async (event) => {
+        progress.push(event);
+      },
+    });
+
+    await expect(
+      runner.run({
+        prompt: "Find verified MCP evidence",
+        requiredSourceKinds: ["mcp"],
+      }),
+    ).rejects.toThrow("transport offline");
+
+    const phases = progress.map((event) => event.phase);
+    expect(phases).toEqual(
+      expect.arrayContaining(["source_failed", "task_failed", "failed"]),
+    );
+    expect(phases).not.toContain("source_completed");
+    expect(phases).not.toContain("evidence_collected");
   });
 });

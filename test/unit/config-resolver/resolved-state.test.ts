@@ -141,6 +141,24 @@ describe("resolved runtime state", () => {
         level: "L3",
       },
     });
+    expect(workbench?.deep_research).toMatchObject({
+      mcp: {
+        include_error_evidence: true,
+        max_evidence: 4,
+        targets: [
+          expect.objectContaining({
+            server: "filesystem-search",
+            tool: "search",
+            title: "Workspace search evidence",
+            metadata: expect.objectContaining({
+              source: "runtime-profile",
+              readOnly: true,
+              riskLevel: "low",
+            }),
+          }),
+        ],
+      },
+    });
     expect(workbench?.mcp_servers?.find((server) => server.name === "filesystem-patch")?.args?.[0])
       .toBe("packages/mcp-filesystem-patch/dist/index.js");
     expect(JSON.stringify(runtime)).not.toContain("5173");
@@ -285,6 +303,21 @@ describe("resolved runtime state", () => {
     );
     expect(projection.mcp.config.mcpServers["filesystem-core"].args?.at(-1))
       .toBe("/workspace");
+    expect(projection.deepResearch).toMatchObject({
+      mcp: {
+        includeErrorEvidence: true,
+        maxEvidence: 4,
+        targets: [
+          expect.objectContaining({
+            server: "filesystem-search",
+            tool: "search",
+            metadata: expect.objectContaining({
+              source: "runtime-profile",
+            }),
+          }),
+        ],
+      },
+    });
     expect(JSON.stringify(projection)).not.toContain(".mcp.json");
     expect(JSON.stringify(projection)).not.toContain("kirakira:kirakira");
   });

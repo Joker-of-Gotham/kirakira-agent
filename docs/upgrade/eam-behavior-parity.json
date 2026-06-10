@@ -94,12 +94,12 @@
     }
   },
   "nextMechanismGap": {
-    "id": "deep-research-mcp-profile-discovery-and-failure-semantics",
-    "targetName": "deep-research",
+    "id": "docker-local-daemon-integration-coverage",
+    "targetName": "runtime-daemon",
     "priority": "high",
     "status": "partial",
-    "gap": "Move MCP research target discovery from explicit smoke targets into profile-projected MCP research configuration, and add live failure-semantics coverage for transport errors and tool-originated isError results.",
-    "rationale": "The live gate now proves DeepResearchRunner can collect citation-ready file/web/MCP evidence, call local stdio/http MCP transports through the daemon-governed runtime, and emit KernelBridge/ResearchTaskExecutor research source, citation, task, and run completion events. The remaining product-level MCP research gaps are profile-driven target discovery and failure semantics, not the successful live research event path.",
+    "gap": "Run and harden profile-owned Docker/local daemon integration gates across memory, MCP, deep research, web, and desktop so `workbench-host` and `test-host` readiness evidence is regular release evidence rather than ad hoc local proof.",
+    "rationale": "The deep-research MCP path now derives daemon research targets from profile-projected `deep_research.mcp.targets`, exercises live stdio/http MCP transports through `KernelBridge`, and preserves the MCP boundary between tool-originated `isError` evidence and transport/protocol failures. The next highest-leverage mechanism gap is full Docker/local integration coverage across the selected runtime profiles and presentation surfaces.",
     "evidence": [
       {
         "kind": "source",
@@ -126,6 +126,18 @@
         "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
       },
       {
+        "kind": "source",
+        "path": "packages/config-resolver/src/runtime-projection.ts"
+      },
+      {
+        "kind": "source",
+        "path": "scripts/runtime-profile.mjs"
+      },
+      {
+        "kind": "config",
+        "path": "configs/runtime/profiles.json"
+      },
+      {
         "kind": "test",
         "path": "test/unit/deep-research/file.test.ts"
       },
@@ -148,6 +160,14 @@
       {
         "kind": "test",
         "path": "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
+      },
+      {
+        "kind": "test",
+        "path": "test/unit/runtime/profile-resolution.test.ts"
+      },
+      {
+        "kind": "test",
+        "path": "test/unit/config-resolver/resolved-state.test.ts"
       },
       {
         "kind": "test",
@@ -196,12 +216,18 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-deep-research-kernel-mcp-live-event-gate.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md"
       }
     ],
     "commands": [
-      "pnpm exec vitest run test/unit/deep-research/mcp.test.ts test/unit/deep-research/web.test.ts test/unit/deep-research/file.test.ts test/unit/deep-research/planner.test.ts",
-      "pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts",
+      "pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts",
+      "pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
       "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
+      "pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live",
+      "pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 120000 --live",
       "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
     ]
   },
@@ -745,8 +771,8 @@
     {
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered. Remaining product gaps are profile-driven MCP research target discovery and live failure-semantics coverage for transport errors and tool-originated isError results."
+      "status": "covered",
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered."
     },
     {
       "targetName": "frontend-app",

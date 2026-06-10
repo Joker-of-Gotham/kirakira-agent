@@ -303,6 +303,70 @@ function runtimeOrchestrationConfig(config, profile) {
   return Object.keys(orchestration).length > 0 ? orchestration : undefined;
 }
 
+function runtimeDeepResearchConfig(config, profile) {
+  const deepResearch = mergeSpecRecord(config.deepResearch, profile.deepResearch);
+  return Object.keys(deepResearch).length > 0 ? deepResearch : undefined;
+}
+
+function runtimeDeepResearchMcpTarget(value) {
+  if (!isRecord(value)) return undefined;
+  const server = typeof value.server === "string" && value.server.trim().length > 0
+    ? value.server.trim()
+    : undefined;
+  const tool = typeof value.tool === "string" && value.tool.trim().length > 0
+    ? value.tool.trim()
+    : undefined;
+  if (!server || !tool) return undefined;
+  const args = isRecord(value.arguments) ? value.arguments : undefined;
+  const metadata = isRecord(value.metadata) ? value.metadata : undefined;
+  return {
+    server,
+    tool,
+    ...(typeof value.title === "string" && value.title.length > 0 ? { title: value.title } : {}),
+    ...(typeof value.uri === "string" && value.uri.length > 0 ? { uri: value.uri } : {}),
+    ...(args && Object.keys(args).length > 0 ? { arguments: args } : {}),
+    ...(metadata && Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
+}
+
+function runtimeDeepResearchProjection(deepResearch) {
+  if (!isRecord(deepResearch)) return undefined;
+  const mcp = isRecord(deepResearch.mcp) ? deepResearch.mcp : {};
+  if (Object.keys(mcp).length === 0) return undefined;
+  const targetRefs = Array.isArray(mcp.targetRefs)
+    ? mcp.targetRefs
+    : [
+        ...serviceGroupRefs(
+          Array.isArray(mcp.targetGroups) && mcp.targetGroups.length > 0
+            ? mcp.targetGroups
+            : mcp.defaultTargetGroups,
+        ),
+        ...(Array.isArray(mcp.targetNames) ? mcp.targetNames : []),
+      ];
+  const catalogTargets = isRecord(mcp.targets) && !Array.isArray(mcp.targets)
+    ? mcp.targets
+    : {};
+  const referencedTargets = expandDeepResearchMcpTargetRefs(targetRefs, deepResearch)
+    .map((targetName) => runtimeDeepResearchMcpTarget(catalogTargets[targetName]))
+    .filter(Boolean);
+  const inlineTargets = (Array.isArray(mcp.inlineTargets) ? mcp.inlineTargets : [])
+    .map(runtimeDeepResearchMcpTarget)
+    .filter(Boolean);
+  const targets = [...referencedTargets, ...inlineTargets];
+  const mcpProjection = {
+    ...(targets.length > 0 ? { targets } : {}),
+    ...(typeof mcp.includeErrorEvidence === "boolean"
+      ? { includeErrorEvidence: mcp.includeErrorEvidence }
+      : {}),
+    ...(Number.isInteger(mcp.maxEvidence) && mcp.maxEvidence > 0
+      ? { maxEvidence: mcp.maxEvidence }
+      : {}),
+  };
+  return Object.keys(mcpProjection).length > 0
+    ? { mcp: mcpProjection }
+    : undefined;
+}
+
 function runtimeComposeServiceName(config, serviceName) {
   const entry = runtimeServiceCatalogEntry(config, serviceName);
   return typeof entry?.composeService === "string" && entry.composeService.length > 0
@@ -352,6 +416,31 @@ export function expandMcpServerRefs(refs = [], config = loadRuntimeProfiles()) {
     const group = groups[groupName];
     if (!Array.isArray(group)) {
       throw new Error(`Unknown MCP server group "${groupName}"`);
+    }
+    expanded.push(...group);
+  }
+  return uniqueStrings(expanded);
+}
+
+export function expandDeepResearchMcpTargetRefs(refs = [], deepResearch = {}) {
+  if (!Array.isArray(refs)) {
+    throw new Error("Deep research MCP target references must be a string array");
+  }
+  const mcp = isRecord(deepResearch.mcp) ? deepResearch.mcp : {};
+  const groups = isRecord(mcp.groups) ? mcp.groups : {};
+  const expanded = [];
+  for (const ref of refs) {
+    if (typeof ref !== "string" || ref.length === 0) {
+      throw new Error("Deep research MCP target references must be non-empty strings");
+    }
+    if (!ref.startsWith("@")) {
+      expanded.push(ref);
+      continue;
+    }
+    const groupName = ref.slice(1);
+    const group = groups[groupName];
+    if (!Array.isArray(group)) {
+      throw new Error(`Unknown deep research MCP target group "${groupName}"`);
     }
     expanded.push(...group);
   }
@@ -1114,6 +1203,10 @@ export function buildRuntimeMcpProjection(mcpConfigPlan) {
   };
 }
 
+export function buildRuntimeDeepResearchProjection(profile = resolveRuntimeProfile()) {
+  return runtimeDeepResearchProjection(profile.deepResearch);
+}
+
 export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(), options = {}) {
   const config = runtimeConfigForProfile(profile, options);
   const compose = buildRuntimeComposePlan(profile);
@@ -1130,6 +1223,7 @@ export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(),
     mcpConfigPlan: mcpConfig,
     memoryStackPlan: memoryStack,
   });
+  const deepResearch = buildRuntimeDeepResearchProjection(profile);
   return {
     schemaVersion: 1,
     profile: profile.name,
@@ -1142,6 +1236,7 @@ export function buildRuntimeProfileProjection(profile = resolveRuntimeProfile(),
       memoryStackPlan: memoryStack,
     }),
     mcp: buildRuntimeMcpProjection(mcpConfig),
+    ...(deepResearch ? { deepResearch } : {}),
     fragments: {
       env,
       compose,
@@ -1431,12 +1526,14 @@ export function resolveRuntimeProfile(
   const dynamicProfile = resolveDynamicProfile(config, profile, env);
   const memory = runtimeMemoryConfig(config, profile);
   const orchestration = runtimeOrchestrationConfig(config, profile);
+  const deepResearch = runtimeDeepResearchConfig(config, profile);
   const resolvedProfile = {
     name,
     ...profile,
     ...dynamicProfile,
     ...(memory ? { memory } : {}),
     ...(orchestration ? { orchestration } : {}),
+    ...(deepResearch ? { deepResearch } : {}),
     envBindings,
     containerStartup: resolveContainerStartupRefs(profile.containerStartup, config),
     workbench: resolveWorkbenchRefs(profile.workbench, config),

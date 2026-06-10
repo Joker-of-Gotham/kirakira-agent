@@ -25,12 +25,12 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the local live stdio/http MCP adapter and KernelBridge event gate, the
-highest-leverage remaining mechanism gap is now product-level
-`deep-research-mcp-profile-discovery-and-failure-semantics`: move MCP research
-target discovery from explicit smoke targets into profile-projected MCP research
-configuration, and add live failure-semantics coverage for transport errors and
-tool-originated `isError` results.
+After the profile-projected MCP research target slice, the highest-leverage
+remaining mechanism gap is now
+`docker-local-daemon-integration-coverage`: run and harden profile-owned
+Docker/local daemon integration gates across memory, MCP, deep research, web,
+and desktop so `workbench-host` and `test-host` readiness evidence becomes
+regular release evidence instead of ad hoc local proof.
 
 Evidence:
 
@@ -40,24 +40,32 @@ Evidence:
 - `packages/deep-research/src/source-adapters.ts`
 - `packages/deep-research/src/web.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
+- `packages/config-resolver/src/runtime-projection.ts`
+- `scripts/runtime-profile.mjs`
+- `configs/runtime/profiles.json`
 - `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/mcp.test.ts`
 - `test/unit/deep-research/planner.test.ts`
 - `test/unit/deep-research/web.test.ts`
 - `test/unit/runtime-daemon/deep-research-mcp-source.test.ts`
+- `test/unit/runtime/profile-resolution.test.ts`
+- `test/unit/config-resolver/resolved-state.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 - `test/smoke/deep-research/live-adapters-smoke.test.ts`
 - `test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts`
 - `scripts/deep-research-live-adapters.mjs`
 - `docs/upgrade/gates/deep-research-live-adapters.json`
+- `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
 
 Focused validation command:
 
 ```powershell
-pnpm exec vitest run test/unit/deep-research/mcp.test.ts test/unit/deep-research/web.test.ts test/unit/deep-research/file.test.ts test/unit/deep-research/planner.test.ts
-pnpm exec vitest run test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/runtime-daemon/kernel-bridge-subagent.test.ts test/unit/orchestrator-kernel/task-executor.test.ts
+pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
+pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
 node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
+pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live
+pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 120000 --live
 ```
 
 ## External Behavior Constraints
@@ -106,7 +114,7 @@ parity failures:
 
 | Extra package | Behavior status | Reason |
 | --- | --- | --- |
-| `deep-research` | Partial | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission; remaining product gaps are profile-driven MCP research target discovery and live failure-semantics coverage. |
+| `deep-research` | Covered | Standalone deep-research package supports kernel research nodes, daemon composition, generic same-kind source adapter fanout, workspace-bounded file evidence through the daemon default source path, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission. |
 | `frontend-app` | Partial | Shared web and desktop workbench presentation is outside the EAM package baseline. |
 | `frontend-core` | Partial | Browser-safe projection selectors are outside the EAM package baseline. |
 | `runtime-contracts` | Covered | Centralized daemon/browser/desktop protocol contracts are covered by runtime contract tests. |

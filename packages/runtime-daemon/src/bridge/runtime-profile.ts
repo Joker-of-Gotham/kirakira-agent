@@ -1,6 +1,7 @@
 import type {
   OrchestrationTopologyConfig,
   ResolvedConfig,
+  ResolvedRuntimeDeepResearchState,
   ResolvedRuntimeMcpServerState,
   ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
@@ -27,6 +28,7 @@ export interface RuntimeProfileComposition {
   mcpServerNames: string[];
   memory?: ResolvedRuntimeMemoryState;
   topology?: RuntimeProfileTopology;
+  deepResearch?: ResolvedRuntimeDeepResearchState;
   mcpManifest?: RuntimeMcpManifest;
   orchestrationManifest?: RuntimeOrchestrationManifest;
 }
@@ -124,6 +126,7 @@ export function runtimeProfileComposition(
     profile?.orchestration ?? input.resolvedConfig?.agentToml?.orchestration?.topology;
   const mcpServers = profile?.mcp_servers ?? [];
   const memory = profile?.memory;
+  const deepResearch = profile?.deep_research;
   const mcpManifest = runtimeMcpManifest(
     profile,
     input.resolvedConfig?.runtimeState?.mcp_catalog,
@@ -135,6 +138,7 @@ export function runtimeProfileComposition(
     mcpServerNames: mcpServers.map((server) => server.name),
     ...(memory ? { memory } : {}),
     ...(topology ? { topology } : {}),
+    ...(deepResearch ? { deepResearch } : {}),
     ...(mcpManifest ? { mcpManifest } : {}),
     ...(orchestrationManifest ? { orchestrationManifest } : {}),
   };

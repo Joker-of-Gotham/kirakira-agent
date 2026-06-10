@@ -246,6 +246,28 @@
       "level": "L3"
     }
   },
+  "deepResearch": {
+    "mcp": {
+      "defaultTargetGroups": ["workspace-readonly"],
+      "groups": {
+        "workspace-readonly": ["workspace-search"]
+      },
+      "targets": {
+        "workspace-search": {
+          "server": "filesystem-search",
+          "tool": "search",
+          "title": "Workspace search evidence",
+          "metadata": {
+            "source": "runtime-profile",
+            "riskLevel": "low",
+            "readOnly": true
+          }
+        }
+      },
+      "includeErrorEvidence": true,
+      "maxEvidence": 4
+    }
+  },
   "orchestration": {
     "topology": {
       "mode": "swarm",

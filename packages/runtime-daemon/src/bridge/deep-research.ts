@@ -19,6 +19,7 @@ import type {
 } from "@kirakira/orchestrator-kernel";
 import type { RunEvent, RunEventKind } from "@kirakira/runtime-contracts";
 import { ulid } from "ulid";
+import { runtimeProfileComposition } from "./runtime-profile.js";
 
 type DynamicValue<T> = T | ((input: ResearchTaskKernelInput) => T | undefined);
 
@@ -62,8 +63,10 @@ export interface DaemonDeepResearchOptions extends DeepResearchKernelOptions {
 
 export interface DaemonDeepResearchCompositionInput {
   resolvedConfig?: Pick<ResolvedConfig, "agentToml" | "runtimeState">;
+  runtimeProfileName?: string;
   kernelDeepResearch?: DeepResearchKernelOptions;
   daemonDeepResearch?: DaemonDeepResearchOptions;
+  mcpPort?: McpResearchToolCallPort;
   eventSink?: DaemonRunEventSink;
 }
 
@@ -80,7 +83,14 @@ export function createDaemonDeepResearchKernelOptions(
     input.daemonDeepResearch?.sourceAdapters,
   ].filter((source): source is AdapterSource => source !== undefined);
   const memorySources = normalizeMemorySources(input.daemonDeepResearch?.memory);
-  const mcpSources = normalizeMcpSources(input.daemonDeepResearch?.mcp);
+  const explicitMcpSources = normalizeMcpSources(input.daemonDeepResearch?.mcp);
+  const profileMcpSource =
+    explicitMcpSources.length === 0
+      ? profileMcpResearchSource(input)
+      : undefined;
+  const mcpSources = profileMcpSource
+    ? [profileMcpSource]
+    : explicitMcpSources;
   const includeFileSource = shouldIncludeFileSource(
     input.daemonDeepResearch?.file,
     configSources.length > 0,
@@ -154,6 +164,38 @@ function normalizeMcpSources(
   if (!value) return [];
   if (Array.isArray(value)) return [...value];
   return [value as DaemonMcpResearchSourceOptions];
+}
+
+function profileMcpResearchSource(
+  input: DaemonDeepResearchCompositionInput,
+): DaemonMcpResearchSourceOptions | undefined {
+  if (!input.mcpPort) return undefined;
+  const profileMcp = runtimeProfileComposition({
+    resolvedConfig: input.resolvedConfig,
+    runtimeProfileName: input.runtimeProfileName,
+  }).deepResearch?.mcp;
+  const targets = profileMcp?.targets ?? [];
+  if (!profileMcp || targets.length === 0) return undefined;
+  return {
+    port: input.mcpPort,
+    targets: targets.map((target) => ({
+      server: target.server,
+      tool: target.tool,
+      ...(target.title !== undefined ? { title: target.title } : {}),
+      ...(target.uri !== undefined ? { uri: target.uri } : {}),
+      ...(target.arguments !== undefined ? { arguments: target.arguments } : {}),
+      metadata: {
+        source: "runtime-profile",
+        ...(target.metadata ?? {}),
+      },
+    })),
+    ...(profileMcp.include_error_evidence !== undefined
+      ? { includeErrorEvidence: profileMcp.include_error_evidence }
+      : {}),
+    ...(profileMcp.max_evidence !== undefined
+      ? { maxEvidence: profileMcp.max_evidence }
+      : {}),
+  };
 }
 
 function resolveDynamicValue<T>(

@@ -41,6 +41,7 @@ node scripts/upgrade-readiness.mjs --format json
 ## Boundary
 
 This closes the successful local live MCP research event path through
-KernelBridge. It does not claim external MCP service coverage, profile-driven
-MCP research target discovery, or live failure-semantics coverage for transport
-errors and tool-originated `isError` results.
+KernelBridge. Profile-driven MCP research target discovery and the MCP
+tool-result versus transport-failure boundary are covered in
+`docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`; this
+older gate still does not claim external MCP service coverage.

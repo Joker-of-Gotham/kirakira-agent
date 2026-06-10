@@ -4,6 +4,7 @@ export { loadPolicyYaml, matchShellPolicy, matchMcpServerPolicy } from "./policy
 export { resolveConfig, type ResolveConfigOptions } from "./resolved-state.js";
 export {
   buildResolvedMcpConfigPlan,
+  buildResolvedRuntimeDeepResearchProjection,
   buildResolvedMemoryStackPlan,
   buildResolvedRuntimeEnvPlan,
   buildResolvedRuntimeMcpProjection,
@@ -12,6 +13,8 @@ export {
   buildResolvedRuntimeServiceProjection,
   buildResolvedRuntimeStartupPlan,
   selectResolvedRuntimeProfile,
+  type RuntimeProjectionDeepResearchMcpTarget,
+  type RuntimeProjectionDeepResearchPlan,
   type RuntimeProfileProjection,
   type RuntimeProjectionEnvPlan,
   type RuntimeProjectionEnvVariable,

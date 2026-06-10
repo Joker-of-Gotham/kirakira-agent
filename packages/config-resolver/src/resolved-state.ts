@@ -14,6 +14,8 @@ import type {
   LocalConfig,
   PolicyYaml,
   ResolvedConfig,
+  ResolvedRuntimeDeepResearchState,
+  ResolvedRuntimeDeepResearchMcpTargetState,
   ResolvedRuntimeMcpServerState,
   ResolvedRuntimeMemoryState,
   ResolvedRuntimeOrchestrationState,
@@ -387,6 +389,10 @@ function orchestrationDefaults(config: Record<string, unknown>): Record<string, 
   return recordMap(config.orchestration);
 }
 
+function deepResearchDefaults(config: Record<string, unknown>): Record<string, unknown> {
+  return recordMap(config.deepResearch);
+}
+
 function memoryConfig(
   rawProfile: Record<string, unknown>,
   config: Record<string, unknown>,
@@ -399,6 +405,13 @@ function orchestrationConfig(
   config: Record<string, unknown>,
 ): Record<string, unknown> {
   return deepMerge(orchestrationDefaults(config), recordMap(rawProfile.orchestration));
+}
+
+function deepResearchConfig(
+  rawProfile: Record<string, unknown>,
+  config: Record<string, unknown>,
+): Record<string, unknown> {
+  return deepMerge(deepResearchDefaults(config), recordMap(rawProfile.deepResearch));
 }
 
 function optionalBoolean(value: unknown): boolean | undefined {
@@ -620,6 +633,66 @@ function projectRuntimeOrchestrationState(
   return Object.keys(state).length > 0 ? state : undefined;
 }
 
+function runtimeMcpResearchTarget(
+  value: unknown,
+): ResolvedRuntimeDeepResearchMcpTargetState | undefined {
+  const target = recordMap(value);
+  const server = stringValue(target.server);
+  const tool = stringValue(target.tool);
+  if (!server || !tool) return undefined;
+  const args = recordMap(target.arguments);
+  const metadata = recordMap(target.metadata);
+  return {
+    server,
+    tool,
+    ...(stringValue(target.title) !== undefined ? { title: stringValue(target.title) } : {}),
+    ...(stringValue(target.uri) !== undefined ? { uri: stringValue(target.uri) } : {}),
+    ...(Object.keys(args).length > 0 ? { arguments: args } : {}),
+    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+  };
+}
+
+function projectRuntimeDeepResearchState(
+  deepResearch: Record<string, unknown>,
+): ResolvedRuntimeDeepResearchState | undefined {
+  const mcp = recordMap(deepResearch.mcp);
+  if (Object.keys(mcp).length === 0) return undefined;
+  const groups = recordMap(mcp.groups);
+  const catalogTargets = recordMap(mcp.targets);
+  const explicitRefs = stringArray(mcp.targetRefs);
+  const targetRefs = explicitRefs.length > 0
+    ? explicitRefs
+    : [
+        ...groupRefs(
+          stringArray(mcp.targetGroups).length > 0
+            ? mcp.targetGroups
+            : mcp.defaultTargetGroups,
+        ),
+        ...stringArray(mcp.targetNames),
+      ];
+  const referencedTargets = expandRefs(targetRefs, groups)
+    .map((targetName) => runtimeMcpResearchTarget(catalogTargets[targetName]))
+    .filter((target): target is ResolvedRuntimeDeepResearchMcpTargetState =>
+      target !== undefined,
+    );
+  const inlineTargets = (Array.isArray(mcp.inlineTargets) ? mcp.inlineTargets : [])
+    .map(runtimeMcpResearchTarget)
+    .filter((target): target is ResolvedRuntimeDeepResearchMcpTargetState =>
+      target !== undefined,
+    );
+  const targets = [...referencedTargets, ...inlineTargets];
+  const mcpState = {
+    ...(targets.length > 0 ? { targets } : {}),
+    ...(optionalBoolean(mcp.includeErrorEvidence) !== undefined
+      ? { include_error_evidence: optionalBoolean(mcp.includeErrorEvidence) }
+      : {}),
+    ...(optionalPositiveInteger(mcp.maxEvidence) !== undefined
+      ? { max_evidence: optionalPositiveInteger(mcp.maxEvidence) }
+      : {}),
+  };
+  return Object.keys(mcpState).length > 0 ? { mcp: mcpState } : undefined;
+}
+
 function projectRuntimeProfile(
   name: string,
   rawProfile: Record<string, unknown>,
@@ -631,6 +704,7 @@ function projectRuntimeProfile(
   const serviceGroupMap = recordMap(serviceCatalog(config).groups);
   const memory = memoryConfig(rawProfile, config);
   const orchestration = orchestrationConfig(rawProfile, config);
+  const deepResearch = deepResearchConfig(rawProfile, config);
   const endpointNames = expandRefs(
     [
       ...groupRefs(rawProfile.serviceEndpointGroups),
@@ -686,6 +760,7 @@ function projectRuntimeProfile(
     serviceGroupMap,
   );
   const orchestrationState = projectRuntimeOrchestrationState(orchestration);
+  const deepResearchState = projectRuntimeDeepResearchState(deepResearch);
 
   return {
     name,
@@ -749,6 +824,7 @@ function projectRuntimeProfile(
     } : {}),
     ...(memoryState ? { memory: memoryState } : {}),
     ...(orchestrationState ? { orchestration: orchestrationState } : {}),
+    ...(deepResearchState ? { deep_research: deepResearchState } : {}),
   };
 }
 

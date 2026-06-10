@@ -37,6 +37,23 @@ export interface RuntimeProjectionMcpPlan {
   config: RuntimeProjectionMcpConfigPlan["config"];
 }
 
+export interface RuntimeProjectionDeepResearchMcpTarget {
+  server: string;
+  tool: string;
+  title?: string;
+  uri?: string;
+  arguments?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RuntimeProjectionDeepResearchPlan {
+  mcp?: {
+    targets?: RuntimeProjectionDeepResearchMcpTarget[];
+    includeErrorEvidence?: boolean;
+    maxEvidence?: number;
+  };
+}
+
 export interface RuntimeProjectionEnvVariable {
   name: string;
   generated: boolean;
@@ -181,6 +198,7 @@ export interface RuntimeProfileProjection {
   mode: ResolvedRuntimeProfileState["mode"];
   services: RuntimeProjectionServicePlan[];
   mcp: RuntimeProjectionMcpPlan;
+  deepResearch?: RuntimeProjectionDeepResearchPlan;
   fragments: {
     env: RuntimeProjectionEnvPlan;
     readiness: RuntimeProjectionReadinessPlan;
@@ -415,6 +433,32 @@ export function buildResolvedRuntimeMcpProjection(
     })),
     config: configPlan.config,
   };
+}
+
+export function buildResolvedRuntimeDeepResearchProjection(
+  profile: ResolvedRuntimeProfileState,
+): RuntimeProjectionDeepResearchPlan | undefined {
+  const mcp = profile.deep_research?.mcp;
+  if (!mcp) return undefined;
+  const projected = {
+    ...(mcp.targets && mcp.targets.length > 0
+      ? {
+          targets: mcp.targets.map((target) => ({
+            server: target.server,
+            tool: target.tool,
+            ...(target.title !== undefined ? { title: target.title } : {}),
+            ...(target.uri !== undefined ? { uri: target.uri } : {}),
+            ...(target.arguments !== undefined ? { arguments: target.arguments } : {}),
+            ...(target.metadata !== undefined ? { metadata: target.metadata } : {}),
+          })),
+        }
+      : {}),
+    ...(mcp.include_error_evidence !== undefined
+      ? { includeErrorEvidence: mcp.include_error_evidence }
+      : {}),
+    ...(mcp.max_evidence !== undefined ? { maxEvidence: mcp.max_evidence } : {}),
+  };
+  return Object.keys(projected).length > 0 ? { mcp: projected } : undefined;
 }
 
 export function buildResolvedRuntimeReadinessPlan(
@@ -771,6 +815,7 @@ export function buildResolvedRuntimeProfileProjection(
   const readiness = buildResolvedRuntimeReadinessPlan(profile);
   const mcpConfig = buildResolvedMcpConfigPlan(profile);
   const memoryStack = buildResolvedMemoryStackPlan(profile);
+  const deepResearch = buildResolvedRuntimeDeepResearchProjection(profile);
   const startup = buildResolvedRuntimeStartupPlan(profile, {
     envPlan: env,
     readinessPlan: readiness,
@@ -790,6 +835,7 @@ export function buildResolvedRuntimeProfileProjection(
       })),
       config: mcpConfig.config,
     },
+    ...(deepResearch ? { deepResearch } : {}),
     fragments: {
       env,
       readiness,
