@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildEamParityAudit } from "./eam-parity-audit.mjs";
 import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
+import { buildRuntimeIntegrationGateCommand } from "./runtime-integration-gate.mjs";
 import {
   buildRuntimeProfileProjection,
   loadRuntimeProfiles,
@@ -75,6 +76,10 @@ export function buildUpgradeReadinessReport(options = {}) {
     profileName,
     options.env ?? process.env,
   );
+  const runtimeIntegrationGate = buildRuntimeIntegrationGateCommand(
+    { gateName: "upgrade" },
+    options.env ?? process.env,
+  );
   const presentationProjection = buildPresentationProjectionGate(projection);
   const presentationRenderEvidence = buildPresentationRenderEvidenceGate(
     workspaceRoot,
@@ -95,6 +100,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     parity,
     memoryPersistenceSmoke,
     deepResearchLiveAdapters,
+    runtimeIntegrationGate,
     presentationProjection,
     presentationRenderEvidence,
     harnessHardcoding,
@@ -133,6 +139,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     gates: {
       memoryPersistence: memoryPersistenceSmoke,
       deepResearchLiveAdapters,
+      runtimeIntegration: runtimeIntegrationGate,
       presentationProjection,
       presentationRenderEvidence,
       harnessHardcoding,
@@ -604,8 +611,13 @@ function harnessApiTrack({ packageJson, projection, harnessHardcoding }) {
     checks: [
       passFail(
         "Runtime profile, ready, and doctor scripts are exposed",
-        hasScripts(packageJson, ["runtime:profile", "runtime:ready", "runtime:doctor"]),
-        "package.json scripts runtime:profile/runtime:ready/runtime:doctor",
+        hasScripts(packageJson, [
+          "runtime:profile",
+          "runtime:ready",
+          "runtime:doctor",
+          "integration:gate",
+        ]),
+        "package.json scripts runtime:profile/runtime:ready/runtime:doctor/integration:gate",
       ),
       passFail(
         "Profile projection includes readiness, MCP, and memory fragments",
@@ -630,7 +642,12 @@ function harnessApiTrack({ packageJson, projection, harnessHardcoding }) {
   };
 }
 
-function ecosystemTrack({ workspaceRoot, projection, memoryPersistenceSmoke }) {
+function ecosystemTrack({
+  workspaceRoot,
+  projection,
+  memoryPersistenceSmoke,
+  runtimeIntegrationGate,
+}) {
   const readiness = projection.fragments?.readiness;
   const memoryStack = projection.fragments?.memoryStack;
   return {
@@ -665,6 +682,7 @@ function ecosystemTrack({ workspaceRoot, projection, memoryPersistenceSmoke }) {
         memoryUnitContractEvidence(memoryPersistenceSmoke),
       ),
       memoryPersistenceLiveGateCheck(memoryPersistenceSmoke),
+      runtimeIntegrationGateCheck(runtimeIntegrationGate),
     ],
   };
 }
@@ -694,6 +712,26 @@ function memoryPersistenceLiveGateCheck(smoke) {
     label: "Memory-store checkpoint + retain/reflect live persistence gate",
     status,
     evidence,
+  };
+}
+
+function runtimeIntegrationGateCheck(gate) {
+  const status =
+    gate?.status === "passed"
+      ? "pass"
+      : gate?.status === "failed"
+        ? "fail"
+        : "warn";
+  return {
+    label: "Profile-owned runtime integration gate aggregates child gates",
+    status,
+    evidence: [
+      `gate=${gate?.gate ?? "missing"}`,
+      `status=${gate?.status ?? "missing"}`,
+      `steps=${(gate?.steps ?? []).map((step) => `${step.id}:${step.status}`).join(",") || "missing"}`,
+      `result=${gate?.evidence?.resultPath ?? "missing"}`,
+      `childGatesPassed=${String(gate?.evidence?.childGatesPassed ?? false)}`,
+    ].join("; "),
   };
 }
 

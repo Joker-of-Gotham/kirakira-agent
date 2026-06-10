@@ -25,12 +25,11 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the profile-projected MCP research target slice, the highest-leverage
-remaining mechanism gap is now
-`docker-local-daemon-integration-coverage`: run and harden profile-owned
-Docker/local daemon integration gates across memory, MCP, deep research, web,
-and desktop so `workbench-host` and `test-host` readiness evidence becomes
-regular release evidence instead of ad hoc local proof.
+After the profile-owned runtime integration gate, the highest-leverage remaining
+mechanism gap is now `runtime-daemon-composition-smoke`: add one live daemon
+composition smoke that proves subagent topology, deep research, MCP gateway
+policy/trust/audit/OTel metadata, memory recall/checkpoint wiring, and profile
+readiness in a single `KernelBridge` run.
 
 Evidence:
 
@@ -42,6 +41,7 @@ Evidence:
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
 - `packages/config-resolver/src/runtime-projection.ts`
 - `scripts/runtime-profile.mjs`
+- `scripts/runtime-integration-gate.mjs`
 - `configs/runtime/profiles.json`
 - `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/mcp.test.ts`
@@ -50,18 +50,23 @@ Evidence:
 - `test/unit/runtime-daemon/deep-research-mcp-source.test.ts`
 - `test/unit/runtime/profile-resolution.test.ts`
 - `test/unit/config-resolver/resolved-state.test.ts`
+- `test/unit/scripts/runtime-integration-gate.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 - `test/smoke/deep-research/live-adapters-smoke.test.ts`
 - `test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts`
 - `scripts/deep-research-live-adapters.mjs`
 - `docs/upgrade/gates/deep-research-live-adapters.json`
+- `docs/upgrade/gates/runtime-integration-gate.json`
 - `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
+- `docs/change-records/2026-06-10-runtime-integration-gate.md`
 
 Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
+pnpm exec vitest run test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
 node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
 pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live
@@ -82,6 +87,16 @@ pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 12
   `jsonrpc.request.id`, `mcp.method.name`, and transport attributes as the
   expected tool-call span evidence:
   <https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/>.
+- Docker Compose `up` defines the `--wait` readiness-oriented startup shape
+  used by profile-owned compose plans:
+  <https://docs.docker.com/reference/cli/docker/compose/up/>.
+- Docker Compose pre-defined environment variables are runtime inputs and must
+  stay in profile/env projection instead of copied into gate scripts:
+  <https://docs.docker.com/compose/how-tos/environment-variables/envvars/>.
+- Electron security and context-isolation guidance requires desktop live gates
+  to preserve isolated renderer/preload boundaries:
+  <https://www.electronjs.org/docs/latest/tutorial/security> and
+  <https://www.electronjs.org/docs/latest/tutorial/context-isolation>.
 - OpenAI, Alibaba DashScope, Volcengine Ark, and DeepSeek publish
   provider-owned OpenAI-compatible endpoint shapes; provider ids, aliases,
   key env vars, and versioned base paths therefore belong in a shared catalog
@@ -140,6 +155,13 @@ and MCP source adapter suites, then reads
 `docs/upgrade/gates/deep-research-live-adapters.json` and passes only when the
 profile, required suites, unit tests, adapter smoke, KernelBridge event smoke,
 and MCP checks match the current gate contract.
+
+`gates.runtimeIntegration` now aggregates the profile-owned deep-research,
+memory-persistence, and web/desktop workbench child gates through
+`scripts/runtime-integration-gate.mjs`. It passes only when child gate evidence
+matches the current configured profiles and the aggregate artifact
+`docs/upgrade/gates/runtime-integration-gate.json` matches the current step
+identity.
 
 ## Readiness Interpretation
 

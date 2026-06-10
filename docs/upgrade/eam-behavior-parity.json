@@ -91,15 +91,21 @@
       ],
       "liveResultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
       "expectation": "Provider-neutral file, web, and MCP adapter suites are unit-evidenced, and the local live stdio/http MCP adapter plus KernelBridge research event result must match the current profile, required suites, unit tests, live tests, and MCP checks before readiness can pass."
+    },
+    "runtimeIntegrationGate": {
+      "script": "scripts/runtime-integration-gate.mjs",
+      "readinessReportPath": "gates.runtimeIntegration",
+      "liveResultPath": "docs/upgrade/gates/runtime-integration-gate.json",
+      "expectation": "The profile-owned upgrade gate must aggregate matching deep-research, memory-persistence, and web/desktop workbench child gate evidence without duplicating ports, compose services, or local environment constants."
     }
   },
   "nextMechanismGap": {
-    "id": "docker-local-daemon-integration-coverage",
+    "id": "runtime-daemon-composition-smoke",
     "targetName": "runtime-daemon",
     "priority": "high",
     "status": "partial",
-    "gap": "Run and harden profile-owned Docker/local daemon integration gates across memory, MCP, deep research, web, and desktop so `workbench-host` and `test-host` readiness evidence is regular release evidence rather than ad hoc local proof.",
-    "rationale": "The deep-research MCP path now derives daemon research targets from profile-projected `deep_research.mcp.targets`, exercises live stdio/http MCP transports through `KernelBridge`, and preserves the MCP boundary between tool-originated `isError` evidence and transport/protocol failures. The next highest-leverage mechanism gap is full Docker/local integration coverage across the selected runtime profiles and presentation surfaces.",
+    "gap": "Add a single live daemon composition smoke gate that proves subagent topology, deep research, MCP gateway policy/trust/audit/OTel metadata, memory recall/checkpoint wiring, and profile readiness in one KernelBridge run.",
+    "rationale": "The runtime integration gate now aggregates matching deep-research, memory-persistence, and workbench child gate evidence under one profile-owned release artifact. The remaining mechanism gap is stronger than aggregation: one live daemon run must prove that these mechanisms compose through the same KernelBridge/runtime-daemon path instead of only passing as separate child gates.",
     "evidence": [
       {
         "kind": "source",
@@ -132,6 +138,10 @@
       {
         "kind": "source",
         "path": "scripts/runtime-profile.mjs"
+      },
+      {
+        "kind": "script",
+        "path": "scripts/runtime-integration-gate.mjs"
       },
       {
         "kind": "config",
@@ -171,6 +181,10 @@
       },
       {
         "kind": "test",
+        "path": "test/unit/scripts/runtime-integration-gate.test.ts"
+      },
+      {
+        "kind": "test",
         "path": "test/smoke/deep-research/live-adapters-smoke.test.ts"
       },
       {
@@ -188,6 +202,10 @@
       {
         "kind": "smoke-result",
         "path": "docs/upgrade/gates/deep-research-live-adapters.json"
+      },
+      {
+        "kind": "smoke-result",
+        "path": "docs/upgrade/gates/runtime-integration-gate.json"
       },
       {
         "kind": "record",
@@ -220,10 +238,17 @@
       {
         "kind": "record",
         "path": "docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md"
+      },
+      {
+        "kind": "record",
+        "path": "docs/change-records/2026-06-10-runtime-integration-gate.md"
       }
     ],
     "commands": [
       "pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts",
+      "pnpm exec vitest run test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts",
+      "node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run",
+      "node scripts/runtime-integration-gate.mjs --gate upgrade --live",
       "pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
       "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
       "pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live",

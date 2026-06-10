@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "gate": "upgrade",
+  "status": "passed",
+  "passedAt": "2026-06-10T01:35:39.433Z",
+  "checks": [
+    "deep-research:file-source",
+    "deep-research:web-source",
+    "deep-research:mcp-runtime-source",
+    "deep-research:mcp-live-transports",
+    "deep-research:mcp-kernel-research-events",
+    "memory-store:checkpoint",
+    "memory-store:retain-reflect",
+    "daemon:browser-gateway",
+    "presentation:web",
+    "daemon:socket",
+    "presentation:desktop"
+  ],
+  "steps": [
+    {
+      "id": "deep-research:live-adapters",
+      "kind": "deep-research-live-adapters",
+      "profile": "workbench-host",
+      "gate": "deep-research:live-adapters",
+      "checks": [
+        "deep-research:file-source",
+        "deep-research:web-source",
+        "deep-research:mcp-runtime-source",
+        "deep-research:mcp-live-transports",
+        "deep-research:mcp-kernel-research-events"
+      ]
+    },
+    {
+      "id": "memory-store:persistence",
+      "kind": "memory-persistence",
+      "profile": "test-host",
+      "gate": "memory-store:persistence",
+      "checks": [
+        "memory-store:checkpoint",
+        "memory-store:retain-reflect"
+      ]
+    },
+    {
+      "id": "workbench:presentation",
+      "kind": "workbench-smoke",
+      "profile": "workbench-host",
+      "gate": "presentation",
+      "checks": [
+        "daemon:browser-gateway",
+        "presentation:web",
+        "daemon:socket",
+        "presentation:desktop"
+      ]
+    }
+  ],
+  "command": "node scripts/runtime-integration-gate.mjs --gate upgrade --live",
+  "references": [
+    {
+      "title": "Docker Compose up",
+      "url": "https://docs.docker.com/reference/cli/docker/compose/up/"
+    },
+    {
+      "title": "Docker Compose pre-defined environment variables",
+      "url": "https://docs.docker.com/compose/how-tos/environment-variables/envvars/"
+    },
+    {
+      "title": "Electron security",
+      "url": "https://www.electronjs.org/docs/latest/tutorial/security"
+    },
+    {
+      "title": "Electron context isolation",
+      "url": "https://www.electronjs.org/docs/latest/tutorial/context-isolation"
+    }
+  ]
+}

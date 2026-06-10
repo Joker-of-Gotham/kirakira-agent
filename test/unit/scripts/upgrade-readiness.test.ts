@@ -56,6 +56,10 @@ describe("upgrade readiness gate", () => {
             label: "Memory-store checkpoint + retain/reflect live persistence gate",
             status: "pass",
           }),
+          expect.objectContaining({
+            label: "Profile-owned runtime integration gate aggregates child gates",
+            status: "pass",
+          }),
         ]),
       }),
     );
@@ -80,6 +84,14 @@ describe("upgrade readiness gate", () => {
         status: "passed",
         resultMatches: true,
       },
+    });
+    expect(report.gates.runtimeIntegration).toMatchObject({
+      gate: "upgrade",
+      gateSource: "runtime-profile.integrationGates",
+      status: "passed",
+      evidence: expect.objectContaining({
+        childGatesPassed: true,
+      }),
     });
     expect(report.gates.presentationProjection).toMatchObject({
       status: "pass",
@@ -162,7 +174,7 @@ describe("upgrade readiness gate", () => {
           expect.objectContaining({
             label: "Runtime profile, ready, and doctor scripts are exposed",
             status: "pass",
-            evidence: "package.json scripts runtime:profile/runtime:ready/runtime:doctor",
+            evidence: "package.json scripts runtime:profile/runtime:ready/runtime:doctor/integration:gate",
           }),
           expect.objectContaining({
             label: "Runtime profile projection/startup avoids unrelated dev-server port",
@@ -188,6 +200,8 @@ describe("upgrade readiness gate", () => {
     expect(json.advisoryWarnings.length).toBe(report.advisoryWarnings.length);
     expect(json.gates.deepResearchLiveAdapters.status).toBe("pass");
     expect(json.gates.deepResearchLiveAdapters.liveGate.resultMatches).toBe(true);
+    expect(json.gates.runtimeIntegration.status).toBe("passed");
+    expect(json.gates.runtimeIntegration.evidence.childGatesPassed).toBe(true);
     expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.presentationRenderEvidence.resultMatches).toBe(true);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
