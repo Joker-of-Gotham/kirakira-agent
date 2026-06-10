@@ -1,5 +1,6 @@
 export * from "./constants.js";
 export * from "./errors.js";
+export * from "./model-metadata.js";
 export * from "./model-providers.js";
 
 export type * from "./types/skill.js";

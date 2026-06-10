@@ -242,6 +242,7 @@ export function KirakiraWorkbench({
   const [mcpDirectory, setMcpDirectory] = useState<McpDirectoryState>({ status: "idle" });
   const [selectedMcpToolId, setSelectedMcpToolId] = useState<string | undefined>();
   const [mcpToolDrafts, setMcpToolDrafts] = useState<Record<string, string>>({});
+  const [mcpToolConfirmations, setMcpToolConfirmations] = useState<Record<string, boolean>>({});
   const [mcpToolCall, setMcpToolCall] = useState<McpToolCallState>({ status: "idle" });
   const [activeWorkbenchView, setActiveWorkbenchView] = useState<WorkbenchViewId>("runs");
   const [inspectorViewId, setInspectorViewId] = useState<WorkbenchInspectorViewId>("mcp");
@@ -382,6 +383,7 @@ export function KirakiraWorkbench({
     setMcpDirectory({ status: "idle" });
     setSelectedMcpToolId(undefined);
     setMcpToolDrafts({});
+    setMcpToolConfirmations({});
     setMcpToolCall({ status: "idle" });
   }, [runtime]);
 
@@ -679,6 +681,11 @@ export function KirakiraWorkbench({
 
   const updateMcpArgumentDraft = useCallback((toolId: string, draft: string) => {
     setMcpToolDrafts((drafts) => ({ ...drafts, [toolId]: draft }));
+    setMcpToolConfirmations((confirmations) => ({ ...confirmations, [toolId]: false }));
+  }, []);
+
+  const updateMcpToolConfirmation = useCallback((toolId: string, confirmed: boolean) => {
+    setMcpToolConfirmations((confirmations) => ({ ...confirmations, [toolId]: confirmed }));
   }, []);
 
   const topologyManifest = runtimeTransportOrchestration(runtimeStatus);
@@ -703,6 +710,17 @@ export function KirakiraWorkbench({
 
   const callSelectedMcpTool = useCallback(async () => {
     if (!selectedMcpTool) return;
+    if (
+      selectedMcpPlayground.requiresHumanConfirmation &&
+      mcpToolConfirmations[selectedMcpTool.id] !== true
+    ) {
+      setMcpToolCall({
+        status: "error",
+        toolId: selectedMcpTool.id,
+        message: "Human confirmation required before calling this governed MCP tool",
+      });
+      return;
+    }
     if (selectedMcpPlayground.draft.status !== "ready") {
       setMcpToolCall({
         status: "error",
@@ -728,7 +746,7 @@ export function KirakiraWorkbench({
         message: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [runId, runtime, selectedMcpPlayground.draft, selectedMcpTool]);
+  }, [mcpToolConfirmations, runId, runtime, selectedMcpPlayground.draft, selectedMcpTool]);
 
   const researchRuns = Object.values(projection.researchRuns);
   const latestResearch = researchRuns[researchRuns.length - 1];
@@ -1068,6 +1086,8 @@ export function KirakiraWorkbench({
           selectedMcpPlayground={selectedMcpPlayground}
           mcpToolDetail={activityRail.mcpTool}
           mcpToolCall={mcpToolCall}
+          mcpToolRequiresConfirmation={selectedMcpPlayground.requiresHumanConfirmation}
+          mcpToolConfirmed={selectedMcpTool ? mcpToolConfirmations[selectedMcpTool.id] === true : false}
           onCancel={cancel}
           canCancel={Boolean(runId)}
           onSelectItem={selectWorkstreamItem}
@@ -1077,6 +1097,7 @@ export function KirakiraWorkbench({
           onInspectorViewChange={setInspectorViewId}
           onSelectMcpTool={setSelectedMcpToolId}
           onMcpArgumentDraftChange={updateMcpArgumentDraft}
+          onMcpToolConfirmationChange={updateMcpToolConfirmation}
           onCallMcpTool={() => void callSelectedMcpTool()}
           onRefreshMcp={() => void refreshMcpDirectory(false)}
           onStartAndRefreshMcp={() => void refreshMcpDirectory(true)}
@@ -1233,8 +1254,11 @@ export function KirakiraWorkbench({
             playground={selectedMcpPlayground}
             toolDetail={activityRail.mcpTool}
             callState={mcpToolCall}
+            requiresConfirmation={selectedMcpPlayground.requiresHumanConfirmation}
+            confirmed={selectedMcpTool ? mcpToolConfirmations[selectedMcpTool.id] === true : false}
             onSelectTool={setSelectedMcpToolId}
             onArgumentDraftChange={updateMcpArgumentDraft}
+            onConfirmationChange={updateMcpToolConfirmation}
             onCallTool={() => void callSelectedMcpTool()}
             onRefresh={() => void refreshMcpDirectory(false)}
             onStartAndRefresh={() => void refreshMcpDirectory(true)}
@@ -1731,6 +1755,8 @@ function WorkbenchViewSurface({
   selectedMcpPlayground,
   mcpToolDetail,
   mcpToolCall,
+  mcpToolRequiresConfirmation,
+  mcpToolConfirmed,
   onCancel,
   canCancel,
   onSelectItem,
@@ -1740,6 +1766,7 @@ function WorkbenchViewSurface({
   onInspectorViewChange,
   onSelectMcpTool,
   onMcpArgumentDraftChange,
+  onMcpToolConfirmationChange,
   onCallMcpTool,
   onRefreshMcp,
   onStartAndRefreshMcp,
@@ -1759,6 +1786,8 @@ function WorkbenchViewSurface({
   selectedMcpPlayground: RuntimeMcpToolPlaygroundView;
   mcpToolDetail?: RunActivityRailMcpTool;
   mcpToolCall: McpToolCallState;
+  mcpToolRequiresConfirmation: boolean;
+  mcpToolConfirmed: boolean;
   onCancel: () => void;
   canCancel: boolean;
   onSelectItem: (itemId: string, focusId?: string) => void;
@@ -1768,6 +1797,7 @@ function WorkbenchViewSurface({
   onInspectorViewChange: (id: WorkbenchInspectorViewId) => void;
   onSelectMcpTool: (id: string) => void;
   onMcpArgumentDraftChange: (toolId: string, draft: string) => void;
+  onMcpToolConfirmationChange: (toolId: string, confirmed: boolean) => void;
   onCallMcpTool: () => void;
   onRefreshMcp: () => void;
   onStartAndRefreshMcp: () => void;
@@ -1837,8 +1867,11 @@ function WorkbenchViewSurface({
           playground={selectedMcpPlayground}
           toolDetail={mcpToolDetail}
           callState={mcpToolCall}
+          requiresConfirmation={mcpToolRequiresConfirmation}
+          confirmed={mcpToolConfirmed}
           onSelectTool={onSelectMcpTool}
           onArgumentDraftChange={onMcpArgumentDraftChange}
+          onConfirmationChange={onMcpToolConfirmationChange}
           onCallTool={onCallMcpTool}
           onRefresh={onRefreshMcp}
           onStartAndRefresh={onStartAndRefreshMcp}
@@ -2968,8 +3001,11 @@ function McpDirectoryPanel({
   playground,
   toolDetail,
   callState,
+  requiresConfirmation,
+  confirmed,
   onSelectTool,
   onArgumentDraftChange,
+  onConfirmationChange,
   onCallTool,
   onRefresh,
   onStartAndRefresh,
@@ -2981,8 +3017,11 @@ function McpDirectoryPanel({
   playground: RuntimeMcpToolPlaygroundView;
   toolDetail?: RunActivityRailMcpTool;
   callState: McpToolCallState;
+  requiresConfirmation: boolean;
+  confirmed: boolean;
   onSelectTool: (id: string) => void;
   onArgumentDraftChange: (toolId: string, draft: string) => void;
+  onConfirmationChange: (toolId: string, confirmed: boolean) => void;
   onCallTool: () => void;
   onRefresh: () => void;
   onStartAndRefresh: () => void;
@@ -3081,7 +3120,10 @@ function McpDirectoryPanel({
             toolDetail={toolDetail}
             playground={playground}
             callState={callState}
+            requiresConfirmation={requiresConfirmation}
+            confirmed={confirmed}
             onArgumentDraftChange={onArgumentDraftChange}
+            onConfirmationChange={onConfirmationChange}
             onCallTool={onCallTool}
           />
         </div>
@@ -3095,14 +3137,20 @@ function McpToolDetail({
   toolDetail,
   playground,
   callState,
+  requiresConfirmation,
+  confirmed,
   onArgumentDraftChange,
+  onConfirmationChange,
   onCallTool,
 }: {
   tool?: RuntimeMcpDirectoryTool;
   toolDetail?: RunActivityRailMcpTool;
   playground: RuntimeMcpToolPlaygroundView;
   callState: McpToolCallState;
+  requiresConfirmation: boolean;
+  confirmed: boolean;
   onArgumentDraftChange: (toolId: string, draft: string) => void;
+  onConfirmationChange: (toolId: string, confirmed: boolean) => void;
   onCallTool: () => void;
 }) {
   const [activeTab, setActiveTab] = useState<McpToolDetailTab>("details");
@@ -3182,6 +3230,20 @@ function McpToolDetail({
               onChange={(event) => onArgumentDraftChange(tool.id, event.target.value)}
             />
           </label>
+          {requiresConfirmation ? (
+            <label className="kk-mcp-human-confirm">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                disabled={calling}
+                onChange={(event) => onConfirmationChange(tool.id, event.target.checked)}
+              />
+              <span>
+                <strong>Confirm governed MCP call</strong>
+                <small>Policy, trust, audit, or first-use metadata requires human confirmation.</small>
+              </span>
+            </label>
+          ) : null}
           <div className="kk-mcp-call-actions">
             <button
               type="button"
@@ -3196,7 +3258,7 @@ function McpToolDetail({
               type="button"
               className="kk-submit kk-mcp-call-button"
               onClick={onCallTool}
-              disabled={calling || invalidDraft}
+              disabled={calling || invalidDraft || (requiresConfirmation && !confirmed)}
             >
               <Play size={16} />
               {calling ? "Calling" : "Call tool"}

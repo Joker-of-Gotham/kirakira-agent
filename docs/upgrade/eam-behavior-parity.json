@@ -550,9 +550,10 @@
       "targetName": "model-gateway",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira Python model-gateway reads OpenAI-compatible provider defaults, aliases, key environment names, and endpoint path rules from the shared core provider catalog so TS and Python gateways share one provider source of truth. Model aliases, capabilities, and price metadata remain a separate model metadata catalog follow-up rather than provider catalog parity.",
+      "behavior": "Kirakira Python model-gateway reads OpenAI-compatible provider defaults, key environment names, and endpoint path rules from the shared core provider catalog. Model aliases, capabilities, context windows, tool/embedding support, and token price metadata now live in a separate shared core model metadata catalog consumed by both TypeScript and Python gateway tests.",
       "extensionFiles": [
-        "packages/model-gateway/src/kirakira_model_gateway/model_provider_catalog.py"
+        "packages/model-gateway/src/kirakira_model_gateway/model_provider_catalog.py",
+        "packages/model-gateway/src/kirakira_model_gateway/model_metadata_catalog.py"
       ],
       "evidence": [
         {
@@ -561,7 +562,15 @@
         },
         {
           "kind": "source",
+          "path": "packages/core/src/model-metadata.catalog.json"
+        },
+        {
+          "kind": "source",
           "path": "packages/model-gateway/src/kirakira_model_gateway/model_provider_catalog.py"
+        },
+        {
+          "kind": "source",
+          "path": "packages/model-gateway/src/kirakira_model_gateway/model_metadata_catalog.py"
         },
         {
           "kind": "test",
@@ -570,8 +579,18 @@
         },
         {
           "kind": "test",
+          "path": "test/unit/model-gateway/test_model_metadata_catalog.py",
+          "command": "python -m pytest test/unit/model-gateway/test_model_metadata_catalog.py test/unit/model-gateway/test_capability.py test/unit/model-gateway/test_cost.py"
+        },
+        {
+          "kind": "test",
           "path": "test/unit/core/model-providers.test.ts",
           "command": "pnpm.cmd exec vitest run test/unit/core/model-providers.test.ts test/unit/config-resolver/model-config.test.ts test/unit/agent-runtime/model-client-provider-env.test.ts test/unit/scripts/llm-providers.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/core/model-metadata.test.ts",
+          "command": "pnpm.cmd exec vitest run test/unit/core/model-metadata.test.ts"
         },
         {
           "kind": "record",

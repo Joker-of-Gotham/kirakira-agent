@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Optional
 
+from kirakira_model_gateway.model_metadata_catalog import load_model_metadata_catalog
 
 @dataclass(frozen=True)
 class ModelCapability:
@@ -30,113 +31,33 @@ class ModelCapability:
     requires_approval: bool = False
 
 
-_BUILTIN_CAPABILITIES: dict[str, ModelCapability] = {
-    # OpenAI
-    "gpt-4o": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        max_context_tokens=128_000,
-        max_output_tokens=16_384,
-        price_class="medium",
-        latency_class="fast",
-    ),
-    "gpt-4o-mini": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        max_context_tokens=128_000,
-        max_output_tokens=16_384,
-        price_class="low",
-        latency_class="fast",
-    ),
-    "gpt-4.1": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        max_context_tokens=1_047_576,
-        max_output_tokens=32_768,
-        price_class="medium",
-        latency_class="fast",
-    ),
-    "o3": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_reasoning=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        max_context_tokens=200_000,
-        max_output_tokens=100_000,
-        price_class="premium",
-        latency_class="slow",
-    ),
-
-    # Anthropic
-    "claude-sonnet-4-20250514": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_reasoning=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        supports_memory=True,
-        max_context_tokens=200_000,
-        max_output_tokens=16_384,
-        price_class="medium",
-        latency_class="fast",
-    ),
-    "claude-opus-4-20250514": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=True,
-        supports_vision=True,
-        supports_mcp_tools=True,
-        supports_reasoning=True,
-        supports_tool_search=True,
-        supports_long_context=True,
-        supports_memory=True,
-        max_context_tokens=200_000,
-        max_output_tokens=32_000,
-        price_class="premium",
-        latency_class="slow",
-        requires_approval=True,
-    ),
-
-    # Qwen (local)
-    "Qwen/Qwen3-32B": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=False,
-        supports_vision=False,
-        supports_long_context=True,
-        max_context_tokens=131_072,
-        max_output_tokens=8_192,
-        price_class="low",
-        latency_class="medium",
-        data_residency="local",
-    ),
-    "Qwen/Qwen3.5-35B-A3B": ModelCapability(
-        supports_function_calling=True,
-        supports_structured_output=False,
-        supports_vision=False,
-        supports_long_context=True,
-        max_context_tokens=131_072,
-        max_output_tokens=8_192,
-        price_class="low",
-        latency_class="medium",
-        data_residency="local",
-    ),
-}
+def _builtin_capabilities() -> dict[str, ModelCapability]:
+    entries: dict[str, ModelCapability] = {}
+    for model in load_model_metadata_catalog().models:
+        cap = model.capabilities
+        classes = model.classes
+        capability = ModelCapability(
+            supports_function_calling=cap.function_calling,
+            supports_structured_output=cap.structured_output,
+            supports_vision=cap.vision,
+            supports_batch=cap.batch,
+            supports_streaming=cap.streaming,
+            supports_mcp_tools=cap.mcp_tools,
+            supports_reasoning=cap.reasoning,
+            supports_memory=cap.memory,
+            supports_tool_search=cap.tool_search,
+            supports_long_context=cap.long_context,
+            max_context_tokens=model.context_window,
+            max_output_tokens=model.max_output_tokens,
+            price_class=classes.price,
+            latency_class=classes.latency,
+            data_residency=classes.data_residency,
+            requires_approval=cap.requires_approval,
+        )
+        entries[model.id] = capability
+        for alias in model.aliases:
+            entries[alias] = capability
+    return entries
 
 
 @dataclass
@@ -144,7 +65,7 @@ class ModelCapabilityRegistry:
     _entries: dict[str, ModelCapability] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        self._entries.update(_BUILTIN_CAPABILITIES)
+        self._entries.update(_builtin_capabilities())
 
     def register(self, model_id: str, capability: ModelCapability) -> None:
         self._entries[model_id] = capability

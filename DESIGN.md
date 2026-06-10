@@ -107,5 +107,6 @@ desktop shell and expand when controls stack.
 
 ## Dark Mode Strategy
 
-Dark mode is not implemented yet. When added, remap semantic color tokens in a
-single theme layer; do not duplicate component CSS.
+Dark mode uses a single `prefers-color-scheme: dark` semantic token remap in
+`packages/frontend-app/src/styles.css`. Component CSS must continue to consume
+the same semantic tokens and must not duplicate dark-specific component rules.

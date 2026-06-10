@@ -34,6 +34,7 @@ export interface RuntimeMcpToolPlaygroundView {
   trustRows: RuntimeMcpMetadataRow[];
   policyRows: RuntimeMcpMetadataRow[];
   auditRows: RuntimeMcpMetadataRow[];
+  requiresHumanConfirmation: boolean;
   callSummary?: RuntimeMcpToolCallSummary;
 }
 
@@ -175,6 +176,24 @@ function auditRows(tool: RuntimeMcpDirectoryTool | undefined): RuntimeMcpMetadat
   return rows;
 }
 
+export function mcpToolRequiresHumanConfirmation(
+  tool: RuntimeMcpDirectoryTool | undefined,
+): boolean {
+  if (!tool) return false;
+  const policy = tool.policy;
+  const trust = tool.trust;
+  return Boolean(
+    policy?.approvalRequired ||
+      policy?.decision === "ask" ||
+      policy?.decision === "escalate" ||
+      policy?.obligations.snapshotRequired ||
+      policy?.obligations.dryRunRequired ||
+      trust?.firstUse ||
+      trust?.tier === "unknown" ||
+      trust?.tier === "community",
+  );
+}
+
 function contentText(result: RuntimeMcpToolCallResult): string {
   const payload =
     result.structuredContent ??
@@ -222,6 +241,7 @@ export function createMcpToolPlaygroundView(
     trustRows: trustRows(tool),
     policyRows: policyRows(tool),
     auditRows: auditRows(tool),
+    requiresHumanConfirmation: mcpToolRequiresHumanConfirmation(tool),
     ...(result ? { callSummary: callSummary(result) } : {}),
   };
 }

@@ -10,6 +10,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Optional
 
+from kirakira_model_gateway.model_metadata_catalog import load_model_metadata_catalog
 
 @dataclass(frozen=True)
 class TokenPrice:
@@ -18,22 +19,19 @@ class TokenPrice:
     output_per_m: float
 
 
-_PRICES: dict[str, TokenPrice] = {
-    # OpenAI (2025 pricing)
-    "gpt-4o": TokenPrice(2.50, 10.00),
-    "gpt-4o-mini": TokenPrice(0.15, 0.60),
-    "gpt-4.1": TokenPrice(2.00, 8.00),
-    "gpt-4.1-mini": TokenPrice(0.40, 1.60),
-    "gpt-4.1-nano": TokenPrice(0.10, 0.40),
-    "o3": TokenPrice(10.00, 40.00),
-    "o4-mini": TokenPrice(1.10, 4.40),
-
-    # Anthropic (2025 pricing)
-    "claude-sonnet-4-20250514": TokenPrice(3.00, 15.00),
-    "claude-opus-4-20250514": TokenPrice(15.00, 75.00),
-    "claude-3-5-sonnet-20241022": TokenPrice(3.00, 15.00),
-    "claude-3-5-haiku-20241022": TokenPrice(0.80, 4.00),
-}
+def _prices() -> dict[str, TokenPrice]:
+    prices: dict[str, TokenPrice] = {}
+    for model in load_model_metadata_catalog().models:
+        if model.pricing is None:
+            continue
+        price = TokenPrice(
+            model.pricing.input_per_million_usd,
+            model.pricing.output_per_million_usd,
+        )
+        prices[model.id] = price
+        for alias in model.aliases:
+            prices[alias] = price
+    return prices
 
 
 def estimate_cost(
@@ -48,23 +46,24 @@ def estimate_cost(
 
 
 def _lookup_price(model: str) -> Optional[TokenPrice]:
-    if model in _PRICES:
-        return _PRICES[model]
+    prices = _prices()
+    if model in prices:
+        return prices[model]
     lower = model.lower()
-    if lower in _PRICES:
-        return _PRICES[lower]
-    for key, price in _PRICES.items():
+    if lower in prices:
+        return prices[lower]
+    for key, price in prices.items():
         if lower == key.lower():
             return price
     best_key: Optional[str] = None
     best_len = 0
-    for key in _PRICES:
+    for key in prices:
         kl = key.lower()
         if lower.startswith(kl) and len(kl) > best_len:
             best_key = key
             best_len = len(kl)
     if best_key is not None:
-        return _PRICES[best_key]
+        return prices[best_key]
     return None
 
 

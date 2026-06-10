@@ -1,0 +1,361 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    "https://developers.openai.com/api/docs/pricing",
+    "https://www.anthropic.com/claude/sonnet",
+    "https://www.anthropic.com/claude/opus"
+  ],
+  "aliases": {
+    "gpt-4o": "gpt-4o-2024-11-20",
+    "gpt-4o-mini": "gpt-4o-mini-2024-07-18",
+    "gpt-4.1": "gpt-4.1-2025-04-14",
+    "gpt-4.1-mini": "gpt-4.1-mini-2025-04-14",
+    "gpt-4.1-nano": "gpt-4.1-nano-2025-04-14",
+    "gpt-5.5": "gpt-5.5",
+    "gpt-5.4": "gpt-5.4",
+    "gpt-5.4-mini": "gpt-5.4-mini",
+    "gpt-5.4-nano": "gpt-5.4-nano",
+    "gpt-5.2": "gpt-5.2",
+    "gpt-5.1": "gpt-5.1",
+    "gpt-5": "gpt-5",
+    "o3": "o3-2025-04-16",
+    "o4-mini": "o4-mini-2025-04-16",
+    "claude-sonnet": "claude-sonnet-4-6",
+    "claude-opus": "claude-opus-4-8",
+    "claude-3.5-sonnet": "claude-3-5-sonnet-20241022",
+    "claude-3.5-haiku": "claude-3-5-haiku-20241022",
+    "qwen3": "Qwen/Qwen3-32B",
+    "qwen3-32b": "Qwen/Qwen3-32B",
+    "qwen3.5-35b": "Qwen/Qwen3.5-35B-A3B"
+  },
+  "models": [
+    {
+      "id": "gpt-5.5",
+      "provider": "openai",
+      "aliases": ["gpt-5.5"],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "pricing": { "inputPerMillionUsd": 2.5, "outputPerMillionUsd": 15 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "premium", "latency": "medium", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-5.4",
+      "provider": "openai",
+      "aliases": ["gpt-5.4"],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "pricing": { "inputPerMillionUsd": 1.25, "outputPerMillionUsd": 7.5 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "medium", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-5.4-mini",
+      "provider": "openai",
+      "aliases": ["gpt-5.4-mini"],
+      "contextWindow": 272000,
+      "maxOutputTokens": 128000,
+      "pricing": { "inputPerMillionUsd": 0.375, "outputPerMillionUsd": 2.25 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-4o",
+      "provider": "openai",
+      "aliases": ["gpt-4o-2024-11-20"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": { "inputPerMillionUsd": 2.5, "outputPerMillionUsd": 10 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-4o-mini",
+      "provider": "openai",
+      "aliases": ["gpt-4o-mini-2024-07-18"],
+      "contextWindow": 128000,
+      "maxOutputTokens": 16384,
+      "pricing": { "inputPerMillionUsd": 0.15, "outputPerMillionUsd": 0.6 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-4.1",
+      "provider": "openai",
+      "aliases": ["gpt-4.1-2025-04-14"],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": { "inputPerMillionUsd": 2, "outputPerMillionUsd": 8 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-4.1-mini",
+      "provider": "openai",
+      "aliases": ["gpt-4.1-mini-2025-04-14"],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": { "inputPerMillionUsd": 0.4, "outputPerMillionUsd": 1.6 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "gpt-4.1-nano",
+      "provider": "openai",
+      "aliases": ["gpt-4.1-nano-2025-04-14"],
+      "contextWindow": 1047576,
+      "maxOutputTokens": 32768,
+      "pricing": { "inputPerMillionUsd": 0.1, "outputPerMillionUsd": 0.4 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "o3",
+      "provider": "openai",
+      "aliases": ["o3-2025-04-16"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": { "inputPerMillionUsd": 10, "outputPerMillionUsd": 40 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "premium", "latency": "slow", "dataResidency": "us" }
+    },
+    {
+      "id": "o4-mini",
+      "provider": "openai",
+      "aliases": ["o4-mini-2025-04-16"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 100000,
+      "pricing": { "inputPerMillionUsd": 1.1, "outputPerMillionUsd": 4.4 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "medium", "dataResidency": "us" }
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "provider": "anthropic",
+      "aliases": ["claude-sonnet", "claude-sonnet-4-20250514"],
+      "contextWindow": 1000000,
+      "maxOutputTokens": 64000,
+      "pricing": { "inputPerMillionUsd": 3, "outputPerMillionUsd": 15 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "memory": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "claude-opus-4-8",
+      "provider": "anthropic",
+      "aliases": ["claude-opus", "claude-opus-4-20250514"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": { "inputPerMillionUsd": 5, "outputPerMillionUsd": 25 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "reasoning": true,
+        "memory": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true,
+        "requiresApproval": true
+      },
+      "classes": { "price": "premium", "latency": "slow", "dataResidency": "us" }
+    },
+    {
+      "id": "claude-3-5-sonnet-20241022",
+      "provider": "anthropic",
+      "aliases": ["claude-3.5-sonnet"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "pricing": { "inputPerMillionUsd": 3, "outputPerMillionUsd": 15 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "medium", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "claude-3-5-haiku-20241022",
+      "provider": "anthropic",
+      "aliases": ["claude-3.5-haiku"],
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "pricing": { "inputPerMillionUsd": 0.8, "outputPerMillionUsd": 4 },
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": true,
+        "vision": true,
+        "streaming": true,
+        "mcpTools": true,
+        "toolSearch": true,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    },
+    {
+      "id": "Qwen/Qwen3-32B",
+      "provider": "aliyun-bailian",
+      "aliases": ["qwen3", "qwen3-32b"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": false,
+        "vision": false,
+        "streaming": true,
+        "mcpTools": false,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "medium", "dataResidency": "local" }
+    },
+    {
+      "id": "Qwen/Qwen3.5-35B-A3B",
+      "provider": "aliyun-bailian",
+      "aliases": ["qwen3.5-35b"],
+      "contextWindow": 131072,
+      "maxOutputTokens": 8192,
+      "capabilities": {
+        "functionCalling": true,
+        "structuredOutput": false,
+        "vision": false,
+        "streaming": true,
+        "mcpTools": false,
+        "embedding": false,
+        "longContext": true
+      },
+      "classes": { "price": "low", "latency": "medium", "dataResidency": "local" }
+    },
+    {
+      "id": "text-embedding-3-small",
+      "provider": "openai",
+      "aliases": [],
+      "contextWindow": 8191,
+      "maxOutputTokens": 0,
+      "capabilities": {
+        "functionCalling": false,
+        "structuredOutput": false,
+        "vision": false,
+        "streaming": false,
+        "mcpTools": false,
+        "embedding": true,
+        "longContext": false
+      },
+      "pricing": { "inputPerMillionUsd": 0.02, "outputPerMillionUsd": 0 },
+      "classes": { "price": "low", "latency": "fast", "dataResidency": "us" }
+    }
+  ]
+}

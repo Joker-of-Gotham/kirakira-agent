@@ -83,6 +83,7 @@ describe("frontend-core MCP tool playground view", () => {
       "Ledger",
       "pep",
     ]);
+    expect(view.requiresHumanConfirmation).toBe(true);
   });
 
   it("parses edited JSON object drafts and summarizes call results", () => {
@@ -130,5 +131,37 @@ describe("frontend-core MCP tool playground view", () => {
 
     expect(view.draft.status).toBe("invalid");
     expect(view.draft.error).toContain("JSON object");
+  });
+
+  it("does not require human confirmation for trusted allowlisted read-only tools", () => {
+    const safeTool = createMcpDirectoryView({
+      generatedAt: "2026-06-10T00:00:00.000Z",
+      servers: [
+        {
+          name: "docs",
+          health: "healthy",
+          trust: {
+            tier: "trusted",
+            source: "config",
+            trustedAnnotations: true,
+            firstUse: false,
+          },
+          policy: {
+            decision: "allow",
+            source: "gateway-rule",
+            reasonCodes: [],
+            approvalRequired: false,
+            obligations: {
+              snapshotRequired: false,
+              dryRunRequired: false,
+              auditRequired: false,
+            },
+          },
+          tools: [{ name: "search", inputSchema: { type: "object" } }],
+        },
+      ],
+    }).tools[0];
+
+    expect(createMcpToolPlaygroundView(safeTool).requiresHumanConfirmation).toBe(false);
   });
 });

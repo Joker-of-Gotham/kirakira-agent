@@ -32,6 +32,7 @@
     "presentation:render": "tsx --tsconfig tsconfig.base.json scripts/presentation-render-evidence.ts",
     "parity:eam": "node scripts/eam-parity-audit.mjs",
     "upgrade:readiness": "node scripts/upgrade-readiness.mjs",
+    "release:check": "node scripts/release-check.mjs",
     "test": "vitest run",
     "test:integration": "vitest run test/integration",
     "clean": "turbo clean",

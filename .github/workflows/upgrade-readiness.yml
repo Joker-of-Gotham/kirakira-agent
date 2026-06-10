@@ -1,0 +1,54 @@
+name: Upgrade Readiness
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - codex/**
+  workflow_dispatch:
+    inputs:
+      full_lifecycle:
+        description: "Run Docker-backed full lifecycle on a self-hosted runner"
+        required: false
+        default: "false"
+
+jobs:
+  non-docker-readiness:
+    name: Non-Docker readiness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pnpm install --frozen-lockfile
+      - run: python -m pip install -e "packages/model-gateway[dev]"
+      - run: node scripts/release-check.mjs --skip-docker --skip-hydrated
+
+  docker-full-lifecycle:
+    name: Docker full lifecycle
+    if: github.event_name == 'workflow_dispatch' && inputs.full_lifecycle == 'true'
+    runs-on: [self-hosted, docker, kirakira]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pnpm install --frozen-lockfile
+      - run: python -m pip install -e "packages/model-gateway[dev]"
+      - run: node scripts/release-check.mjs --full-lifecycle

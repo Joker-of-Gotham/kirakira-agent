@@ -40,3 +40,10 @@ packages:
 ## Integrity Check
 
 `validateLockIntegrity()` verifies every entry's digest against the local blob cache.
+
+## Workspace Policy
+
+The committed, reproducible lockfile is `kirakira.lock`. Local skill runtime
+snapshots such as `skills-lock.json` are generated workspace state and should
+stay untracked; promotion into the auditable install surface must go through the
+`kirakira.lock` schema above.

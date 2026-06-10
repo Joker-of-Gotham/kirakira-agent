@@ -44,7 +44,10 @@ export {
 } from "./runtime-capabilities.js";
 
 export { createMcpDirectoryView } from "./mcp-directory.js";
-export { createMcpToolPlaygroundView } from "./mcp-playground.js";
+export {
+  createMcpToolPlaygroundView,
+  mcpToolRequiresHumanConfirmation,
+} from "./mcp-playground.js";
 
 export type {
   RuntimeMcpDirectoryServer,

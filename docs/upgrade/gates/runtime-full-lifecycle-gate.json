@@ -4,7 +4,7 @@
   "profile": "workbench-host",
   "integrationGate": "full-lifecycle",
   "status": "blocked",
-  "recordedAt": "2026-06-10T12:41:28.937Z",
+  "recordedAt": "2026-06-10T13:37:27.929Z",
   "checks": [
     "runtime-lifecycle:docker-compose-ready",
     "runtime-lifecycle:daemon-gateway",
