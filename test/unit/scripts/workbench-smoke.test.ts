@@ -530,6 +530,55 @@ describe("workbench smoke gate", () => {
     ]);
   });
 
+  it("runs an afterReady hook before tearing down smoke processes", async () => {
+    const smoke = buildWorkbenchSmokeCommand(
+      {
+        profileName: "workbench-host",
+        surface: "web",
+        skipInfra: true,
+        timeoutMs: 60,
+      },
+      {},
+    );
+    const events: string[] = [];
+    const supervisor = {
+      assertHealthy() {
+        events.push("healthy");
+      },
+      waitForFailure() {
+        return new Promise<never>(() => {});
+      },
+      spawnBackground(step: { name: string }) {
+        events.push(`spawn:${step.name}`);
+        return fakeChild(step.name);
+      },
+      async stopAll() {
+        events.push("stop");
+      },
+    };
+
+    await runWorkbenchSmoke(smoke, {
+      supervisor,
+      waitForReadiness: async (_readiness, checks, options) => {
+        events.push(`wait:${checks.join(",")}:${options.timeoutMs}`);
+      },
+      afterReady: async (_plan, ready) => {
+        events.push(`after:${ready.checks.join(",")}`);
+      },
+    });
+
+    expect(events).toEqual([
+      "healthy",
+      "spawn:daemon",
+      "healthy",
+      "wait:daemon:browser-gateway:60",
+      "spawn:web",
+      "wait:daemon:browser-gateway,presentation:web:60",
+      "after:daemon:browser-gateway,presentation:web",
+      "stop",
+    ]);
+  });
+
   it("runs the desktop Electron smoke shell as a foreground assertion", async () => {
     const smoke = buildWorkbenchSmokeCommand(
       {

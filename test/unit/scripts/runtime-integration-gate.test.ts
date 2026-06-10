@@ -46,6 +46,7 @@ describe("runtime integration gate", () => {
       ["memory-store:persistence", "memory-persistence", "test-host"],
       ["runtime-daemon:composition-smoke", "runtime-daemon-composition", "workbench-host"],
       ["workbench:presentation", "workbench-smoke", "workbench-host"],
+      ["presentation:hydrated-visual-qa", "presentation-hydrated-visual-qa", "workbench-host"],
     ]);
     expect(command.checks).toEqual(
       expect.arrayContaining([
@@ -56,6 +57,8 @@ describe("runtime integration gate", () => {
         "daemon:browser-gateway",
         "presentation:web",
         "presentation:desktop",
+        "presentation:viewport-screenshots",
+        "presentation:core-workbench-views",
       ]),
     );
     expect(JSON.stringify(command)).not.toContain("5173");
@@ -76,6 +79,7 @@ describe("runtime integration gate", () => {
       "node scripts/memory-persistence-smoke.mjs --profile test-host --timeout-ms 12000 --live",
       "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --timeout-ms 12000 --live",
+      "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 12000 --live",
     ]);
   });
 
@@ -102,6 +106,7 @@ describe("runtime integration gate", () => {
           expect.objectContaining({ id: "memory-store:persistence" }),
           expect.objectContaining({ id: "runtime-daemon:composition-smoke" }),
           expect.objectContaining({ id: "workbench:presentation" }),
+          expect.objectContaining({ id: "presentation:hydrated-visual-qa" }),
         ],
       });
       expect(replay.evidence).toMatchObject({
@@ -140,9 +145,11 @@ describe("runtime integration gate", () => {
       expect.stringContaining("scripts/memory-persistence-smoke.mjs --profile test-host"),
       expect.stringContaining("scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host"),
       expect.stringContaining("scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation"),
+      expect.stringContaining("scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host"),
     ]);
     expect(calls[1]).toContain("--skip-compose");
     expect(calls[3]).toContain("--skip-infra");
+    expect(calls[4]).toContain("--skip-infra");
   });
 
   it("supports injected gate adapters without changing the aggregate flow", () => {

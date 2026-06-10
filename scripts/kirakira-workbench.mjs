@@ -526,6 +526,15 @@ export async function runWorkbenchSmokePlan(plan, options = {}) {
       supervisor,
       waitForChecks(plan.readiness, smokeChecks, options.readiness),
     );
+    if (typeof options.afterReady === "function") {
+      await raceBackgroundFailure(
+        supervisor,
+        options.afterReady(plan, {
+          checks: smokeChecks,
+          readiness: plan.readiness,
+        }),
+      );
+    }
   } finally {
     removeSignalHandlers();
     await supervisor.stopAll();

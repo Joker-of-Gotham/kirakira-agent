@@ -108,6 +108,20 @@ describe("upgrade readiness gate", () => {
       targetsPass: true,
       containsForbiddenPort: false,
     });
+    expect(report.gates.presentationHydratedVisualQa).toMatchObject({
+      status: "pass",
+      resultPath: "docs/upgrade/gates/presentation-hydrated-visual-qa.json",
+      profile: "workbench-host",
+      resultStatus: "passed",
+      resultMatches: true,
+      surfaces: ["desktop", "web"],
+      viewports: ["desktop", "mobile", "tablet"],
+      views: ["agents", "research", "runs", "systems"],
+      consoleErrors: 0,
+      pageErrors: 0,
+      overflowViolations: 0,
+      containsForbiddenPort: false,
+    });
     expect(report.gates.presentationProjection.targets).toEqual([
       expect.objectContaining({
         surface: "web",
@@ -164,6 +178,13 @@ describe("upgrade readiness gate", () => {
               "result=docs/upgrade/gates/presentation-render-evidence.json",
             ),
           }),
+          expect.objectContaining({
+            label: "Hydrated web/Electron visual QA evidence is current",
+            status: "pass",
+            evidence: expect.stringContaining(
+              "result=docs/upgrade/gates/presentation-hydrated-visual-qa.json",
+            ),
+          }),
         ]),
       }),
     );
@@ -204,6 +225,7 @@ describe("upgrade readiness gate", () => {
     expect(json.gates.runtimeIntegration.evidence.childGatesPassed).toBe(true);
     expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.presentationRenderEvidence.resultMatches).toBe(true);
+    expect(json.gates.presentationHydratedVisualQa.resultMatches).toBe(true);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });
 });

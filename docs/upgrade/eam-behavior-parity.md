@@ -25,13 +25,12 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the profile-owned runtime integration gate and the single-run
-`runtime-daemon-composition-smoke`, the highest-leverage remaining gap is now
-`presentation-hydrated-visual-qa`: add a profile-owned hydrated browser and
-Electron visual gate that opens the real web and desktop renderer targets,
-captures screenshots across mobile/tablet/desktop viewports, checks console
-errors and overflow, and verifies the Runs/Agents/Research/Systems workbench
-views against the design contract.
+After the profile-owned runtime integration gate, the single-run
+`runtime-daemon-composition-smoke`, and the renderer-level
+`presentation-hydrated-visual-qa`, the highest-leverage remaining gap is now
+`full-lifecycle-docker-desktop-gate`: run the full Docker-backed daemon,
+browser gateway, web renderer, desktop renderer, Electron shell, and hydrated
+visual QA as one slower live gate when Docker Desktop is available.
 
 Evidence:
 
@@ -45,6 +44,8 @@ Evidence:
 - `scripts/runtime-profile.mjs`
 - `scripts/runtime-integration-gate.mjs`
 - `scripts/runtime-daemon-composition-smoke.mjs`
+- `scripts/presentation-hydrated-visual-qa.mjs`
+- `scripts/presentation-hydrated-visual-qa-runner.mjs`
 - `configs/runtime/profiles.json`
 - `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/mcp.test.ts`
@@ -55,6 +56,7 @@ Evidence:
 - `test/unit/config-resolver/resolved-state.test.ts`
 - `test/unit/scripts/runtime-integration-gate.test.ts`
 - `test/unit/scripts/runtime-daemon-composition-smoke.test.ts`
+- `test/unit/scripts/presentation-hydrated-visual-qa.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 - `test/smoke/deep-research/live-adapters-smoke.test.ts`
@@ -63,7 +65,9 @@ Evidence:
 - `scripts/deep-research-live-adapters.mjs`
 - `docs/upgrade/gates/deep-research-live-adapters.json`
 - `docs/upgrade/gates/runtime-daemon-composition-smoke.json`
+- `docs/upgrade/gates/presentation-hydrated-visual-qa.json`
 - `docs/upgrade/gates/runtime-integration-gate.json`
+- `docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md`
 - `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
 - `docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`
 - `docs/change-records/2026-06-10-runtime-integration-gate.md`
@@ -72,9 +76,10 @@ Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
-pnpm exec vitest run test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm exec vitest run test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
 pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts
 node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live
+$env:VITE_KIRAKIRA_RUNTIME_MODE='mock'; node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --timeout-ms 240000 --skip-infra --skip-daemon
 node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
 node scripts/deep-research-live-adapters.mjs --profile workbench-host --live

@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "gate": "upgrade",
   "status": "passed",
-  "passedAt": "2026-06-10T02:05:43.130Z",
+  "passedAt": "2026-06-10T03:32:53.233Z",
   "checks": [
     "deep-research:file-source",
     "deep-research:web-source",
@@ -21,7 +21,14 @@
     "daemon:browser-gateway",
     "presentation:web",
     "daemon:socket",
-    "presentation:desktop"
+    "presentation:desktop",
+    "presentation:hydrated-web",
+    "presentation:hydrated-desktop",
+    "presentation:viewport-screenshots",
+    "presentation:console-page-errors",
+    "presentation:horizontal-overflow",
+    "presentation:nonblank-rendering",
+    "presentation:core-workbench-views"
   ],
   "steps": [
     {
@@ -72,6 +79,21 @@
         "presentation:web",
         "daemon:socket",
         "presentation:desktop"
+      ]
+    },
+    {
+      "id": "presentation:hydrated-visual-qa",
+      "kind": "presentation-hydrated-visual-qa",
+      "profile": "workbench-host",
+      "gate": "presentation-hydrated-visual-qa",
+      "checks": [
+        "presentation:hydrated-web",
+        "presentation:hydrated-desktop",
+        "presentation:viewport-screenshots",
+        "presentation:console-page-errors",
+        "presentation:horizontal-overflow",
+        "presentation:nonblank-rendering",
+        "presentation:core-workbench-views"
       ]
     }
   ],

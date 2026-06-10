@@ -96,23 +96,53 @@
       "script": "scripts/runtime-integration-gate.mjs",
       "readinessReportPath": "gates.runtimeIntegration",
       "liveResultPath": "docs/upgrade/gates/runtime-integration-gate.json",
-      "expectation": "The profile-owned upgrade gate must aggregate matching deep-research, memory-persistence, runtime-daemon composition, and web/desktop workbench child gate evidence without duplicating ports, compose services, or local environment constants."
+      "expectation": "The profile-owned upgrade gate must aggregate matching deep-research, memory-persistence, runtime-daemon composition, workbench smoke, and hydrated visual QA child gate evidence without duplicating ports, compose services, or local environment constants."
     },
     "runtimeDaemonCompositionGate": {
       "script": "scripts/runtime-daemon-composition-smoke.mjs",
       "readinessReportPath": "gates.runtimeIntegration.steps[runtime-daemon:composition-smoke]",
       "liveResultPath": "docs/upgrade/gates/runtime-daemon-composition-smoke.json",
       "expectation": "The runtime-daemon composition smoke must prove subagent topology, deep research MCP evidence, MCP policy/trust/audit/OTel metadata, memory recall, checkpoint persistence, and resolved profile readiness in one KernelBridge run."
+    },
+    "presentationHydratedVisualQaGate": {
+      "script": "scripts/presentation-hydrated-visual-qa.mjs",
+      "readinessReportPath": "gates.presentationHydratedVisualQa",
+      "liveResultPath": "docs/upgrade/gates/presentation-hydrated-visual-qa.json",
+      "expectation": "The hydrated visual QA gate must open profile-derived web and desktop renderer URLs, capture mobile/tablet/desktop screenshots, exercise Runs/Agents/Research/Systems views, and report zero unexpected console errors, page errors, overflow violations, or blank screenshots without using unrelated dev-server port 5173."
     }
   },
   "nextMechanismGap": {
-    "id": "presentation-hydrated-visual-qa",
-    "targetName": "frontend-app",
+    "id": "full-lifecycle-docker-desktop-gate",
+    "targetName": "runtime-daemon",
     "priority": "high",
     "status": "partial",
-    "gap": "Add a profile-owned hydrated visual QA gate that opens the real web and desktop renderer targets, captures mobile/tablet/desktop screenshots, checks console and page errors, verifies overflow/nonblank rendering, and exercises Runs, Agents, Research, and Systems views from profile-derived URLs.",
-    "rationale": "The runtime integration gate now includes a single-run runtime-daemon composition smoke, so the broadest remaining goal-level gap is presentation quality: the current evidence proves package structure, SSR rendering, static visual hooks, and readiness targets, but not hydrated browser/Electron rendering quality.",
+    "gap": "Run the full Docker-backed daemon, browser gateway, web renderer, desktop renderer, Electron shell, and hydrated visual QA as one slower live gate when Docker Desktop is available.",
+    "rationale": "The renderer-level hydrated visual QA gate now proves web and desktop screenshots, view navigation, nonblank rendering, console/page errors, and overflow from profile-derived URLs. The remaining broader gap is full lifecycle coverage with Docker-backed services and the daemon/gateway stack instead of the renderer-only mock-runtime path used for fast visual QA in this environment.",
     "evidence": [
+      {
+        "kind": "script",
+        "path": "scripts/presentation-hydrated-visual-qa.mjs"
+      },
+      {
+        "kind": "script",
+        "path": "scripts/presentation-hydrated-visual-qa-runner.mjs"
+      },
+      {
+        "kind": "script",
+        "path": "scripts/runtime-integration-gate.mjs"
+      },
+      {
+        "kind": "config",
+        "path": "configs/runtime/profiles.json"
+      },
+      {
+        "kind": "source",
+        "path": "packages/frontend-app/src/workbench.tsx"
+      },
+      {
+        "kind": "source",
+        "path": "packages/frontend-app/src/styles.css"
+      },
       {
         "kind": "source",
         "path": "apps/web"
@@ -122,44 +152,16 @@
         "path": "apps/desktop"
       },
       {
-        "kind": "source",
-        "path": "packages/frontend-app/src/workbench.tsx"
-      },
-      {
-        "kind": "source",
-        "path": "packages/frontend-core/src"
-      },
-      {
-        "kind": "script",
-        "path": "scripts/kirakira-workbench-smoke.mjs"
-      },
-      {
-        "kind": "script",
-        "path": "scripts/presentation-render-evidence.ts"
-      },
-      {
-        "kind": "config",
-        "path": "configs/runtime/profiles.json"
-      },
-      {
-        "kind": "doc",
-        "path": "docs/design/desktop-web-presentation-contract.md"
+        "kind": "smoke-result",
+        "path": "docs/upgrade/gates/presentation-hydrated-visual-qa.json"
       },
       {
         "kind": "smoke-result",
-        "path": "docs/upgrade/gates/presentation-render-evidence.json"
-      },
-      {
-        "kind": "smoke-result",
-        "path": "docs/upgrade/gates/workbench-presentation-smoke.json"
-      },
-      {
-        "kind": "smoke-result",
-        "path": "docs/upgrade/gates/runtime-daemon-composition-smoke.json"
+        "path": "docs/upgrade/gates/runtime-integration-gate.json"
       },
       {
         "kind": "record",
-        "path": "docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md"
+        "path": "docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md"
       },
       {
         "kind": "reference",
@@ -167,12 +169,10 @@
       }
     ],
     "commands": [
-      "pnpm exec vitest run test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts",
-      "pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts",
-      "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --dry-run",
+      "pnpm exec vitest run test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts",
+      "$env:VITE_KIRAKIRA_RUNTIME_MODE='mock'; node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --timeout-ms 240000 --skip-infra --skip-daemon",
       "node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run",
-      "pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live",
-      "pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 120000 --live",
+      "node scripts/upgrade-readiness.mjs --profile workbench-host --format json",
       "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
     ]
   },
@@ -726,6 +726,15 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md"
+        },
+        {
+          "kind": "gate",
+          "path": "docs/upgrade/gates/presentation-hydrated-visual-qa.json",
+          "command": "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --timeout-ms 240000 --skip-infra --skip-daemon"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md"
         }
       ],
       "remainingGaps": []
@@ -742,13 +751,13 @@
       "targetName": "frontend-app",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns shared web and desktop workbench presentation outside the EAM package baseline."
+      "behavior": "Kirakira owns shared web and desktop workbench presentation outside the EAM package baseline; renderer-level hydrated screenshot QA now covers profile-derived web/desktop targets, mobile/tablet/desktop viewports, Runs/Agents/Research/Systems navigation, nonblank rendering, console/page errors, and overflow. Full daemon/gateway-backed visual execution remains a broader live lifecycle follow-up."
     },
     {
       "targetName": "frontend-core",
       "classification": "intentional-kirakira-extension",
       "status": "partial",
-      "behavior": "Kirakira owns browser-safe frontend projection selectors outside the EAM package baseline."
+      "behavior": "Kirakira owns browser-safe frontend projection selectors outside the EAM package baseline; shared workbench navigation/detail selectors are now exercised by the hydrated visual QA gate across the four core views. Continued projection expansion remains tied to new product surfaces."
     },
     {
       "targetName": "runtime-contracts",

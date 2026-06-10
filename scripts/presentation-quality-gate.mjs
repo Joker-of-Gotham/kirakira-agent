@@ -184,7 +184,7 @@ function buildDesignReview(sources, iaDensity) {
       passed,
       total: scorecard.length,
     },
-    followUp: "Capture screenshots for the same viewport targets once renderer screenshot automation is available.",
+    followUp: "Run scripts/presentation-hydrated-visual-qa.mjs for archived screenshots on the same viewport targets.",
   };
 }
 

@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildEamParityAudit } from "./eam-parity-audit.mjs";
 import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
+import { buildPresentationHydratedVisualQaCommand } from "./presentation-hydrated-visual-qa.mjs";
 import { buildRuntimeIntegrationGateCommand } from "./runtime-integration-gate.mjs";
 import {
   buildRuntimeProfileProjection,
@@ -18,6 +19,8 @@ const DEFAULT_PROFILE = "workbench-host";
 const FORBIDDEN_PORT_TEXT = "5173";
 const PRESENTATION_RENDER_EVIDENCE_PATH =
   "docs/upgrade/gates/presentation-render-evidence.json";
+const PRESENTATION_HYDRATED_VISUAL_QA_PATH =
+  "docs/upgrade/gates/presentation-hydrated-visual-qa.json";
 
 export function normalizeUpgradeReadinessArgs(argv = []) {
   const options = {
@@ -85,6 +88,11 @@ export function buildUpgradeReadinessReport(options = {}) {
     workspaceRoot,
     profile.name,
   );
+  const presentationHydratedVisualQa = buildPresentationHydratedVisualQaGate(
+    workspaceRoot,
+    profile.name,
+    options.env ?? process.env,
+  );
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
     workspaceRoot,
@@ -103,6 +111,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     runtimeIntegrationGate,
     presentationProjection,
     presentationRenderEvidence,
+    presentationHydratedVisualQa,
     harnessHardcoding,
   };
   const tracks = [
@@ -142,6 +151,7 @@ export function buildUpgradeReadinessReport(options = {}) {
       runtimeIntegration: runtimeIntegrationGate,
       presentationProjection,
       presentationRenderEvidence,
+      presentationHydratedVisualQa,
       harnessHardcoding,
     },
     advisoryWarnings: advisories,
@@ -399,6 +409,7 @@ function presentationTrack({
   packageJson,
   presentationProjection,
   presentationRenderEvidence,
+  presentationHydratedVisualQa,
 }) {
   const webTarget = presentationProjection.targets.find((target) => target.surface === "web");
   const desktopTarget = presentationProjection.targets.find(
@@ -444,8 +455,115 @@ function presentationTrack({
         presentationRenderEvidence.status === "pass",
         presentationRenderEvidence.evidence,
       ),
+      passFail(
+        "Hydrated web/Electron visual QA evidence is current",
+        presentationHydratedVisualQa.status === "pass",
+        presentationHydratedVisualQa.evidence,
+      ),
     ],
   };
+}
+
+function buildPresentationHydratedVisualQaGate(workspaceRoot, profileName, env) {
+  const command = buildPresentationHydratedVisualQaCommand(
+    { gateName: "presentation-hydrated-visual-qa", profileName },
+    env,
+  );
+  const resultPath = join(workspaceRoot, PRESENTATION_HYDRATED_VISUAL_QA_PATH);
+  if (!existsSync(resultPath)) {
+    return {
+      status: "fail",
+      resultPath: PRESENTATION_HYDRATED_VISUAL_QA_PATH,
+      resultStatus: "missing",
+      resultMatches: false,
+      evidence: `result=${PRESENTATION_HYDRATED_VISUAL_QA_PATH}; status=missing`,
+    };
+  }
+  const artifact = readJson(resultPath);
+  const surfaces = Array.isArray(artifact.surfaces) ? artifact.surfaces : [];
+  const viewports = Array.isArray(artifact.viewports) ? artifact.viewports : [];
+  const views = Array.isArray(artifact.views) ? artifact.views : [];
+  const surfaceResults = Array.isArray(artifact.surfaceResults) ? artifact.surfaceResults : [];
+  const surfaceNames = surfaces.map((surface) => String(surface)).sort();
+  const viewportIds = viewports.map((viewport) => viewport.id).sort();
+  const viewIds = views.map((view) => view.id).sort();
+  const screenshots = surfaceResults.flatMap((surface) => surface.viewports ?? []);
+  const consoleErrors = screenshots.reduce(
+    (total, viewport) => total + (viewport.consoleMessages ?? []).filter(consoleMessageIsError).length,
+    0,
+  );
+  const pageErrors = screenshots.reduce(
+    (total, viewport) => total + (viewport.pageFailures ?? []).length,
+    0,
+  );
+  const overflowViolations = screenshots.reduce(
+    (total, viewport) =>
+      total +
+      ((viewport.probe?.overflow?.documentHorizontalPixels ?? 0) > 2 ? 1 : 0) +
+      (viewport.probe?.overflow?.clippedText?.length ?? 0),
+    0,
+  );
+  const nonblankScreenshots = screenshots.filter((viewport) => viewport.screenshot?.nonblank === true).length;
+  const resultMatches =
+    artifact.gate === "presentation-hydrated-visual-qa" &&
+    artifact.profile === profileName &&
+    artifact.status === "passed" &&
+    command.evidence?.resultMatches === true &&
+    surfaceNames.includes("desktop") &&
+    surfaceNames.includes("web") &&
+    viewportIds.includes("desktop") &&
+    viewportIds.includes("mobile") &&
+    viewportIds.includes("tablet") &&
+    viewIds.includes("agents") &&
+    viewIds.includes("research") &&
+    viewIds.includes("runs") &&
+    viewIds.includes("systems") &&
+    screenshots.length >= surfaceNames.length * viewportIds.length &&
+    nonblankScreenshots === screenshots.length &&
+    consoleErrors === 0 &&
+    pageErrors === 0 &&
+    overflowViolations === 0 &&
+    !JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT);
+  return {
+    status: resultMatches ? "pass" : "fail",
+    resultPath: PRESENTATION_HYDRATED_VISUAL_QA_PATH,
+    profile: artifact.profile ?? null,
+    resultStatus: artifact.status ?? "missing",
+    resultMatches,
+    surfaces: surfaceNames,
+    viewports: viewportIds,
+    views: viewIds,
+    screenshots: screenshots.length,
+    nonblankScreenshots,
+    consoleErrors,
+    pageErrors,
+    overflowViolations,
+    containsForbiddenPort: JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT),
+    evidence: [
+      `result=${PRESENTATION_HYDRATED_VISUAL_QA_PATH}`,
+      `status=${artifact.status ?? "missing"}`,
+      `profile=${artifact.profile ?? "missing"}`,
+      `surfaces=${surfaceNames.join(",") || "none"}`,
+      `viewports=${viewportIds.join(",") || "none"}`,
+      `views=${viewIds.join(",") || "none"}`,
+      `screenshots=${nonblankScreenshots}/${screenshots.length}`,
+      `consoleErrors=${consoleErrors}`,
+      `pageErrors=${pageErrors}`,
+      `overflow=${overflowViolations}`,
+      `forbiddenPort=${JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT) ? "present" : "absent"}`,
+    ].join("; "),
+  };
+}
+
+function consoleMessageIsError(message) {
+  const level = String(message?.level ?? "").toLowerCase();
+  if (
+    String(message?.message ?? "").includes("Electron Security Warning (Insecure Content-Security-Policy)") &&
+    String(message?.source ?? "").startsWith("node:electron")
+  ) {
+    return false;
+  }
+  return level === "2" || level === "3" || level.includes("error");
 }
 
 function buildPresentationRenderEvidenceGate(workspaceRoot, profileName) {

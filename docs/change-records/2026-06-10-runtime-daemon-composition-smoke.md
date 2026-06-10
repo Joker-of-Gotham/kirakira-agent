@@ -43,5 +43,7 @@ node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 
 This closes the single-run `KernelBridge` composition gap for runtime-daemon
 mechanisms. It does not replace the Docker-backed memory persistence gate or
-the web/desktop presentation smoke gate, and it does not yet provide hydrated
-browser/Electron screenshot QA.
+the web/desktop presentation smoke gate. Renderer-level hydrated
+browser/Electron screenshot QA now lives in
+`docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md`; full
+Docker-backed visual QA remains a slower environment gate.

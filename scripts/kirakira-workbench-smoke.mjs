@@ -474,6 +474,7 @@ export async function runWorkbenchSmoke(smokeCommand, options = {}) {
     runChecked: options.runChecked,
     runForeground: options.runForeground,
     waitForReadiness: options.waitForReadiness,
+    afterReady: options.afterReady,
     readiness: smokeCommand.readiness,
   });
 }

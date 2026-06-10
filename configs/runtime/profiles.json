@@ -289,6 +289,62 @@
       ]
     }
   },
+  "presentationHydratedVisualQaGates": {
+    "presentation-hydrated-visual-qa": {
+      "description": "Profile-owned hydrated visual QA gate opening real web and desktop renderer targets, capturing screenshots, checking console/page errors, overflow, nonblank rendering, and Runs/Agents/Research/Systems navigation.",
+      "profile": "workbench-host",
+      "workbenchSmokeGate": "presentation",
+      "liveEnv": "KIRAKIRA_PRESENTATION_HYDRATED_VISUAL_QA_LIVE",
+      "passedEnv": "KIRAKIRA_PRESENTATION_HYDRATED_VISUAL_QA_PASSED",
+      "resultPath": "docs/upgrade/gates/presentation-hydrated-visual-qa.json",
+      "screenshotDir": "docs/upgrade/gates/presentation-hydrated-visual-qa",
+      "surfaces": ["web", "desktop"],
+      "viewports": [
+        { "id": "mobile", "width": 375, "height": 812 },
+        { "id": "tablet", "width": 768, "height": 1024 },
+        { "id": "desktop", "width": 1440, "height": 900 }
+      ],
+      "views": [
+        {
+          "id": "runs",
+          "label": "Runs",
+          "navAriaLabel": "Show run operations workspace",
+          "selector": "workbench-view-runs",
+          "workspaceAriaLabel": "Run operations workspace"
+        },
+        {
+          "id": "agents",
+          "label": "Agents",
+          "navAriaLabel": "Show agent swarm workspace",
+          "selector": "workbench-view-agents",
+          "workspaceAriaLabel": "Agent swarm workspace"
+        },
+        {
+          "id": "research",
+          "label": "Research",
+          "navAriaLabel": "Show research evidence workspace",
+          "selector": "workbench-view-research",
+          "workspaceAriaLabel": "Research evidence workspace"
+        },
+        {
+          "id": "systems",
+          "label": "Systems",
+          "navAriaLabel": "Show runtime systems workspace",
+          "selector": "workbench-view-systems",
+          "workspaceAriaLabel": "Memory, MCP, and artifact systems"
+        }
+      ],
+      "checks": [
+        "presentation:hydrated-web",
+        "presentation:hydrated-desktop",
+        "presentation:viewport-screenshots",
+        "presentation:console-page-errors",
+        "presentation:horizontal-overflow",
+        "presentation:nonblank-rendering",
+        "presentation:core-workbench-views"
+      ]
+    }
+  },
   "integrationGates": {
     "upgrade": {
       "description": "Profile-owned integration release gate spanning deep research, memory persistence, and web/desktop workbench presentation.",
@@ -317,6 +373,12 @@
           "kind": "workbench-smoke",
           "profile": "workbench-host",
           "gate": "presentation"
+        },
+        {
+          "id": "presentation:hydrated-visual-qa",
+          "kind": "presentation-hydrated-visual-qa",
+          "profile": "workbench-host",
+          "gate": "presentation-hydrated-visual-qa"
         }
       ]
     }

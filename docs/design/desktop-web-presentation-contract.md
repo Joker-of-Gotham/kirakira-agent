@@ -65,6 +65,7 @@ Run these after desktop presentation changes:
 
 ```powershell
 node scripts/presentation-quality-gate.mjs --profile workbench-host --format markdown --artifact tmp/presentation-quality/workbench-host.json --fail-on-issues
+node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --skip-infra --skip-daemon
 pnpm --filter @kirakira/desktop typecheck
 pnpm exec vitest run test/unit/desktop/startup-manifest.test.ts test/unit/desktop/main-security.test.ts test/unit/desktop/preload.test.ts test/unit/desktop/renderer-endpoint.test.ts test/unit/desktop/runtime-ipc.test.ts test/unit/desktop/desktop-transport.test.ts
 ```
@@ -74,11 +75,28 @@ the shared renderer contract, validates multi-view IA density, and can write a
 JSON QA artifact without starting Web, Electron, Docker, or local services. The
 artifact also carries a seven-dimension visual review scorecard and mobile,
 tablet, and desktop viewport targets so design QA has an archiveable record
-before screenshot automation is available.
+before live screenshot automation is needed.
+
+The hydrated visual QA gate is the screenshot automation layer:
+
+- `configs/runtime/profiles.json` owns
+  `presentationHydratedVisualQaGates.presentation-hydrated-visual-qa`.
+- `scripts/presentation-hydrated-visual-qa.mjs` starts the selected
+  web/desktop renderer surfaces through the workbench smoke harness, then uses
+  an Electron offscreen `BrowserWindow` runner to open profile-derived URLs.
+- The gate captures `web` and `desktop` screenshots for `mobile`, `tablet`,
+  and `desktop` viewports, clicks the shared Runs, Agents, Research, and
+  Systems navigation buttons, and fails on blank renders, page failures,
+  unexpected console errors, horizontal overflow, or missing active-view
+  markers.
+- Durable evidence lives at
+  `docs/upgrade/gates/presentation-hydrated-visual-qa.json`, with PNGs under
+  `docs/upgrade/gates/presentation-hydrated-visual-qa/`.
 
 Remaining design work:
 
 - Document the shared web/desktop view taxonomy once multi-view workbench
   routing stabilizes.
-- Capture archived visual QA snapshots from the presentation gate once renderer
-  screenshot automation lands.
+- Run the same hydrated gate against the full Docker-backed daemon/gateway stack
+  when Docker Desktop is available, instead of the renderer-only mock-runtime
+  path used for fast visual QA.

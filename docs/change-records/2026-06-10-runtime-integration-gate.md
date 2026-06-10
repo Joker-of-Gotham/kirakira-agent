@@ -8,7 +8,8 @@ Date: 2026-06-10
   `configs/runtime/profiles.json`.
 - Added `scripts/runtime-integration-gate.mjs` as the aggregate release gate
   entrypoint for deep research live adapters, memory persistence,
-  runtime-daemon composition, and web/desktop workbench presentation.
+  runtime-daemon composition, web/desktop workbench presentation, and hydrated
+  presentation visual QA.
 - Added the root `pnpm integration:gate` script.
 - Wired `scripts/upgrade-readiness.mjs` to consume the aggregate gate under
   `gates.runtimeIntegration`.
@@ -33,6 +34,7 @@ Date: 2026-06-10
 
 ```powershell
 pnpm.cmd exec vitest run test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm.cmd exec vitest run test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts
 node scripts/upgrade-readiness.mjs --profile workbench-host --format json
 ```
 
@@ -41,5 +43,8 @@ node scripts/upgrade-readiness.mjs --profile workbench-host --format json
 This closes the first aggregate Docker/local release gate: existing child live
 evidence is now summarized by one profile-owned artifact and command. The
 single-run `KernelBridge` mechanism proof now lives in
-`docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`; hydrated
-browser/Electron visual QA remains a separate presentation gate.
+`docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`; the
+renderer-level hydrated browser/Electron visual QA proof now lives in
+`docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md`. Full
+Docker-backed daemon/gateway visual QA still requires Docker Desktop to be
+available.

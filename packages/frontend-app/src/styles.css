@@ -1206,7 +1206,7 @@ a:focus-visible {
 }
 
 .kk-topology-summary {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 62px), 1fr));
   gap: 6px;
   margin: 0 0 10px;
 }
@@ -1229,6 +1229,8 @@ a:focus-visible {
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
 .kk-topology-summary dd {

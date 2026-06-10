@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildWorkbenchSmokeGateCommand } from "./kirakira-workbench-smoke.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
+import { buildPresentationHydratedVisualQaCommand } from "./presentation-hydrated-visual-qa.mjs";
 import { buildRuntimeDaemonCompositionSmokeCommand } from "./runtime-daemon-composition-smoke.mjs";
 import { loadRuntimeProfiles } from "./runtime-profile.mjs";
 
@@ -18,6 +19,7 @@ const FALLBACK_LIVE_ENV = "KIRAKIRA_RUNTIME_INTEGRATION_GATE_LIVE";
 const GATE_BUILDERS = Object.freeze({
   "deep-research-live-adapters": buildDeepResearchStep,
   "memory-persistence": buildMemoryPersistenceStep,
+  "presentation-hydrated-visual-qa": buildPresentationHydratedVisualQaStep,
   "runtime-daemon-composition": buildRuntimeDaemonCompositionStep,
   "workbench-smoke": buildWorkbenchSmokeStep,
 });
@@ -344,6 +346,39 @@ function buildRuntimeDaemonCompositionStep(entry, options, env) {
         profile,
         "--timeout-ms",
         String(options.timeoutMs),
+        "--live",
+      ],
+    ],
+    env: {
+      KIRAKIRA_RUNTIME_PROFILE: profile,
+    },
+  };
+}
+
+function buildPresentationHydratedVisualQaStep(entry, options, env) {
+  const profile = requiredString(entry.profile, "presentation-hydrated-visual-qa.profile");
+  const gateName = requiredString(entry.gate, "presentation-hydrated-visual-qa.gate");
+  const skipInfra = entry.skipInfra === true || options.skipInfra === true;
+  const command = buildPresentationHydratedVisualQaCommand({
+    gateName,
+    profileName: profile,
+    live: options.live,
+    timeoutMs: options.timeoutMs,
+    skipInfra,
+  }, env);
+  return {
+    command,
+    commandArgs: [
+      process.execPath,
+      [
+        "scripts/presentation-hydrated-visual-qa.mjs",
+        "--gate",
+        gateName,
+        "--profile",
+        profile,
+        "--timeout-ms",
+        String(options.timeoutMs),
+        ...(skipInfra ? ["--skip-infra"] : []),
         "--live",
       ],
     ],
