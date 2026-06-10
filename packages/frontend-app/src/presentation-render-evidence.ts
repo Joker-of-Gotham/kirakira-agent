@@ -104,10 +104,12 @@ const SHARED_SELECTOR_MARKERS = Object.freeze([
   { id: "run-navigation", value: 'aria-label="Run navigation"' },
   { id: "workspace", value: 'aria-label="Runtime workspace"' },
   { id: "workspace-views", value: 'aria-label="Workspace views"' },
+  { id: "command-layer", value: 'aria-label="Open command palette"' },
 ]);
 
 const SHARED_TEXT_MARKERS = Object.freeze([
   { id: "product", value: "Kirakira Agent" },
+  { id: "commands", value: "Commands" },
   { id: "runs", value: "Runs" },
   { id: "recent-runs", value: "Recent Runs" },
   { id: "systems", value: "Systems" },

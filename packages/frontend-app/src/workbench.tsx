@@ -4,6 +4,8 @@ import {
   Bot,
   CheckCircle2,
   CircleDot,
+  Command,
+  CornerDownLeft,
   Clock3,
   Cpu,
   ExternalLink,
@@ -13,10 +15,12 @@ import {
   Play,
   PlugZap,
   RefreshCw,
+  Search,
   ShieldCheck,
   Square,
   TerminalSquare,
   Wrench,
+  X,
 } from "lucide-react";
 import {
   createMcpDirectoryView,
@@ -70,9 +74,14 @@ import {
   type WorkbenchSelectedSubagentDrawer,
   type WorkbenchViewId,
 } from "@kirakira/frontend-core";
-import type { FormEvent, ReactNode } from "react";
+import type { FormEvent, KeyboardEvent as ReactKeyboardEvent, ReactNode, RefObject } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RunEvent, RuntimeRunMode } from "@kirakira/runtime-contracts";
+import {
+  createWorkbenchCommandActions,
+  filterWorkbenchCommandActions,
+  type WorkbenchCommandAction,
+} from "./command-actions.js";
 import { createMockRuntimeTransport } from "./mock-transport.js";
 
 export type KirakiraPresentationSurface = "web" | "desktop";
@@ -246,6 +255,35 @@ export function KirakiraWorkbench({
   const [commandStatus, setCommandStatus] =
     useState<RunCommandCenterStatus>(defaultCommandStatus);
   const [commandBusy, setCommandBusy] = useState<RunCommandAction | undefined>();
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const commandPaletteTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const commandPaletteSearchRef = useRef<HTMLInputElement | null>(null);
+  const commandPaletteWasOpenRef = useRef(false);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      if (event.key.toLowerCase() !== "k") return;
+      event.preventDefault();
+      setCommandPaletteOpen((open) => !open);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (commandPaletteOpen) {
+      commandPaletteWasOpenRef.current = true;
+      const frame = window.requestAnimationFrame(() => commandPaletteSearchRef.current?.focus());
+      return () => window.cancelAnimationFrame(frame);
+    }
+    if (commandPaletteWasOpenRef.current) {
+      commandPaletteWasOpenRef.current = false;
+      commandPaletteTriggerRef.current?.focus();
+    }
+    return undefined;
+  }, [commandPaletteOpen]);
 
   useEffect(() => {
     let disposed = false;
@@ -716,6 +754,119 @@ export function KirakiraWorkbench({
         }
       : undefined);
   const pendingApproval = projection.pendingApprovalIds[0];
+  const workbenchCommandActions = useMemo(
+    () =>
+      createWorkbenchCommandActions({
+        runId: commandTargetRunId,
+        activeView: navigation.activeView,
+        views: navigation.items.map((item) => ({
+          id: item.id,
+          label: item.label,
+          status: item.status,
+          selected: item.selected,
+        })),
+        attention: workstream.attention,
+        pendingApprovalId: pendingApproval,
+        activeArtifactId,
+        activeArtifactTitle: detailViews.artifactDetails.selected?.title,
+        selectedMcpTool,
+        commandBusy: commandBusy !== undefined || mcpToolCall.status === "loading",
+        drafts: {
+          steerInstruction: commandCenter.steerInstruction,
+          enqueuePrompt: commandCenter.enqueuePrompt,
+          interruptId: commandCenter.interruptId,
+        },
+      }),
+    [
+      activeArtifactId,
+      commandBusy,
+      commandCenter.enqueuePrompt,
+      commandCenter.interruptId,
+      commandCenter.steerInstruction,
+      commandTargetRunId,
+      detailViews.artifactDetails.selected?.title,
+      mcpToolCall.status,
+      navigation.activeView,
+      navigation.items,
+      pendingApproval,
+      selectedMcpTool,
+      workstream.attention,
+    ],
+  );
+  const executeWorkbenchCommand = useCallback(
+    (action: WorkbenchCommandAction) => {
+      if (action.disabled) return;
+      setCommandPaletteOpen(false);
+      setCommandPaletteQuery("");
+      if (action.kind === "steer_run") {
+        void steerRun();
+        return;
+      }
+      if (action.kind === "enqueue_prompt") {
+        void enqueuePrompt();
+        return;
+      }
+      if (action.kind === "provide_input") {
+        void provideRunInput();
+        return;
+      }
+      if (action.kind === "resume_run") {
+        void resumeRun();
+        return;
+      }
+      if (action.kind === "inspect_run") {
+        void inspectRun();
+        return;
+      }
+      if (action.kind === "open_view" && action.viewId) {
+        selectWorkbenchView(action.viewId);
+        return;
+      }
+      if (action.kind === "open_attention") {
+        selectWorkbenchView("runs");
+        if (action.targetId) selectWorkstreamItem(action.targetId, action.focusId);
+        else if (action.focusId) setSelectedFocusId(action.focusId);
+        return;
+      }
+      if (action.kind === "open_approval") {
+        selectWorkbenchView("runs");
+        if (action.targetId) selectWorkstreamItem(action.targetId, action.focusId);
+        return;
+      }
+      if (action.kind === "approve_gate") {
+        void approve("approve");
+        return;
+      }
+      if (action.kind === "open_artifact") {
+        selectWorkbenchView("research");
+        if (action.focusId) setSelectedFocusId(action.focusId);
+        return;
+      }
+      if (action.kind === "open_mcp_tool") {
+        selectWorkbenchView("systems");
+        setInspectorViewId("mcp");
+        if (action.targetId) setSelectedMcpToolId(action.targetId);
+        return;
+      }
+      if (action.kind === "call_mcp_tool") {
+        selectWorkbenchView("systems");
+        setInspectorViewId("mcp");
+        if (action.targetId) setSelectedMcpToolId(action.targetId);
+        void callSelectedMcpTool();
+      }
+    },
+    [
+      approve,
+      callSelectedMcpTool,
+      enqueuePrompt,
+      inspectRun,
+      provideRunInput,
+      resumeRun,
+      selectWorkbenchView,
+      selectWorkstreamItem,
+      steerRun,
+    ],
+  );
   const graph = projection.graph;
   const graphNodes = Object.values(graph.nodes).sort((a, b) => {
     if (a.id === graph.rootNodeId) return -1;
@@ -846,9 +997,23 @@ export function KirakiraWorkbench({
             <p className="kk-kicker">{activeNavigationLabel} workbench</p>
             <h1>{projection.runId ?? "Ready for a run"}</h1>
           </div>
-          <div className={`kk-connection kk-connection-${connection}`}>
-            <CircleDot size={16} />
-            {connection}
+          <div className="kk-topbar-actions">
+            <button
+              ref={commandPaletteTriggerRef}
+              type="button"
+              className="kk-command-trigger"
+              aria-label="Open command palette"
+              aria-haspopup="dialog"
+              aria-expanded={commandPaletteOpen}
+              onClick={() => setCommandPaletteOpen(true)}
+            >
+              <Command size={16} />
+              <span>Commands</span>
+            </button>
+            <div className={`kk-connection kk-connection-${connection}`}>
+              <CircleDot size={16} />
+              {connection}
+            </div>
           </div>
         </header>
 
@@ -1127,7 +1292,200 @@ export function KirakiraWorkbench({
           </dl>
         </section>
       </aside>
+
+      <WorkbenchCommandPalette
+        open={commandPaletteOpen}
+        actions={workbenchCommandActions}
+        query={commandPaletteQuery}
+        searchRef={commandPaletteSearchRef}
+        onQueryChange={setCommandPaletteQuery}
+        onClose={() => setCommandPaletteOpen(false)}
+        onExecute={executeWorkbenchCommand}
+      />
     </main>
+  );
+}
+
+function WorkbenchCommandPalette({
+  open,
+  actions,
+  query,
+  searchRef,
+  onQueryChange,
+  onClose,
+  onExecute,
+}: {
+  open: boolean;
+  actions: readonly WorkbenchCommandAction[];
+  query: string;
+  searchRef: RefObject<HTMLInputElement | null>;
+  onQueryChange: (query: string) => void;
+  onClose: () => void;
+  onExecute: (action: WorkbenchCommandAction) => void;
+}) {
+  const panelRef = useRef<HTMLElement | null>(null);
+  const resultRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const filteredActions = useMemo(
+    () => filterWorkbenchCommandActions(actions, query),
+    [actions, query],
+  );
+  const groupedActions = useMemo(() => {
+    const groups = new Map<string, WorkbenchCommandAction[]>();
+    for (const action of filteredActions) {
+      const items = groups.get(action.group) ?? [];
+      items.push(action);
+      groups.set(action.group, items);
+    }
+    return [...groups.entries()];
+  }, [filteredActions]);
+  const firstEnabledAction = filteredActions.find((action) => !action.disabled);
+
+  if (!open) return null;
+
+  const focusResult = (direction: 1 | -1, currentIndex?: number) => {
+    const enabledRefs = resultRefs.current
+      .map((element, index) => ({ element, index }))
+      .filter((item) => item.element && !item.element.disabled);
+    if (enabledRefs.length === 0) return;
+    if (currentIndex === undefined) {
+      enabledRefs[0]?.element?.focus();
+      return;
+    }
+    const position = enabledRefs.findIndex((item) => item.index === currentIndex);
+    const nextPosition = position === -1
+      ? 0
+      : (position + direction + enabledRefs.length) % enabledRefs.length;
+    enabledRefs[nextPosition]?.element?.focus();
+  };
+
+  const trapDialogFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key !== "Tab") return;
+    const focusable = panelRef.current?.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), input:not(:disabled), [href], [tabindex]:not([tabindex="-1"])',
+    );
+    if (!focusable || focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first || !last) return;
+    const active = document.activeElement;
+    if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+      return;
+    }
+    if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  resultRefs.current = [];
+  let optionCursor = 0;
+
+  return (
+    <div
+      className="kk-command-palette-backdrop"
+      role="presentation"
+      onMouseDown={onClose}
+    >
+      <section
+        ref={panelRef}
+        className="kk-command-palette"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="kk-command-palette-title"
+        onMouseDown={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+            return;
+          }
+          trapDialogFocus(event);
+        }}
+      >
+        <header className="kk-command-palette-head">
+          <div>
+            <p className="kk-kicker">Command Layer</p>
+            <h2 id="kk-command-palette-title">Workbench Commands</h2>
+          </div>
+          <button type="button" className="kk-icon-button" aria-label="Close command palette" onClick={onClose}>
+            <X size={16} />
+          </button>
+        </header>
+        <label className="kk-command-search-label" htmlFor="kk-command-query">
+          <Search size={17} />
+          <input
+            ref={searchRef}
+            id="kk-command-query"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && firstEnabledAction) {
+                event.preventDefault();
+                onExecute(firstEnabledAction);
+                return;
+              }
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                focusResult(1);
+              }
+            }}
+            placeholder="Search runs, gates, artifacts, MCP tools"
+            autoComplete="off"
+          />
+        </label>
+        <div className="kk-command-results" aria-label="Workbench command results">
+          {groupedActions.length === 0 ? (
+            <div className="kk-command-empty">No matching commands</div>
+          ) : (
+            groupedActions.map(([group, groupActions]) => (
+              <section key={group} className="kk-command-group" aria-label={group}>
+                <h3>{group}</h3>
+                <div>
+                  {groupActions.map((action) => {
+                    const optionIndex = optionCursor;
+                    optionCursor += 1;
+                    return (
+                      <button
+                        key={action.id}
+                        ref={(element) => {
+                          resultRefs.current[optionIndex] = element;
+                        }}
+                        type="button"
+                        className={`kk-command-option kk-command-option-${action.tone}`}
+                        disabled={action.disabled}
+                        title={action.disabledReason}
+                        onClick={() => onExecute(action)}
+                        onKeyDown={(event) => {
+                          if (event.key === "ArrowDown") {
+                            event.preventDefault();
+                            focusResult(1, optionIndex);
+                          }
+                          if (event.key === "ArrowUp") {
+                            event.preventDefault();
+                            if (optionIndex === 0) searchRef.current?.focus();
+                            else focusResult(-1, optionIndex);
+                          }
+                        }}
+                      >
+                        <span className="kk-command-option-copy">
+                          <strong>{action.label}</strong>
+                          <small>{action.disabledReason ?? action.detail ?? action.id}</small>
+                        </span>
+                        <span className="kk-command-option-status">
+                          {action.disabled ? <Square size={14} /> : <CornerDownLeft size={15} />}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
 

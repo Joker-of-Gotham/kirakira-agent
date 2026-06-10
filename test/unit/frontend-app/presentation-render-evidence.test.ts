@@ -31,6 +31,13 @@ describe("presentation render evidence", () => {
       expect(surface.html.sha256).toMatch(/^[a-f0-9]{64}$/u);
       expect(surface.selectors.every((marker) => marker.status === "pass")).toBe(true);
       expect(surface.textMarkers.every((marker) => marker.status === "pass")).toBe(true);
+      expect(surface.selectors).toContainEqual(
+        expect.objectContaining({
+          id: "command-layer",
+          value: 'aria-label="Open command palette"',
+          status: "pass",
+        }),
+      );
       expect(Object.values(surface.transportCalls)).toEqual(
         expect.arrayContaining([0]),
       );

@@ -381,6 +381,198 @@ a:focus-visible {
   text-transform: capitalize;
 }
 
+.kk-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.kk-command-trigger {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 7px 11px;
+  background: var(--kk-color-surface-raised);
+  color: var(--kk-ink);
+  box-shadow: 0 8px 22px rgb(12 27 35 / 7%);
+  cursor: pointer;
+}
+
+.kk-command-trigger span {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.kk-command-palette-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: start center;
+  padding: min(12vh, 92px) 18px 24px;
+  background: rgb(15 23 26 / 38%);
+}
+
+.kk-command-palette {
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 12px;
+  border: 1px solid var(--kk-border-strong);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--kk-surface);
+  box-shadow: 0 26px 80px rgb(12 27 35 / 28%);
+}
+
+.kk-command-palette-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kk-command-palette-head h2 {
+  margin: 0;
+  color: var(--kk-ink);
+  font-size: 1.05rem;
+}
+
+.kk-command-search-label {
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 0 12px;
+  background: var(--kk-color-surface-subtle);
+  color: var(--kk-text-muted);
+}
+
+.kk-command-search-label input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--kk-ink);
+}
+
+.kk-command-results {
+  min-height: 180px;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-right: 2px;
+}
+
+.kk-command-group {
+  display: grid;
+  gap: 6px;
+}
+
+.kk-command-group h3 {
+  margin: 0;
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.kk-command-group > div {
+  display: grid;
+  gap: 6px;
+}
+
+.kk-command-option {
+  min-width: 0;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  background: var(--kk-surface);
+  color: var(--kk-text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.kk-command-option-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.kk-command-option-copy strong,
+.kk-command-option-copy small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-command-option-copy strong {
+  color: var(--kk-ink);
+  font-size: 0.86rem;
+}
+
+.kk-command-option-copy small {
+  color: var(--kk-text-muted);
+  font-size: 0.74rem;
+}
+
+.kk-command-option-status {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text-muted);
+  background: var(--kk-color-surface-raised);
+}
+
+.kk-command-option-success {
+  border-color: var(--kk-color-success-border);
+}
+
+.kk-command-option-warning {
+  border-color: var(--kk-color-warning-border);
+}
+
+.kk-command-option-critical {
+  border-color: var(--kk-color-danger-border);
+}
+
+.kk-command-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+}
+
+.kk-command-empty {
+  min-height: 140px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text-muted);
+  background: var(--kk-color-surface-subtle);
+}
+
 .kk-connection-connected {
   color: var(--kk-green);
 }
@@ -3681,6 +3873,23 @@ a.kk-system-row:hover,
     flex-direction: column;
   }
 
+  .kk-topbar-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .kk-command-trigger {
+    flex: 1 1 auto;
+  }
+
+  .kk-command-palette-backdrop {
+    padding: 12px;
+  }
+
+  .kk-command-palette {
+    max-height: calc(100vh - 24px);
+  }
+
   .kk-topbar h1 {
     max-width: 100%;
   }
@@ -3688,6 +3897,8 @@ a.kk-system-row:hover,
 
 @media (prefers-reduced-motion: no-preference) {
   .kk-submit,
+  .kk-command-trigger,
+  .kk-command-option,
   .kk-nav-item,
   .kk-run-item,
   .kk-icon-button,
@@ -3712,6 +3923,8 @@ a.kk-system-row:hover,
 
   .kk-submit:hover,
   .kk-icon-button:hover,
+  .kk-command-trigger:hover,
+  .kk-command-option:hover:not(:disabled),
   .kk-nav-item:hover,
   .kk-run-item:hover,
   .kk-focus-item:hover,

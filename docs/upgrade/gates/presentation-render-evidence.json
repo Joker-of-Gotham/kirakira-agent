@@ -3,7 +3,7 @@
   "gate": "presentation-render-evidence",
   "profile": "workbench-host",
   "status": "passed",
-  "generatedAt": "2026-06-10T07:14:44.453Z",
+  "generatedAt": "2026-06-10T09:40:04.404Z",
   "command": "tsx --tsconfig tsconfig.base.json scripts/presentation-render-evidence.ts --profile workbench-host --write-result C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-render-evidence.json",
   "inputs": {
     "sharedRenderer": "packages/frontend-app/src/workbench.tsx",
@@ -16,8 +16,8 @@
       "transportMode": "browser-gateway",
       "environmentLabel": "Browser gateway",
       "html": {
-        "bytes": 24798,
-        "sha256": "9de6c0bbcb01a20e6fdec3194d5339b880852234f2d8dd70254f6acd8f064f14"
+        "bytes": 25318,
+        "sha256": "b36563398e9d91bae96bca0354d4e81aba7cd1c24cc29602f341c650c79eeb06"
       },
       "selectors": [
         {
@@ -41,6 +41,11 @@
           "status": "pass"
         },
         {
+          "id": "command-layer",
+          "value": "aria-label=\"Open command palette\"",
+          "status": "pass"
+        },
+        {
           "id": "surface-identity",
           "value": "data-kk-presentation-surface=\"web\"",
           "status": "pass"
@@ -50,6 +55,11 @@
         {
           "id": "product",
           "value": "Kirakira Agent",
+          "status": "pass"
+        },
+        {
+          "id": "commands",
+          "value": "Commands",
           "status": "pass"
         },
         {
@@ -99,8 +109,8 @@
       "transportMode": "desktop-ipc",
       "environmentLabel": "Desktop IPC",
       "html": {
-        "bytes": 24794,
-        "sha256": "af600aa9d5144e1b6d57c7ef004b1486171549d8543f205d77bf437b24adba3d"
+        "bytes": 25314,
+        "sha256": "d81e2b588c8c3a437135a449bba01ef1222b024098233d00ebdbb26762738435"
       },
       "selectors": [
         {
@@ -124,6 +134,11 @@
           "status": "pass"
         },
         {
+          "id": "command-layer",
+          "value": "aria-label=\"Open command palette\"",
+          "status": "pass"
+        },
+        {
           "id": "surface-identity",
           "value": "data-kk-presentation-surface=\"desktop\"",
           "status": "pass"
@@ -133,6 +148,11 @@
         {
           "id": "product",
           "value": "Kirakira Agent",
+          "status": "pass"
+        },
+        {
+          "id": "commands",
+          "value": "Commands",
           "status": "pass"
         },
         {
@@ -183,7 +203,7 @@
       "id": "web:html",
       "label": "web SSR markup",
       "status": "pass",
-      "evidence": "bytes=24798; sha256=9de6c0bbcb01a20e6fdec3194d5339b880852234f2d8dd70254f6acd8f064f14"
+      "evidence": "bytes=25318; sha256=b36563398e9d91bae96bca0354d4e81aba7cd1c24cc29602f341c650c79eeb06"
     },
     {
       "id": "web:selectors",
@@ -207,7 +227,7 @@
       "id": "desktop:html",
       "label": "desktop SSR markup",
       "status": "pass",
-      "evidence": "bytes=24794; sha256=af600aa9d5144e1b6d57c7ef004b1486171549d8543f205d77bf437b24adba3d"
+      "evidence": "bytes=25314; sha256=d81e2b588c8c3a437135a449bba01ef1222b024098233d00ebdbb26762738435"
     },
     {
       "id": "desktop:selectors",
