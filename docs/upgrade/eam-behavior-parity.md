@@ -25,11 +25,13 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the profile-owned runtime integration gate, the highest-leverage remaining
-mechanism gap is now `runtime-daemon-composition-smoke`: add one live daemon
-composition smoke that proves subagent topology, deep research, MCP gateway
-policy/trust/audit/OTel metadata, memory recall/checkpoint wiring, and profile
-readiness in a single `KernelBridge` run.
+After the profile-owned runtime integration gate and the single-run
+`runtime-daemon-composition-smoke`, the highest-leverage remaining gap is now
+`presentation-hydrated-visual-qa`: add a profile-owned hydrated browser and
+Electron visual gate that opens the real web and desktop renderer targets,
+captures screenshots across mobile/tablet/desktop viewports, checks console
+errors and overflow, and verifies the Runs/Agents/Research/Systems workbench
+views against the design contract.
 
 Evidence:
 
@@ -42,6 +44,7 @@ Evidence:
 - `packages/config-resolver/src/runtime-projection.ts`
 - `scripts/runtime-profile.mjs`
 - `scripts/runtime-integration-gate.mjs`
+- `scripts/runtime-daemon-composition-smoke.mjs`
 - `configs/runtime/profiles.json`
 - `test/unit/deep-research/file.test.ts`
 - `test/unit/deep-research/mcp.test.ts`
@@ -51,21 +54,27 @@ Evidence:
 - `test/unit/runtime/profile-resolution.test.ts`
 - `test/unit/config-resolver/resolved-state.test.ts`
 - `test/unit/scripts/runtime-integration-gate.test.ts`
+- `test/unit/scripts/runtime-daemon-composition-smoke.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
 - `test/unit/orchestrator-kernel/research-event-bridge.test.ts`
 - `test/smoke/deep-research/live-adapters-smoke.test.ts`
 - `test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts`
+- `test/smoke/runtime-daemon/composition-smoke.test.ts`
 - `scripts/deep-research-live-adapters.mjs`
 - `docs/upgrade/gates/deep-research-live-adapters.json`
+- `docs/upgrade/gates/runtime-daemon-composition-smoke.json`
 - `docs/upgrade/gates/runtime-integration-gate.json`
 - `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
+- `docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`
 - `docs/change-records/2026-06-10-runtime-integration-gate.md`
 
 Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
-pnpm exec vitest run test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm exec vitest run test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts
+node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live
 node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
 node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
@@ -120,7 +129,7 @@ pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 12
 | `memory-store` | Intentional Kirakira extension | Covered | Daemon checkpoint repository selection, checkpoint envelope compatibility, daemon retain/reflect service bridge contracts, reflect runtime event kinds, reflect started/completed/failed event emission, and the isolated `test-host` live gate are covered. `node scripts/memory-persistence-smoke.mjs --profile test-host --live` passed unit checkpoint/retain contracts plus live checkpoint, retain/recall, reflect observation, belief, and outbox persistence tests; durable evidence is in `docs/upgrade/gates/memory-persistence-smoke.json`. | None. |
 | `model-gateway` | Intentional Kirakira extension | Covered | Python model-gateway now loads OpenAI-compatible provider defaults, aliases, key env names, and endpoint path rules from `packages/core/src/model-providers.catalog.json`, with pytest coverage for catalog override, provider auto-detection, URL construction, and provider factory aliases plus TypeScript provider catalog tests. | Model aliases, capabilities, and price metadata still need their own model metadata catalog follow-up, but provider catalog parity is closed. |
 | `orchestrator-kernel` | Intentional Kirakira extension | Covered | Task executor and daemon orchestrator tests cover subagent bridge execution, research execution, bounded evidence output, topology lane routing, role defaults, deterministic lineage IDs, handoff edge IDs, permission metadata, async checkpoint events, and top-level agent-runtime delegate metadata fields. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, and multiple daemon memory source fanout through the orchestrator research executor. | None. |
-| `runtime-daemon` | Intentional Kirakira extension | Covered | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway; `runtimeProfileComposition` now feeds daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults; SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory; retain/reflect memory operations share the daemon memory service path with typed runtime events. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json`. | None. |
+| `runtime-daemon` | Intentional Kirakira extension | Covered | MCP runtime, daemon MCP tool gateway, memory runtime deps, daemon config, socket path, browser gateway, lifecycle tests, selected-profile helper coverage, profile-owned workbench smoke gate contracts, and the live web + desktop presentation smoke gate cover the new composition surfaces. Delegated ToolExecutor paths now use the daemon gateway; `runtimeProfileComposition` now feeds daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults; SDK-owned MCP export uses a daemon-hosted OTLP HTTP/JSON factory; retain/reflect memory operations share the daemon memory service path with typed runtime events. `test/smoke/runtime-daemon/composition-smoke.test.ts` now proves subagent topology, deep research MCP evidence, MCP policy/trust/audit/OTel metadata, memory recall, checkpoint persistence, and resolved profile readiness in one `KernelBridge` run. Durable live gate evidence is in `docs/upgrade/gates/workbench-presentation-smoke.json` and `docs/upgrade/gates/runtime-daemon-composition-smoke.json`. | None. |
 
 ## Extra Target Entries
 
@@ -157,11 +166,11 @@ profile, required suites, unit tests, adapter smoke, KernelBridge event smoke,
 and MCP checks match the current gate contract.
 
 `gates.runtimeIntegration` now aggregates the profile-owned deep-research,
-memory-persistence, and web/desktop workbench child gates through
-`scripts/runtime-integration-gate.mjs`. It passes only when child gate evidence
-matches the current configured profiles and the aggregate artifact
-`docs/upgrade/gates/runtime-integration-gate.json` matches the current step
-identity.
+memory-persistence, runtime-daemon composition, and web/desktop workbench child
+gates through `scripts/runtime-integration-gate.mjs`. It passes only when child
+gate evidence matches the current configured profiles and the aggregate
+artifact `docs/upgrade/gates/runtime-integration-gate.json` matches the current
+step identity.
 
 ## Readiness Interpretation
 

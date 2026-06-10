@@ -7,8 +7,8 @@ Date: 2026-06-10
 - Added profile-owned `integrationGates.upgrade` to
   `configs/runtime/profiles.json`.
 - Added `scripts/runtime-integration-gate.mjs` as the aggregate release gate
-  entrypoint for deep research live adapters, memory persistence, and
-  web/desktop workbench presentation.
+  entrypoint for deep research live adapters, memory persistence,
+  runtime-daemon composition, and web/desktop workbench presentation.
 - Added the root `pnpm integration:gate` script.
 - Wired `scripts/upgrade-readiness.mjs` to consume the aggregate gate under
   `gates.runtimeIntegration`.
@@ -39,7 +39,7 @@ node scripts/upgrade-readiness.mjs --profile workbench-host --format json
 ## Boundary
 
 This closes the first aggregate Docker/local release gate: existing child live
-evidence is now summarized by one profile-owned artifact and command. It does
-not yet prove a single live `KernelBridge` run that simultaneously exercises
-subagent topology, deep research, MCP gateway metadata, memory recall, and
-checkpoint persistence.
+evidence is now summarized by one profile-owned artifact and command. The
+single-run `KernelBridge` mechanism proof now lives in
+`docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`; hydrated
+browser/Electron visual QA remains a separate presentation gate.

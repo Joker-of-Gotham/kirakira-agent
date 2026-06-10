@@ -44,12 +44,15 @@ describe("runtime integration gate", () => {
     expect(command.steps.map((step) => [step.id, step.kind, step.profile])).toEqual([
       ["deep-research:live-adapters", "deep-research-live-adapters", "workbench-host"],
       ["memory-store:persistence", "memory-persistence", "test-host"],
+      ["runtime-daemon:composition-smoke", "runtime-daemon-composition", "workbench-host"],
       ["workbench:presentation", "workbench-smoke", "workbench-host"],
     ]);
     expect(command.checks).toEqual(
       expect.arrayContaining([
         "deep-research:mcp-kernel-research-events",
         "memory-store:checkpoint",
+        "runtime-daemon:kernelbridge-single-run",
+        "runtime-daemon:mcp-policy-trust-audit-otel",
         "daemon:browser-gateway",
         "presentation:web",
         "presentation:desktop",
@@ -71,6 +74,7 @@ describe("runtime integration gate", () => {
     expect(command.steps.map((step) => step.command)).toEqual([
       "node scripts/deep-research-live-adapters.mjs --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/memory-persistence-smoke.mjs --profile test-host --timeout-ms 12000 --live",
+      "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --timeout-ms 12000 --live",
     ]);
   });
@@ -96,6 +100,7 @@ describe("runtime integration gate", () => {
         steps: [
           expect.objectContaining({ id: "deep-research:live-adapters" }),
           expect.objectContaining({ id: "memory-store:persistence" }),
+          expect.objectContaining({ id: "runtime-daemon:composition-smoke" }),
           expect.objectContaining({ id: "workbench:presentation" }),
         ],
       });
@@ -133,10 +138,11 @@ describe("runtime integration gate", () => {
     expect(calls).toEqual([
       expect.stringContaining("scripts/deep-research-live-adapters.mjs --profile workbench-host"),
       expect.stringContaining("scripts/memory-persistence-smoke.mjs --profile test-host"),
+      expect.stringContaining("scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host"),
       expect.stringContaining("scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation"),
     ]);
     expect(calls[1]).toContain("--skip-compose");
-    expect(calls[2]).toContain("--skip-infra");
+    expect(calls[3]).toContain("--skip-infra");
   });
 
   it("supports injected gate adapters without changing the aggregate flow", () => {

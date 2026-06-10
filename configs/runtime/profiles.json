@@ -268,6 +268,27 @@
       "maxEvidence": 4
     }
   },
+  "daemonCompositionGates": {
+    "runtime-daemon:composition-smoke": {
+      "description": "Single KernelBridge smoke proving subagent topology, deep research MCP, MCP policy/trust/audit/OTel, memory recall, checkpoint persistence, and profile readiness in one daemon run.",
+      "profile": "workbench-host",
+      "liveEnv": "KIRAKIRA_RUNTIME_DAEMON_COMPOSITION_SMOKE_LIVE",
+      "passedEnv": "KIRAKIRA_RUNTIME_DAEMON_COMPOSITION_SMOKE_PASSED",
+      "resultPath": "docs/upgrade/gates/runtime-daemon-composition-smoke.json",
+      "checks": [
+        "runtime-daemon:kernelbridge-single-run",
+        "runtime-daemon:subagent-topology-events",
+        "runtime-daemon:deep-research-mcp-source",
+        "runtime-daemon:mcp-policy-trust-audit-otel",
+        "runtime-daemon:memory-recall-events",
+        "runtime-daemon:checkpoint-persistence",
+        "runtime-daemon:profile-readiness-manifest"
+      ],
+      "tests": [
+        "test/smoke/runtime-daemon/composition-smoke.test.ts"
+      ]
+    }
+  },
   "integrationGates": {
     "upgrade": {
       "description": "Profile-owned integration release gate spanning deep research, memory persistence, and web/desktop workbench presentation.",
@@ -284,6 +305,12 @@
           "id": "memory-store:persistence",
           "kind": "memory-persistence",
           "profile": "test-host"
+        },
+        {
+          "id": "runtime-daemon:composition-smoke",
+          "kind": "runtime-daemon-composition",
+          "profile": "workbench-host",
+          "gate": "runtime-daemon:composition-smoke"
         },
         {
           "id": "workbench:presentation",

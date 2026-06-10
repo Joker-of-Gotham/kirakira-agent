@@ -96,161 +96,81 @@
       "script": "scripts/runtime-integration-gate.mjs",
       "readinessReportPath": "gates.runtimeIntegration",
       "liveResultPath": "docs/upgrade/gates/runtime-integration-gate.json",
-      "expectation": "The profile-owned upgrade gate must aggregate matching deep-research, memory-persistence, and web/desktop workbench child gate evidence without duplicating ports, compose services, or local environment constants."
+      "expectation": "The profile-owned upgrade gate must aggregate matching deep-research, memory-persistence, runtime-daemon composition, and web/desktop workbench child gate evidence without duplicating ports, compose services, or local environment constants."
+    },
+    "runtimeDaemonCompositionGate": {
+      "script": "scripts/runtime-daemon-composition-smoke.mjs",
+      "readinessReportPath": "gates.runtimeIntegration.steps[runtime-daemon:composition-smoke]",
+      "liveResultPath": "docs/upgrade/gates/runtime-daemon-composition-smoke.json",
+      "expectation": "The runtime-daemon composition smoke must prove subagent topology, deep research MCP evidence, MCP policy/trust/audit/OTel metadata, memory recall, checkpoint persistence, and resolved profile readiness in one KernelBridge run."
     }
   },
   "nextMechanismGap": {
-    "id": "runtime-daemon-composition-smoke",
-    "targetName": "runtime-daemon",
+    "id": "presentation-hydrated-visual-qa",
+    "targetName": "frontend-app",
     "priority": "high",
     "status": "partial",
-    "gap": "Add a single live daemon composition smoke gate that proves subagent topology, deep research, MCP gateway policy/trust/audit/OTel metadata, memory recall/checkpoint wiring, and profile readiness in one KernelBridge run.",
-    "rationale": "The runtime integration gate now aggregates matching deep-research, memory-persistence, and workbench child gate evidence under one profile-owned release artifact. The remaining mechanism gap is stronger than aggregation: one live daemon run must prove that these mechanisms compose through the same KernelBridge/runtime-daemon path instead of only passing as separate child gates.",
+    "gap": "Add a profile-owned hydrated visual QA gate that opens the real web and desktop renderer targets, captures mobile/tablet/desktop screenshots, checks console and page errors, verifies overflow/nonblank rendering, and exercises Runs, Agents, Research, and Systems views from profile-derived URLs.",
+    "rationale": "The runtime integration gate now includes a single-run runtime-daemon composition smoke, so the broadest remaining goal-level gap is presentation quality: the current evidence proves package structure, SSR rendering, static visual hooks, and readiness targets, but not hydrated browser/Electron rendering quality.",
     "evidence": [
       {
         "kind": "source",
-        "path": "packages/deep-research/src"
+        "path": "apps/web"
       },
       {
         "kind": "source",
-        "path": "packages/deep-research/src/file.ts"
+        "path": "apps/desktop"
       },
       {
         "kind": "source",
-        "path": "packages/deep-research/src/mcp.ts"
+        "path": "packages/frontend-app/src/workbench.tsx"
       },
       {
         "kind": "source",
-        "path": "packages/deep-research/src/source-adapters.ts"
-      },
-      {
-        "kind": "source",
-        "path": "packages/deep-research/src/web.ts"
-      },
-      {
-        "kind": "source",
-        "path": "packages/runtime-daemon/src/bridge/deep-research.ts"
-      },
-      {
-        "kind": "source",
-        "path": "packages/config-resolver/src/runtime-projection.ts"
-      },
-      {
-        "kind": "source",
-        "path": "scripts/runtime-profile.mjs"
+        "path": "packages/frontend-core/src"
       },
       {
         "kind": "script",
-        "path": "scripts/runtime-integration-gate.mjs"
+        "path": "scripts/kirakira-workbench-smoke.mjs"
+      },
+      {
+        "kind": "script",
+        "path": "scripts/presentation-render-evidence.ts"
       },
       {
         "kind": "config",
         "path": "configs/runtime/profiles.json"
       },
       {
-        "kind": "test",
-        "path": "test/unit/deep-research/file.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/deep-research/mcp.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/deep-research/planner.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/deep-research/web.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/runtime/profile-resolution.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/config-resolver/resolved-state.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/scripts/runtime-integration-gate.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/smoke/deep-research/live-adapters-smoke.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
-      },
-      {
-        "kind": "test",
-        "path": "test/unit/orchestrator-kernel/research-event-bridge.test.ts"
-      },
-      {
-        "kind": "script",
-        "path": "scripts/deep-research-live-adapters.mjs"
+        "kind": "doc",
+        "path": "docs/design/desktop-web-presentation-contract.md"
       },
       {
         "kind": "smoke-result",
-        "path": "docs/upgrade/gates/deep-research-live-adapters.json"
+        "path": "docs/upgrade/gates/presentation-render-evidence.json"
       },
       {
         "kind": "smoke-result",
-        "path": "docs/upgrade/gates/runtime-integration-gate.json"
+        "path": "docs/upgrade/gates/workbench-presentation-smoke.json"
+      },
+      {
+        "kind": "smoke-result",
+        "path": "docs/upgrade/gates/runtime-daemon-composition-smoke.json"
       },
       {
         "kind": "record",
-        "path": "docs/change-records/2026-06-10-daemon-memory-source-fanout-and-readiness-closure.md"
+        "path": "docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md"
       },
       {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-source-adapter-fanout.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-file-source-adapter.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-web-source-adapter.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-mcp-source-adapter.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-live-adapter-gate.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-kernel-mcp-live-event-gate.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md"
-      },
-      {
-        "kind": "record",
-        "path": "docs/change-records/2026-06-10-runtime-integration-gate.md"
+        "kind": "reference",
+        "path": "reference_project/openhuman/app/playwright.config.ts"
       }
     ],
     "commands": [
-      "pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts",
-      "pnpm exec vitest run test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts",
+      "pnpm exec vitest run test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts",
+      "pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts",
+      "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --dry-run",
       "node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run",
-      "node scripts/runtime-integration-gate.mjs --gate upgrade --live",
-      "pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
-      "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
       "pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live",
       "pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 120000 --live",
       "node scripts/eam-parity-audit.mjs --depth files --format json --sample-size 100"
@@ -700,7 +620,7 @@
       "targetName": "runtime-daemon",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira adds daemon config, shared MCP and memory dependency factories, deep-research composition, socket resolution, browser gateway, and runtime socket surfaces on top of the EAM daemon baseline. Runtime profile selection is centralized through runtimeProfileComposition for daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults.",
+      "behavior": "Kirakira adds daemon config, shared MCP and memory dependency factories, deep-research composition, socket resolution, browser gateway, and runtime socket surfaces on top of the EAM daemon baseline. Runtime profile selection is centralized through runtimeProfileComposition for daemon config, lifecycle topology, MCP server registration, MCP OTel recorder plans, memory service selection, and workspace defaults. A profile-owned single-run KernelBridge smoke now proves subagent topology, deep research MCP evidence, MCP policy/trust/audit/OTel metadata, memory recall, checkpoint persistence, and resolved profile readiness in one daemon run.",
       "extensionFiles": [
         "packages/runtime-daemon/src/bin/daemon-config.ts",
         "packages/runtime-daemon/src/bin/kirakira-runtime-daemon.ts",
@@ -787,6 +707,25 @@
         {
           "kind": "record",
           "path": "docs/change-records/2026-06-10-runtime-profile-composition-and-presentation-qa.md"
+        },
+        {
+          "kind": "test",
+          "path": "test/smoke/runtime-daemon/composition-smoke.test.ts",
+          "command": "pnpm.cmd exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts"
+        },
+        {
+          "kind": "test",
+          "path": "test/unit/scripts/runtime-daemon-composition-smoke.test.ts",
+          "command": "pnpm.cmd exec vitest run test/unit/scripts/runtime-daemon-composition-smoke.test.ts"
+        },
+        {
+          "kind": "gate",
+          "path": "docs/upgrade/gates/runtime-daemon-composition-smoke.json",
+          "command": "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live"
+        },
+        {
+          "kind": "record",
+          "path": "docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md"
         }
       ],
       "remainingGaps": []

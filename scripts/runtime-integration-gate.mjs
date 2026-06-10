@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildWorkbenchSmokeGateCommand } from "./kirakira-workbench-smoke.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
+import { buildRuntimeDaemonCompositionSmokeCommand } from "./runtime-daemon-composition-smoke.mjs";
 import { loadRuntimeProfiles } from "./runtime-profile.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,6 +18,7 @@ const FALLBACK_LIVE_ENV = "KIRAKIRA_RUNTIME_INTEGRATION_GATE_LIVE";
 const GATE_BUILDERS = Object.freeze({
   "deep-research-live-adapters": buildDeepResearchStep,
   "memory-persistence": buildMemoryPersistenceStep,
+  "runtime-daemon-composition": buildRuntimeDaemonCompositionStep,
   "workbench-smoke": buildWorkbenchSmokeStep,
 });
 
@@ -312,6 +314,36 @@ function buildMemoryPersistenceStep(entry, options, env) {
         "--timeout-ms",
         String(options.timeoutMs),
         ...(skipCompose ? ["--skip-compose"] : []),
+        "--live",
+      ],
+    ],
+    env: {
+      KIRAKIRA_RUNTIME_PROFILE: profile,
+    },
+  };
+}
+
+function buildRuntimeDaemonCompositionStep(entry, options, env) {
+  const profile = requiredString(entry.profile, "runtime-daemon-composition.profile");
+  const gateName = stringValue(entry.gate) ?? "runtime-daemon:composition-smoke";
+  const command = buildRuntimeDaemonCompositionSmokeCommand({
+    gateName,
+    profileName: profile,
+    live: options.live,
+    timeoutMs: options.timeoutMs,
+  }, env);
+  return {
+    command,
+    commandArgs: [
+      process.execPath,
+      [
+        "scripts/runtime-daemon-composition-smoke.mjs",
+        "--gate",
+        gateName,
+        "--profile",
+        profile,
+        "--timeout-ms",
+        String(options.timeoutMs),
         "--live",
       ],
     ],
