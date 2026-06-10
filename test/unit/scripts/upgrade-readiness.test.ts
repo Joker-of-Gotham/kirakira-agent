@@ -34,16 +34,10 @@ describe("upgrade readiness gate", () => {
     ]);
     expect(report.summary.fail).toBe(0);
     expect(report.summary.checks).toBeGreaterThan(12);
-    expect(report.summary.openWork).toBe(1);
+    expect(report.summary.openWork).toBe(0);
     expect(report.summary.advisoryWarnings).toBe(0);
     expect(report.advisoryWarnings).toEqual([]);
-    expect(report.openWork).toEqual([
-      expect.objectContaining({
-        track: "Docker / Local Ecosystem",
-        status: "warn",
-        item: "Full Docker-backed web/Electron lifecycle gate is evidenced",
-      }),
-    ]);
+    expect(report.openWork).toEqual([]);
     expect(
       report.openWork.some((item) =>
         item.item.includes("File-level mechanism drift has behavior classifications"),
@@ -68,7 +62,7 @@ describe("upgrade readiness gate", () => {
           }),
           expect.objectContaining({
             label: "Full Docker-backed web/Electron lifecycle gate is evidenced",
-            status: "warn",
+            status: "pass",
           }),
         ]),
       }),
@@ -104,12 +98,12 @@ describe("upgrade readiness gate", () => {
       }),
     });
     expect(report.gates.runtimeFullLifecycle).toMatchObject({
-      status: "warn",
+      status: "pass",
       resultPath: "docs/upgrade/gates/runtime-full-lifecycle-gate.json",
       profile: "workbench-host",
-      resultStatus: "blocked",
-      resultMatches: false,
-      preflightStatus: "failed",
+      resultStatus: "passed",
+      resultMatches: true,
+      preflightStatus: "passed",
       targetCollisions: [],
     });
     expect(report.gates.runtimeFullLifecycle.evidence).toContain("targetCollisions=0");
@@ -234,7 +228,7 @@ describe("upgrade readiness gate", () => {
 
     expect(markdown).toContain("# Kirakira Upgrade Readiness");
     expect(markdown).not.toContain("## Advisory Warnings");
-    expect(markdown).toContain("## Open Work");
+    expect(markdown).not.toContain("## Open Work");
     expect(markdown).toContain("Full Docker-backed web/Electron lifecycle gate is evidenced");
     expect(markdown).toContain("EAM Mechanism Parity");
     expect(json.summary.status).toBe(report.summary.status);
@@ -244,7 +238,7 @@ describe("upgrade readiness gate", () => {
     expect(json.gates.deepResearchLiveAdapters.liveGate.resultMatches).toBe(true);
     expect(json.gates.runtimeIntegration.status).toBe("passed");
     expect(json.gates.runtimeIntegration.evidence.childGatesPassed).toBe(true);
-    expect(json.gates.runtimeFullLifecycle.status).toBe("warn");
+    expect(json.gates.runtimeFullLifecycle.status).toBe("pass");
     expect(json.gates.presentationProjection.failures).toBe(0);
     expect(json.gates.presentationRenderEvidence.resultMatches).toBe(true);
     expect(json.gates.presentationHydratedVisualQa.resultMatches).toBe(true);

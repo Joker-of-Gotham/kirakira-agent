@@ -191,6 +191,28 @@ export function resolveWorkbenchSmokeContract(profile, plan, options = {}) {
   };
 }
 
+function commandFor(name) {
+  return process.platform === "win32" && name === "pnpm" ? "pnpm.cmd" : name;
+}
+
+function commandInvocation(command, args) {
+  const executable = commandFor(command);
+  if (process.platform === "win32" && executable.endsWith(".cmd")) {
+    return {
+      command: process.env.ComSpec || "cmd.exe",
+      args: ["/d", "/s", "/c", [executable, ...args.map(quoteCmdArg)].join(" ")],
+      display: [executable, ...args].join(" "),
+    };
+  }
+  return { command: executable, args, display: [executable, ...args].join(" ") };
+}
+
+function quoteCmdArg(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_@./:\\-]+$/u.test(text)) return text;
+  return `"${text.replaceAll('"', '\\"')}"`;
+}
+
 function applySmokeStepContract(plan, smoke) {
   const overrides = new Map((smoke.stepOverrides ?? []).map((override) => [override.step, override]));
   return plan.steps.map((step) => {
@@ -223,11 +245,11 @@ export function buildWorkbenchSmokePlan(profile, surface, options = {}) {
 }
 
 function runChecked(step) {
-  const result = spawnSync(step.command, step.args, {
+  const invocation = commandInvocation(step.command, step.args);
+  const result = spawnSync(invocation.command, invocation.args, {
     cwd: repoRoot,
     env: { ...process.env, ...step.env, COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet" },
     stdio: "inherit",
-    shell: process.platform === "win32",
   });
   if (result.error) throw result.error;
   if ((result.status ?? 1) !== 0) {
@@ -236,11 +258,11 @@ function runChecked(step) {
 }
 
 function spawnStep(step) {
-  return spawn(step.command, step.args, {
+  const invocation = commandInvocation(step.command, step.args);
+  return spawn(invocation.command, invocation.args, {
     cwd: repoRoot,
     env: { ...process.env, ...step.env },
     stdio: "inherit",
-    shell: process.platform === "win32",
   });
 }
 

@@ -249,7 +249,16 @@ export async function runRuntimeIntegrationGate(command, options = {}) {
       timeoutMs: command.timeoutMs,
       runner: options.runner,
     });
+    const cleanupCode = runStepCleanups(step, {
+      env: {
+        ...process.env,
+        ...step.env,
+      },
+      timeoutMs: command.timeoutMs,
+      runner: options.runner,
+    });
     if (code !== 0) return code;
+    if (cleanupCode !== 0) return cleanupCode;
   }
   return 0;
 }
@@ -265,6 +274,10 @@ function buildStep(entry, options, env, adapters) {
   }
   const command = builder(entry, options, env);
   const step = stepSummary(entry, command, kind);
+  const cleanupCommands = normalizeStepCleanup(entry.cleanup, command.command);
+  if (cleanupCommands.length > 0) {
+    step.cleanup = cleanupCommands.map(({ display, required }) => ({ display, required }));
+  }
   Object.defineProperties(step, {
     commandArgs: {
       value: command.commandArgs,
@@ -272,6 +285,13 @@ function buildStep(entry, options, env, adapters) {
     },
     env: {
       value: command.env,
+      enumerable: false,
+    },
+    cleanupCommands: {
+      value: cleanupCommands.map(({ command: cleanupCommand, args, required }) => ({
+        commandArgs: [cleanupCommand, args],
+        required,
+      })),
       enumerable: false,
     },
   });
@@ -536,6 +556,57 @@ function runChecked(commandArgs, options) {
     return 1;
   }
   return result.status ?? 1;
+}
+
+function runStepCleanups(step, options) {
+  let failureCode = 0;
+  for (const cleanup of step.cleanupCommands ?? []) {
+    const code = runChecked(cleanup.commandArgs, options);
+    if (code !== 0 && cleanup.required !== false && failureCode === 0) {
+      failureCode = code;
+    }
+  }
+  return failureCode;
+}
+
+function normalizeStepCleanup(value, command) {
+  const entries = Array.isArray(value) ? value : isRecord(value) ? [value] : [];
+  return entries.map((entry) => normalizeCleanupEntry(entry, command)).filter(Boolean);
+}
+
+function normalizeCleanupEntry(entry, command) {
+  if (!isRecord(entry)) return undefined;
+  const kind = stringValue(entry.kind);
+  if (kind !== "compose-down") {
+    throw new Error(`Unknown runtime integration cleanup kind: ${kind ?? "missing"}`);
+  }
+  const compose = command.liveGate?.compose;
+  if (!isRecord(compose)) {
+    if (command.liveGate?.skipCompose === true) return undefined;
+    throw new Error(`Cleanup kind "${kind}" requires a child gate compose plan.`);
+  }
+  const cleanupCommand = stringValue(compose.command) ?? "docker";
+  const args = composeDownArgs(compose, entry);
+  return {
+    command: cleanupCommand,
+    args,
+    display: [cleanupCommand, ...args].join(" "),
+    required: entry.required !== false,
+  };
+}
+
+function composeDownArgs(compose, cleanup) {
+  const args = stringArray(compose.args);
+  const upIndex = args.indexOf("up");
+  if (upIndex < 0) {
+    throw new Error("compose-down cleanup requires compose args containing an up command.");
+  }
+  return [
+    ...args.slice(0, upIndex),
+    "down",
+    ...(cleanup.removeVolumes === true ? ["-v"] : []),
+    ...(cleanup.removeOrphans === false ? [] : ["--remove-orphans"]),
+  ];
 }
 
 function displayCommand([command, args]) {

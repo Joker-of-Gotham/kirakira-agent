@@ -3,7 +3,7 @@
   "gate": "memory-store:persistence",
   "profile": "test-host",
   "status": "passed",
-  "passedAt": "2026-06-09T20:22:28.987Z",
+  "passedAt": "2026-06-10T15:14:12.892Z",
   "checks": [
     "memory-store:checkpoint",
     "memory-store:retain-reflect"

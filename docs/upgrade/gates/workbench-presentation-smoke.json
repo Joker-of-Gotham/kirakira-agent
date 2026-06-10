@@ -3,7 +3,7 @@
   "gate": "presentation",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-09T20:51:39.901Z",
+  "passedAt": "2026-06-10T15:16:16.546Z",
   "checks": [
     "daemon:browser-gateway",
     "presentation:web",
@@ -36,7 +36,7 @@
   },
   "command": "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --live",
   "readiness": {
-    "timeoutMs": 180000,
+    "timeoutMs": 240000,
     "intervalMs": 1000,
     "probeTimeoutMs": 2000
   }

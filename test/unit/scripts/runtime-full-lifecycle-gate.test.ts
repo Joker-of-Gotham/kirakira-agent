@@ -64,6 +64,23 @@ describe("runtime full lifecycle gate", () => {
         "workbench:desktop-electron",
         "presentation:hydrated-visual-qa",
       ]),
+      preCleanup: [
+        {
+          kind: "compose-down",
+          command: "docker",
+          args: [
+            "compose",
+            "-f",
+            "docker-compose.yml",
+            "-f",
+            "docker-compose.ports.yml",
+            "down",
+            "--remove-orphans",
+          ],
+          display: "docker compose -f docker-compose.yml -f docker-compose.ports.yml down --remove-orphans",
+          required: true,
+        },
+      ],
       checks: expect.arrayContaining([
         "runtime-lifecycle:docker-compose-ready",
         "runtime-lifecycle:hydrated-visual-qa",
@@ -84,7 +101,7 @@ describe("runtime full lifecycle gate", () => {
     ]);
     expect(command.targetCollisions).toEqual([]);
     expect(command.integration.steps.at(-1)?.command).toBe(
-      "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 240000 --live",
+      "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa-full-lifecycle --profile workbench-host --timeout-ms 240000 --live",
     );
     expect(JSON.stringify(command)).not.toContain("5173");
   });
@@ -241,7 +258,10 @@ describe("runtime full lifecycle gate", () => {
       ],
     });
     expect(preflightCalls).toEqual(["docker compose version", "docker info"]);
-    expect(childCalls).not.toEqual([]);
+    expect(childCalls[0]).toBe(
+      "docker compose -f docker-compose.yml -f docker-compose.ports.yml down --remove-orphans",
+    );
+    expect(childCalls[1]).toContain("scripts/deep-research-live-adapters.mjs");
   });
 
   it("surfaces profile-owned preflight guidance on matching failures", async () => {

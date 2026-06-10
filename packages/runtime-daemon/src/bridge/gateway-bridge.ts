@@ -67,24 +67,50 @@ export class GatewayBridge {
       });
       const raw = await new Promise<string>((resolve, reject) => {
         let buffer = "";
+        let settled = false;
+        let to: ReturnType<typeof setTimeout> | undefined;
+        const cleanup = (): void => {
+          stdout.removeListener("data", onData);
+          stdout.removeListener("error", onError);
+          setImmediate(() => {
+            stdin.removeListener("error", onError);
+          });
+          if (to) clearTimeout(to);
+        };
+        const fail = (error: unknown): void => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          reject(error);
+        };
+        const done = (value: string): void => {
+          if (settled) return;
+          settled = true;
+          cleanup();
+          resolve(value);
+        };
+        const onError = (error: Error): void => {
+          fail(error);
+        };
         const onData = (chunk: Buffer | string): void => {
           buffer += chunk.toString();
           const nl = buffer.indexOf("\n");
           if (nl !== -1) {
-            stdout.removeListener("data", onData);
-            resolve(buffer.slice(0, nl).trim());
+            done(buffer.slice(0, nl).trim());
           }
         };
         stdout.on("data", onData);
+        stdout.once("error", onError);
+        stdin.on("error", onError);
         try {
-          stdin.write(`${line}\n`);
+          stdin.write(`${line}\n`, (error) => {
+            if (error) fail(error);
+          });
         } catch (e) {
-          stdout.removeListener("data", onData);
-          reject(e);
+          fail(e);
         }
-        const to = setTimeout(() => {
-          stdout.removeListener("data", onData);
-          reject(new Error("Gateway health RPC timeout"));
+        to = setTimeout(() => {
+          fail(new Error("Gateway health RPC timeout"));
         }, 5000);
         to.unref?.();
       });

@@ -51,6 +51,7 @@ describe("BrowserGatewayServer", () => {
       expect(info.url).toBe(`ws://127.0.0.1:${info.port}/runtime`);
       const health = await fetch(`http://${info.host}:${info.port}/healthz`);
       expect(health.ok).toBe(true);
+      expect(health.headers.get("access-control-allow-origin")).toBeNull();
       const payload: unknown = await health.json();
       expect(isRuntimeBrowserGatewayHealth(payload)).toBe(true);
       if (!isRuntimeBrowserGatewayHealth(payload)) throw new Error("invalid health");
@@ -74,6 +75,34 @@ describe("BrowserGatewayServer", () => {
         messageId: "msg-1",
       });
       ws.close();
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it("adds loopback CORS headers for browser health and manifest requests", async () => {
+    const server = new BrowserGatewayServer({
+      async onMessage() {},
+    });
+    const info = await server.start({
+      port: 0,
+      allowedOrigins: ["http://127.0.0.1:5183"],
+    });
+
+    try {
+      const health = await fetch(`http://${info.host}:${info.port}/healthz`, {
+        headers: { Origin: "http://127.0.0.1:5183" },
+      });
+      const manifest = await fetch(`http://${info.host}:${info.port}/manifest`, {
+        headers: { Origin: "http://127.0.0.1:5183" },
+      });
+      const disallowed = await fetch(`http://${info.host}:${info.port}/healthz`, {
+        headers: { Origin: "http://example.test" },
+      });
+
+      expect(health.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5183");
+      expect(manifest.headers.get("access-control-allow-origin")).toBe("http://127.0.0.1:5183");
+      expect(disallowed.headers.get("access-control-allow-origin")).toBeNull();
     } finally {
       await server.stop();
     }

@@ -3,8 +3,9 @@
   "gate": "runtime-full-lifecycle",
   "profile": "workbench-host",
   "integrationGate": "full-lifecycle",
-  "status": "blocked",
-  "recordedAt": "2026-06-10T13:37:27.929Z",
+  "status": "passed",
+  "recordedAt": "2026-06-10T15:17:12.228Z",
+  "passedAt": "2026-06-10T15:17:12.231Z",
   "checks": [
     "runtime-lifecycle:docker-compose-ready",
     "runtime-lifecycle:daemon-gateway",
@@ -89,13 +90,9 @@
     }
   ],
   "preflight": {
-    "status": "failed",
+    "status": "passed",
     "command": "docker compose version && docker info",
-    "detail": "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
-    "failedCheck": "docker-daemon",
-    "code": "docker-daemon-unavailable",
-    "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
-    "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
+    "detail": "Docker Compose version v5.1.0; Client:\n Version:    29.2.1\n Context:    desktop-linux\n Debug Mode: false\n Plugins:\n  agent: create or run AI agents (Docker Inc.)\n    Version:  v1.27.1\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-agent.exe\n  ai: Docker AI Agent - Ask Gordon (Docker Inc.)\n    Version:  v1.18.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-ai.exe\n  buildx: Docker Buildx (Docker Inc.)\n    Version:  v0.31.1-desktop.1\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-buildx.exe\n  compose: Docker Compose (Docker Inc.)\n    Version:  v5.1.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-compose.exe\n  debug: Get a shell into any image or container (Docker Inc.)\n    Version:  0.0.47\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-debug.exe\n  desktop: Docker Desktop commands (Docker Inc.)\n    Version:  v0.3.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-desktop.exe\n  extension: Manages Docker extensions (Docker Inc.)\n    Version:  v0.2.31\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-extension.exe\n  init: Creates Docker-related starter files for your project (Docker Inc.)\n    Version:  v1.4.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-init.exe\n  mcp: Docker MCP Plugin (Docker Inc.)\n    Version:  v0.40.2\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-mcp.exe\n  model: Docker Model Runner (Docker Inc.)\n    Version:  v1.1.5\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-model.exe\n  offload: Docker Offload (Docker Inc.)\n    Version:  v0.5.56\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-offload.exe\n  pass: Docker Pass Secrets Manager Plugin (beta) (Docker Inc.)\n    Version:  v0.0.24\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-pass.exe\n  sandbox: Docker Sandbox (Docker Inc.)\n    Version:  v0.12.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-sandbox.exe\n  sbom: View the packaged-based Software Bill Of Materials (SBOM) for an image (Anchore Inc.)\n    Version:  0.6.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-sbom.exe\n  scout: Docker Scout (Docker Inc.)\n    Version:  v1.20.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-scout.exe\n\nServer:\n Containers: 12\n  Running: 6\n  Paused: 0\n  Stopped: 6\n Images: 13\n Server Version: 29.2.1\n Storage Driver: overlayfs\n  driver-type: io.containerd.snapshotter.v1\n Logging Driver: json-file\n Cgroup Driver: cgroupfs\n Cgroup Version: 2\n Plugins:\n  Volume: local\n  Network: bridge host ipvlan macvlan null overlay\n  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog\n CDI spec directories:\n  /etc/cdi\n  /var/run/cdi\n Discovered Devices:\n  cdi: docker.com/gpu=webgpu\n Swarm: inactive\n Runtimes: nvidia runc io.containerd.runc.v2\n Default Runtime: runc\n Init Binary: docker-init\n containerd version: dea7da592f5d1d2b7755e3a161be07f43fad8f75\n runc version: v1.3.4-0-gd6d73eb8\n init version: de40ad0\n Security Options:\n  seccomp\n   Profile: builtin\n  cgroupns\n Kernel Version: 6.6.87.2-microsoft-standard-WSL2\n Operating System: Docker Desktop\n OSType: linux\n Architecture: x86_64\n CPUs: 16\n Total Memory: 15.39GiB\n Name: docker-desktop\n ID: 087050b8-1b44-49ff-909e-4dfbe458ae97\n Docker Root Dir: /var/lib/docker\n Debug Mode: false\n HTTP Proxy: http.docker.internal:3128\n HTTPS Proxy: http.docker.internal:3128\n No Proxy: hubproxy.docker.internal\n Labels:\n  com.docker.desktop.address=npipe://\\\\.\\pipe\\docker_cli\n Experimental: false\n Insecure Registries:\n  hubproxy.docker.internal:5555\n  ::1/128\n  127.0.0.0/8\n Live Restore Enabled: false\n Firewall Backend: iptables",
     "checks": [
       {
         "status": "passed",
@@ -112,7 +109,7 @@
         "detail": "Docker Compose version v5.1.0"
       },
       {
-        "status": "failed",
+        "status": "passed",
         "id": "docker-daemon",
         "kind": "command",
         "label": "Docker daemon is reachable",
@@ -122,12 +119,27 @@
         ],
         "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
         "command": "docker info",
-        "detail": "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
-        "code": "docker-daemon-unavailable",
-        "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+        "detail": "Client:\n Version:    29.2.1\n Context:    desktop-linux\n Debug Mode: false\n Plugins:\n  agent: create or run AI agents (Docker Inc.)\n    Version:  v1.27.1\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-agent.exe\n  ai: Docker AI Agent - Ask Gordon (Docker Inc.)\n    Version:  v1.18.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-ai.exe\n  buildx: Docker Buildx (Docker Inc.)\n    Version:  v0.31.1-desktop.1\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-buildx.exe\n  compose: Docker Compose (Docker Inc.)\n    Version:  v5.1.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-compose.exe\n  debug: Get a shell into any image or container (Docker Inc.)\n    Version:  0.0.47\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-debug.exe\n  desktop: Docker Desktop commands (Docker Inc.)\n    Version:  v0.3.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-desktop.exe\n  extension: Manages Docker extensions (Docker Inc.)\n    Version:  v0.2.31\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-extension.exe\n  init: Creates Docker-related starter files for your project (Docker Inc.)\n    Version:  v1.4.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-init.exe\n  mcp: Docker MCP Plugin (Docker Inc.)\n    Version:  v0.40.2\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-mcp.exe\n  model: Docker Model Runner (Docker Inc.)\n    Version:  v1.1.5\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-model.exe\n  offload: Docker Offload (Docker Inc.)\n    Version:  v0.5.56\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-offload.exe\n  pass: Docker Pass Secrets Manager Plugin (beta) (Docker Inc.)\n    Version:  v0.0.24\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-pass.exe\n  sandbox: Docker Sandbox (Docker Inc.)\n    Version:  v0.12.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-sandbox.exe\n  sbom: View the packaged-based Software Bill Of Materials (SBOM) for an image (Anchore Inc.)\n    Version:  0.6.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-sbom.exe\n  scout: Docker Scout (Docker Inc.)\n    Version:  v1.20.0\n    Path:     C:\\Program Files\\Docker\\cli-plugins\\docker-scout.exe\n\nServer:\n Containers: 12\n  Running: 6\n  Paused: 0\n  Stopped: 6\n Images: 13\n Server Version: 29.2.1\n Storage Driver: overlayfs\n  driver-type: io.containerd.snapshotter.v1\n Logging Driver: json-file\n Cgroup Driver: cgroupfs\n Cgroup Version: 2\n Plugins:\n  Volume: local\n  Network: bridge host ipvlan macvlan null overlay\n  Log: awslogs fluentd gcplogs gelf journald json-file local splunk syslog\n CDI spec directories:\n  /etc/cdi\n  /var/run/cdi\n Discovered Devices:\n  cdi: docker.com/gpu=webgpu\n Swarm: inactive\n Runtimes: nvidia runc io.containerd.runc.v2\n Default Runtime: runc\n Init Binary: docker-init\n containerd version: dea7da592f5d1d2b7755e3a161be07f43fad8f75\n runc version: v1.3.4-0-gd6d73eb8\n init version: de40ad0\n Security Options:\n  seccomp\n   Profile: builtin\n  cgroupns\n Kernel Version: 6.6.87.2-microsoft-standard-WSL2\n Operating System: Docker Desktop\n OSType: linux\n Architecture: x86_64\n CPUs: 16\n Total Memory: 15.39GiB\n Name: docker-desktop\n ID: 087050b8-1b44-49ff-909e-4dfbe458ae97\n Docker Root Dir: /var/lib/docker\n Debug Mode: false\n HTTP Proxy: http.docker.internal:3128\n HTTPS Proxy: http.docker.internal:3128\n No Proxy: hubproxy.docker.internal\n Labels:\n  com.docker.desktop.address=npipe://\\\\.\\pipe\\docker_cli\n Experimental: false\n Insecure Registries:\n  hubproxy.docker.internal:5555\n  ::1/128\n  127.0.0.0/8\n Live Restore Enabled: false\n Firewall Backend: iptables"
       }
     ]
   },
+  "preCleanup": [
+    {
+      "kind": "compose-down",
+      "command": "docker",
+      "args": [
+        "compose",
+        "-f",
+        "docker-compose.yml",
+        "-f",
+        "docker-compose.ports.yml",
+        "down",
+        "--remove-orphans"
+      ],
+      "display": "docker compose -f docker-compose.yml -f docker-compose.ports.yml down --remove-orphans",
+      "required": true
+    }
+  ],
   "steps": [
     {
       "id": "deep-research:live-adapters",
@@ -183,7 +195,7 @@
       "id": "presentation:hydrated-visual-qa",
       "kind": "presentation-hydrated-visual-qa",
       "profile": "workbench-host",
-      "gate": "presentation-hydrated-visual-qa",
+      "gate": "presentation-hydrated-visual-qa-full-lifecycle",
       "checks": [
         "presentation:hydrated-web",
         "presentation:hydrated-desktop",
@@ -295,7 +307,7 @@
         "stepId": "presentation:hydrated-visual-qa",
         "kind": "presentation-hydrated-visual-qa",
         "profile": "workbench-host",
-        "gate": "presentation-hydrated-visual-qa",
+        "gate": "presentation-hydrated-visual-qa-full-lifecycle",
         "value": "http://127.0.0.1:5183/"
       }
     ],
@@ -304,7 +316,7 @@
         "stepId": "presentation:hydrated-visual-qa",
         "kind": "presentation-hydrated-visual-qa",
         "profile": "workbench-host",
-        "gate": "presentation-hydrated-visual-qa",
+        "gate": "presentation-hydrated-visual-qa-full-lifecycle",
         "value": "http://127.0.0.1:5174/"
       }
     ]

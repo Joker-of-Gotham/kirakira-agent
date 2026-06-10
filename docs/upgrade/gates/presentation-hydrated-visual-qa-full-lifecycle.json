@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
-  "gate": "presentation-hydrated-visual-qa",
+  "gate": "presentation-hydrated-visual-qa-full-lifecycle",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T15:06:52.511Z",
+  "passedAt": "2026-06-10T15:17:12.146Z",
   "checks": [
     "presentation:hydrated-web",
     "presentation:hydrated-desktop",
@@ -69,11 +69,11 @@
     "desktop": "http://127.0.0.1:5174/"
   },
   "execution": {
-    "mode": "mock",
-    "skipInfra": true,
-    "skipDaemon": true
+    "mode": "gateway",
+    "skipInfra": false,
+    "skipDaemon": false
   },
-  "screenshotDir": "docs/upgrade/gates/presentation-hydrated-visual-qa",
+  "screenshotDir": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle",
   "surfaceResults": [
     {
       "schemaVersion": 1,
@@ -88,11 +88,11 @@
             "height": 812
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/web-mobile.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/web-mobile.png",
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 226956,
+            "pngBytes": 226061,
             "sampledColors": 169,
             "alphaPixels": 513,
             "nonblank": true
@@ -102,12 +102,6 @@
               "level": "0",
               "message": "[vite] connecting...",
               "line": 733,
-              "source": "http://127.0.0.1:5183/@vite/client"
-            },
-            {
-              "level": "0",
-              "message": "[vite] connected.",
-              "line": 827,
               "source": "http://127.0.0.1:5183/@vite/client"
             },
             {
@@ -121,6 +115,12 @@
               "message": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
               "line": 2,
               "source": "node:electron/js2c/sandbox_bundle"
+            },
+            {
+              "level": "0",
+              "message": "[vite] connected.",
+              "line": 827,
+              "source": "http://127.0.0.1:5183/@vite/client"
             }
           ],
           "pageFailures": [],
@@ -128,7 +128,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 1158,
+            "bodyTextLength": 1174,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -170,7 +170,7 @@
                 "activeFound": true,
                 "shellActive": true,
                 "currentNavCount": 1,
-                "textLength": 216
+                "textLength": 217
               }
             ],
             "commandPalette": {
@@ -199,11 +199,11 @@
             "height": 1024
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/web-tablet.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/web-tablet.png",
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 291707,
+            "pngBytes": 290846,
             "sampledColors": 132,
             "alphaPixels": 513,
             "nonblank": true
@@ -239,7 +239,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 1158,
+            "bodyTextLength": 1174,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -281,7 +281,7 @@
                 "activeFound": true,
                 "shellActive": true,
                 "currentNavCount": 1,
-                "textLength": 216
+                "textLength": 217
               }
             ],
             "commandPalette": {
@@ -310,12 +310,12 @@
             "height": 900
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/web-desktop.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/web-desktop.png",
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 698395,
-            "sampledColors": 97,
+            "pngBytes": 682663,
+            "sampledColors": 94,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -350,7 +350,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 1184,
+            "bodyTextLength": 1200,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -392,7 +392,7 @@
                 "activeFound": true,
                 "shellActive": true,
                 "currentNavCount": 1,
-                "textLength": 216
+                "textLength": 217
               }
             ],
             "commandPalette": {
@@ -430,7 +430,7 @@
             "height": 812
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/desktop-mobile.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/desktop-mobile.png",
           "screenshot": {
             "width": 660,
             "height": 1423,
@@ -541,12 +541,12 @@
             "height": 1024
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/desktop-tablet.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/desktop-tablet.png",
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 289152,
-            "sampledColors": 130,
+            "pngBytes": 289294,
+            "sampledColors": 133,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -652,7 +652,7 @@
             "height": 900
           },
           "status": "passed",
-          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa/desktop-desktop.png",
+          "screenshotPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle/desktop-desktop.png",
           "screenshot": {
             "width": 2524,
             "height": 1577,
@@ -760,7 +760,7 @@
       "failures": []
     }
   ],
-  "command": "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live",
+  "command": "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa-full-lifecycle --profile workbench-host --live",
   "references": [
     {
       "title": "Electron BrowserWindow",

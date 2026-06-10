@@ -394,6 +394,60 @@
         "presentation:nonblank-rendering",
         "presentation:core-workbench-views"
       ]
+    },
+    "presentation-hydrated-visual-qa-full-lifecycle": {
+      "description": "Profile-owned Docker-backed hydrated visual QA gate for the no-skip full lifecycle path.",
+      "profile": "workbench-host",
+      "workbenchSmokeGate": "presentation",
+      "liveEnv": "KIRAKIRA_PRESENTATION_HYDRATED_VISUAL_QA_FULL_LIFECYCLE_LIVE",
+      "passedEnv": "KIRAKIRA_PRESENTATION_HYDRATED_VISUAL_QA_FULL_LIFECYCLE_PASSED",
+      "resultPath": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle.json",
+      "screenshotDir": "docs/upgrade/gates/presentation-hydrated-visual-qa-full-lifecycle",
+      "surfaces": ["web", "desktop"],
+      "viewports": [
+        { "id": "mobile", "width": 375, "height": 812 },
+        { "id": "tablet", "width": 768, "height": 1024 },
+        { "id": "desktop", "width": 1440, "height": 900 }
+      ],
+      "views": [
+        {
+          "id": "runs",
+          "label": "Runs",
+          "navAriaLabel": "Show run operations workspace",
+          "selector": "workbench-view-runs",
+          "workspaceAriaLabel": "Run operations workspace"
+        },
+        {
+          "id": "agents",
+          "label": "Agents",
+          "navAriaLabel": "Show agent swarm workspace",
+          "selector": "workbench-view-agents",
+          "workspaceAriaLabel": "Agent swarm workspace"
+        },
+        {
+          "id": "research",
+          "label": "Research",
+          "navAriaLabel": "Show research evidence workspace",
+          "selector": "workbench-view-research",
+          "workspaceAriaLabel": "Research evidence workspace"
+        },
+        {
+          "id": "systems",
+          "label": "Systems",
+          "navAriaLabel": "Show runtime systems workspace",
+          "selector": "workbench-view-systems",
+          "workspaceAriaLabel": "Memory, MCP, and artifact systems"
+        }
+      ],
+      "checks": [
+        "presentation:hydrated-web",
+        "presentation:hydrated-desktop",
+        "presentation:viewport-screenshots",
+        "presentation:console-page-errors",
+        "presentation:horizontal-overflow",
+        "presentation:nonblank-rendering",
+        "presentation:core-workbench-views"
+      ]
     }
   },
   "integrationGates": {
@@ -455,7 +509,11 @@
         {
           "id": "memory-store:persistence",
           "kind": "memory-persistence",
-          "profile": "test-host"
+          "profile": "test-host",
+          "cleanup": {
+            "kind": "compose-down",
+            "removeOrphans": true
+          }
         },
         {
           "id": "runtime-daemon:composition-smoke",
@@ -473,7 +531,7 @@
           "id": "presentation:hydrated-visual-qa",
           "kind": "presentation-hydrated-visual-qa",
           "profile": "workbench-host",
-          "gate": "presentation-hydrated-visual-qa",
+          "gate": "presentation-hydrated-visual-qa-full-lifecycle",
           "env": {
             "VITE_KIRAKIRA_RUNTIME_MODE": "gateway"
           }
@@ -490,6 +548,12 @@
       "passedEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_PASSED",
       "resultPath": "docs/upgrade/gates/runtime-full-lifecycle-gate.json",
       "timeoutMs": 240000,
+      "preCleanup": [
+        {
+          "kind": "compose-down",
+          "removeOrphans": true
+        }
+      ],
       "requiredPreflights": [
         {
           "id": "docker-compose-cli",

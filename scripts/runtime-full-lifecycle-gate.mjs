@@ -164,6 +164,7 @@ export function buildRuntimeFullLifecycleGateCommand(
       ? undefined
       : `live gate is opt-in; set ${gate.liveEnv}=1 or pass --live`;
   const composePlan = projection.fragments?.readiness?.compose;
+  const preCleanup = normalizeLifecycleCleanups(gate.preCleanup, composePlan);
   const command = {
     schemaVersion: 1,
     gate: gate.name,
@@ -180,6 +181,7 @@ export function buildRuntimeFullLifecycleGateCommand(
     requiredPreflights: gate.requiredPreflights,
     preflightChecks: gate.preflightChecks,
     integrationGate: integration.gate,
+    preCleanup,
     integration,
     compose: composePlan
       ? {
@@ -217,6 +219,7 @@ export function buildRuntimeFullLifecycleGateCommand(
       requiredPreflights: gate.requiredPreflights,
       preflightChecks: gate.preflightChecks,
       lifecycleSteps: gate.lifecycleSteps,
+      preCleanup,
       checks: gate.checks,
       targets: targetSummary.targets,
       targetSources: targetSummary.targetSources,
@@ -247,6 +250,16 @@ export async function runRuntimeFullLifecycleGate(command, options = {}) {
       preflight,
     };
   }
+  const cleanupCode = runLifecycleCleanups(command.preCleanup, {
+    ...options,
+    timeoutMs: command.timeoutMs,
+  });
+  if (cleanupCode !== 0) {
+    return {
+      code: cleanupCode,
+      preflight,
+    };
+  }
   const code = await runRuntimeIntegrationGate(command.integration, options);
   return {
     code,
@@ -274,6 +287,7 @@ export function writeRuntimeFullLifecycleGateResult(
     requiredPreflights: command.requiredPreflights,
     preflightChecks: command.preflightChecks,
     preflight: run.preflight,
+    preCleanup: command.preCleanup,
     steps: command.integration.steps.map(runtimeGateStepIdentity),
     targets: command.targets,
     targetSources: command.targetSources,
@@ -304,6 +318,7 @@ export function runtimeFullLifecycleGateReport(command) {
     lifecycleSteps: command.lifecycleSteps,
     requiredPreflights: command.requiredPreflights,
     preflightChecks: command.preflightChecks,
+    preCleanup: command.preCleanup,
     integrationGate: command.integrationGate,
     compose: command.compose,
     targets: command.targets,
@@ -452,6 +467,87 @@ function skippedPreflight(preflightChecks = []) {
   };
 }
 
+function runLifecycleCleanups(cleanups = [], options = {}) {
+  let failureCode = 0;
+  for (const cleanup of cleanups) {
+    const code = runCleanupCommand(cleanup, options);
+    if (code !== 0 && cleanup.required !== false && failureCode === 0) {
+      failureCode = code;
+    }
+  }
+  return failureCode;
+}
+
+function runCleanupCommand(cleanup, options = {}) {
+  if (options.runner) {
+    return options.runner(cleanup.command, cleanup.args, {
+      env: {
+        ...process.env,
+        COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
+      },
+      timeoutMs: options.timeoutMs,
+    });
+  }
+  const result = spawnSync(cleanup.command, cleanup.args, {
+    cwd: repoRoot,
+    env: {
+      ...process.env,
+      COMPOSE_PROGRESS: process.env.COMPOSE_PROGRESS ?? "quiet",
+    },
+    stdio: "inherit",
+    timeout: options.timeoutMs,
+    windowsHide: true,
+  });
+  if (result.error) {
+    console.error(`Failed to run cleanup ${cleanup.display}: ${result.error.message}`);
+    return 1;
+  }
+  if (result.signal) {
+    console.error(`Cleanup ${cleanup.display} exited from signal ${result.signal}.`);
+    return 1;
+  }
+  return result.status ?? 1;
+}
+
+function normalizeLifecycleCleanups(value, composePlan) {
+  const entries = Array.isArray(value) ? value : [];
+  return entries.map((entry) => normalizeLifecycleCleanupEntry(entry, composePlan)).filter(Boolean);
+}
+
+function normalizeLifecycleCleanupEntry(entry, composePlan) {
+  if (!isRecord(entry)) return undefined;
+  const kind = stringValue(entry.kind);
+  if (kind !== "compose-down") {
+    throw new Error(`Unknown runtime lifecycle cleanup kind: ${kind ?? "missing"}`);
+  }
+  if (!isRecord(composePlan)) {
+    throw new Error(`Lifecycle cleanup kind "${kind}" requires a profile compose plan.`);
+  }
+  const command = stringValue(composePlan.command) ?? "docker";
+  const args = composeDownArgs(composePlan, entry);
+  return {
+    kind,
+    command,
+    args,
+    display: [command, ...args].join(" "),
+    required: entry.required !== false,
+  };
+}
+
+function composeDownArgs(composePlan, cleanup) {
+  const args = stringArray(composePlan.args);
+  const upIndex = args.indexOf("up");
+  if (upIndex < 0) {
+    throw new Error("compose-down cleanup requires compose args containing an up command.");
+  }
+  return [
+    ...args.slice(0, upIndex),
+    "down",
+    ...(cleanup.removeVolumes === true ? ["-v"] : []),
+    ...(cleanup.removeOrphans === false ? [] : ["--remove-orphans"]),
+  ];
+}
+
 function runtimeLifecycleGateConfig(config, gateName) {
   const gates = isRecord(config.runtimeLifecycleGates) ? config.runtimeLifecycleGates : {};
   const gate = gates[gateName];
@@ -473,6 +569,7 @@ function runtimeLifecycleGateConfig(config, gateName) {
     passedEnv: stringValue(gate.passedEnv) ?? `${FALLBACK_LIVE_ENV}_PASSED`,
     resultPath: stringValue(gate.resultPath) ?? FALLBACK_RESULT_PATH,
     timeoutMs: positiveIntegerOrUndefined(gate.timeoutMs),
+    preCleanup: Array.isArray(gate.preCleanup) ? gate.preCleanup : [],
     requiredPreflights: preflightChecks.map((check) => check.id),
     preflightChecks,
     lifecycleSteps: stringArray(gate.lifecycleSteps),

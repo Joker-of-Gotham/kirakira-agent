@@ -95,10 +95,16 @@ describe("runtime integration gate", () => {
       id: "presentation:hydrated-visual-qa",
       kind: "presentation-hydrated-visual-qa",
       profile: "workbench-host",
-      command: "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 240000 --live",
+      command: "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa-full-lifecycle --profile workbench-host --timeout-ms 240000 --live",
     });
     expect(command.steps.at(-1)?.command).not.toContain("--skip-infra");
     expect(command.steps.at(-1)?.command).not.toContain("--skip-daemon");
+    expect(command.steps[1]?.cleanup).toEqual([
+      {
+        display: "docker compose -p kirakira-agent-test -f docker-compose.test.yml down --remove-orphans",
+        required: true,
+      },
+    ]);
   });
 
   it("writes and trusts aggregate evidence without losing child gate identities", () => {
@@ -169,6 +175,32 @@ describe("runtime integration gate", () => {
     expect(calls[3]).toContain("--skip-infra");
     expect(calls[4]).toContain("--skip-infra");
     expect(calls[4]).toContain("--skip-daemon");
+  });
+
+  it("runs full-lifecycle cleanup after compose-backed memory persistence", async () => {
+    const command = buildRuntimeIntegrationGateCommand(
+      {
+        gateName: "full-lifecycle",
+        live: true,
+        resultPath: null,
+        skipInfra: true,
+      },
+      {},
+    );
+    const calls: string[] = [];
+    const code = await runRuntimeIntegrationGate(command, {
+      runner: (executable: string, args: string[]) => {
+        calls.push([executable.endsWith("node.exe") ? "node" : executable, ...args].join(" "));
+        return 0;
+      },
+    });
+
+    expect(code).toBe(0);
+    expect(calls[1]).toContain("scripts/memory-persistence-smoke.mjs --profile test-host");
+    expect(calls[2]).toBe(
+      "docker compose -p kirakira-agent-test -f docker-compose.test.yml down --remove-orphans",
+    );
+    expect(calls[3]).toContain("scripts/runtime-daemon-composition-smoke.mjs");
   });
 
   it("supports injected gate adapters without changing the aggregate flow", () => {

@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { Duplex } from "node:stream";
 import {
   DEFAULT_BROWSER_GATEWAY_ENDPOINT,
@@ -70,6 +70,19 @@ const rejectUpgrade = (socket: Duplex, status: number, reason: string): void => 
   socket.destroy();
 };
 
+const applyCorsHeaders = (
+  request: IncomingMessage,
+  response: ServerResponse,
+  allowedOrigins: readonly string[] | undefined,
+): void => {
+  const origin = request.headers.origin;
+  if (typeof origin !== "string" || !isAllowedOrigin(origin, allowedOrigins)) {
+    return;
+  }
+  response.setHeader("access-control-allow-origin", origin);
+  response.setHeader("vary", "Origin");
+};
+
 const browserGatewayManifest = (
   endpoint: RuntimeEndpointParts,
   tokenRequired: boolean,
@@ -107,6 +120,15 @@ export class BrowserGatewayServer {
     }
 
     const server = createServer((request, response) => {
+      applyCorsHeaders(request, response, config.allowedOrigins);
+      if (request.method === "OPTIONS" && (request.url === "/healthz" || request.url === "/manifest")) {
+        response.writeHead(204, {
+          "access-control-allow-methods": "GET, OPTIONS",
+          "access-control-allow-headers": "content-type",
+        });
+        response.end();
+        return;
+      }
       if (request.method === "GET" && request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json" });
         const endpoint =

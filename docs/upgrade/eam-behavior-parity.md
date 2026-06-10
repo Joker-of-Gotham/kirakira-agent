@@ -23,17 +23,16 @@ matched and only Kirakira-side extra files. The behavior question is therefore:
 which extras are intentional Kirakira extension surfaces, and which still need
 runtime validation before upgrade readiness can treat them as closed?
 
-## Next Mechanism Gap
+## Closed Mechanism Gap
 
 After the profile-owned fast runtime integration gate, the single-run
-`runtime-daemon-composition-smoke`, and the renderer-level
-`presentation-hydrated-visual-qa`, the highest-leverage remaining gap is now
-`full-lifecycle-docker-desktop-gate`: keep the full Docker-backed daemon,
-browser gateway, web renderer, desktop renderer, Electron shell, and hydrated
-visual QA under one slower live gate. That gate now exists as
-`runtimeLifecycleGates.runtime-full-lifecycle`; the current artifact is
-`blocked` at Docker daemon preflight because Docker Desktop is not available in
-this environment.
+`runtime-daemon-composition-smoke`, the renderer-level
+`presentation-hydrated-visual-qa`, and the no-skip Docker-backed
+`runtime-full-lifecycle` gate, the former
+`full-lifecycle-docker-desktop-gate` gap is covered. The slower live gate now
+keeps Docker services, daemon, browser gateway, web renderer, desktop renderer,
+Electron shell, and full-stack hydrated visual QA under one profile-owned
+release evidence path, with the current artifact status recorded as `passed`.
 
 Evidence:
 

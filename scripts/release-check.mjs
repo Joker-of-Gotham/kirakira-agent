@@ -34,6 +34,7 @@ const commands = [
   ["runtime-contracts typecheck", pnpm, ["--filter", "@kirakira/runtime-contracts", "typecheck"]],
   ["config-resolver typecheck", pnpm, ["--filter", "@kirakira/config-resolver", "typecheck"]],
   ["cli typecheck", pnpm, ["--filter", "@kirakira/cli", "typecheck"]],
+  ["runtime-daemon typecheck", pnpm, ["--filter", "@kirakira/runtime-daemon", "typecheck"]],
   ["web build", pnpm, ["--filter", "@kirakira/web", "build"]],
   ["desktop build", pnpm, ["--filter", "@kirakira/desktop", "build"]],
   [
@@ -50,6 +51,8 @@ const commands = [
       "test/unit/cli/runtime-profile-command.test.ts",
       "test/unit/cli/runtime-doctor-command.test.ts",
       "test/unit/runtime-daemon/agent-mcp-tool-gateway.test.ts",
+      "test/unit/runtime-daemon/browser-gateway-server.test.ts",
+      "test/unit/runtime-daemon/gateway-bridge.test.ts",
       "test/smoke/runtime-daemon/composition-smoke.test.ts",
       "test/smoke/runtime-daemon/mcp-live-propagation-smoke.test.ts",
       "test/unit/frontend-app/command-actions.test.ts",

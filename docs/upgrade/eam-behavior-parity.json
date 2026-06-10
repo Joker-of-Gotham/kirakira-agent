@@ -137,17 +137,17 @@
       "readinessReportPath": "gates.runtimeFullLifecycle",
       "liveResultPath": "docs/upgrade/gates/runtime-full-lifecycle-gate.json",
       "integrationGate": "full-lifecycle",
-      "currentStatus": "blocked",
-      "expectation": "The full lifecycle gate must run the no-skip Docker-backed daemon/gateway/web/desktop/Electron/hydrated-QA chain, verify Docker preflight, record profile-derived lifecycle steps and targets, and remain open work until a passed artifact replaces the current Docker preflight failure."
+      "currentStatus": "passed",
+      "expectation": "The full lifecycle gate must run the no-skip Docker-backed daemon/gateway/web/desktop/Electron/hydrated-QA chain, verify Docker preflight, record profile-derived lifecycle steps and targets, and keep a passed artifact current for release readiness."
     }
   },
   "nextMechanismGap": {
     "id": "full-lifecycle-docker-desktop-gate",
     "targetName": "runtime-daemon",
     "priority": "high",
-    "status": "partial",
-    "gap": "Run the full Docker-backed daemon, browser gateway, web renderer, desktop renderer, Electron shell, and hydrated visual QA as one slower live gate when Docker Desktop is available.",
-    "rationale": "The renderer-level hydrated visual QA gate now proves web and desktop screenshots, view navigation, nonblank rendering, console/page errors, and overflow from profile-derived URLs with explicit mock/skip execution identity. The separate runtime-full-lifecycle gate now exists and records Docker preflight failure as blocked evidence; the remaining broader gap is a passed full lifecycle artifact with Docker-backed services and the daemon/gateway stack.",
+    "status": "covered",
+    "gap": "Keep the full Docker-backed daemon, browser gateway, web renderer, desktop renderer, Electron shell, and hydrated visual QA under one slower live release gate.",
+    "rationale": "The renderer-level hydrated visual QA gate proves web and desktop screenshots, view navigation, nonblank rendering, console/page errors, and overflow from profile-derived URLs with explicit mock/skip execution identity. The separate runtime-full-lifecycle gate now has a passed Docker-backed artifact covering services, daemon/gateway, web, desktop renderer, Electron shell, and the full-stack hydrated visual QA artifact.",
     "evidence": [
       {
         "kind": "script",
@@ -882,14 +882,14 @@
     {
       "targetName": "frontend-app",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira owns shared web and desktop workbench presentation outside the EAM package baseline; renderer-level hydrated screenshot QA now covers profile-derived web/desktop targets, mobile/tablet/desktop viewports, Runs/Agents/Research/Systems navigation, nonblank rendering, console/page errors, and overflow. Full daemon/gateway-backed visual execution remains a broader live lifecycle follow-up."
+      "status": "covered",
+      "behavior": "Kirakira owns shared web and desktop workbench presentation outside the EAM package baseline; renderer-level hydrated screenshot QA covers profile-derived web/desktop targets, mobile/tablet/desktop viewports, Runs/Agents/Research/Systems navigation, nonblank rendering, console/page errors, and overflow. The full Docker lifecycle gate also covers daemon/gateway-backed web, desktop renderer, Electron shell, and full-stack hydrated visual execution."
     },
     {
       "targetName": "frontend-core",
       "classification": "intentional-kirakira-extension",
-      "status": "partial",
-      "behavior": "Kirakira owns browser-safe frontend projection selectors outside the EAM package baseline; shared workbench navigation/detail selectors are now exercised by the hydrated visual QA gate across the four core views. Continued projection expansion remains tied to new product surfaces."
+      "status": "covered",
+      "behavior": "Kirakira owns browser-safe frontend projection selectors outside the EAM package baseline; shared workbench navigation/detail selectors are exercised by the hydrated visual QA gates across the four core views. Future projection expansion is treated as new product-surface work, not an open parity gap."
     },
     {
       "targetName": "runtime-contracts",
