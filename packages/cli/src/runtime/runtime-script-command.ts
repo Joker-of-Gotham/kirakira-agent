@@ -5,7 +5,9 @@ import { join } from "node:path";
 import { findRepoRoot } from "../util/repo-root.js";
 import {
   getRuntimeScriptDefinition,
+  serializeRuntimeScriptArgs,
   type RuntimeScriptId,
+  type RuntimeScriptOptionsById,
 } from "./runtime-script-registry.js";
 
 export interface RuntimeScriptInvocation {
@@ -14,9 +16,15 @@ export interface RuntimeScriptInvocation {
   cwd: string;
 }
 
-export interface RuntimeScriptInvocationOptions {
-  scriptId: RuntimeScriptId;
+export interface RuntimeScriptInvocationOptions<TScriptId extends RuntimeScriptId = RuntimeScriptId> {
+  scriptId: TScriptId;
   args?: string[];
+  scriptOptions?: RuntimeScriptOptionsById[TScriptId];
+}
+
+export interface RuntimeScriptPathResolution {
+  repoRoot: string;
+  scriptPath: string;
 }
 
 export function resolveKirakiraRepoRoot(env: NodeJS.ProcessEnv = process.env): string {
@@ -27,19 +35,31 @@ export function resolveKirakiraRepoRoot(env: NodeJS.ProcessEnv = process.env): s
   return repoRoot;
 }
 
-export function buildRuntimeScriptInvocation(
-  options: RuntimeScriptInvocationOptions,
+export function buildRuntimeScriptInvocation<TScriptId extends RuntimeScriptId>(
+  options: RuntimeScriptInvocationOptions<TScriptId>,
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeScriptInvocation {
+  const { repoRoot, scriptPath } = resolveRuntimeScriptPath(options.scriptId, env);
+  const args = options.args ?? serializeRuntimeScriptArgs(options.scriptId, options.scriptOptions ?? {});
+  return {
+    command: process.execPath,
+    args: [scriptPath, ...args],
+    cwd: repoRoot,
+  };
+}
+
+export function resolveRuntimeScriptPath(
+  scriptId: RuntimeScriptId,
+  env: NodeJS.ProcessEnv = process.env,
+): RuntimeScriptPathResolution {
   const repoRoot = resolveKirakiraRepoRoot(env);
-  const scriptPath = join(repoRoot, "scripts", getRuntimeScriptDefinition(options.scriptId).scriptName);
+  const scriptPath = join(repoRoot, "scripts", getRuntimeScriptDefinition(scriptId).scriptName);
   if (!existsSync(scriptPath)) {
     throw new Error(`Runtime script not found: ${scriptPath}`);
   }
   return {
-    command: process.execPath,
-    args: [scriptPath, ...(options.args ?? [])],
-    cwd: repoRoot,
+    repoRoot,
+    scriptPath,
   };
 }
 

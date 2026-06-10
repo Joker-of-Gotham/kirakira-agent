@@ -228,6 +228,17 @@ describe("presentation hydrated visual QA gate", () => {
       rmSync(tempRoot, { recursive: true, force: true });
     }
   });
+
+  it("keeps command palette interaction in the hydrated renderer probe", () => {
+    const source = readFileSync("scripts/presentation-hydrated-visual-qa-runner.mjs", "utf8");
+
+    expect(source).toContain('button[aria-label="Open command palette"]');
+    expect(source).toContain('[data-kk-command-palette="open"]');
+    expect(source).toContain('input[aria-label="Search workbench commands"]');
+    expect(source).toContain('[data-kk-command-action-id="view.systems"]');
+    expect(source).toContain("command palette Enter did not activate Systems view");
+    expect(source).toContain("command palette did not close on Escape");
+  });
 });
 
 function fakeSurfaceResults(command: ReturnType<typeof buildPresentationHydratedVisualQaCommand>) {
@@ -267,6 +278,17 @@ function fakeSurfaceResults(command: ReturnType<typeof buildPresentationHydrated
           currentNavCount: 1,
           textLength: 200,
         })),
+        commandPalette: {
+          triggerFound: true,
+          shortcutDefaultPrevented: true,
+          openedByShortcut: true,
+          searchFocused: true,
+          optionCount: 8,
+          filteredSystemsActionFound: true,
+          executedSystemsView: true,
+          reopenedByTrigger: true,
+          closedByEscape: true,
+        },
         overflow: {
           documentHorizontalPixels: 0,
           clippedText: [],

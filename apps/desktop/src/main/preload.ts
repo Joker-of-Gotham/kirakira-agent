@@ -18,11 +18,13 @@ import type {
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
 import {
+  DESKTOP_COMMAND_CHANNELS,
   KIRAKIRA_PRELOAD_API_KEY,
   RUNTIME_IPC_CHANNELS,
 } from "./preload-contract.js";
 
 type EventCallback = (event: RuntimeTransportEvent) => void;
+type CommandPaletteOpenCallback = () => void;
 
 const nextSubscriptionId = () =>
   globalThis.crypto?.randomUUID?.() ?? `subscription-${Date.now()}-${Math.random()}`;
@@ -93,4 +95,13 @@ contextBridge.exposeInMainWorld(KIRAKIRA_PRELOAD_API_KEY, {
   cancel: (runId: string, reason?: string) =>
     ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.cancel, { runId, reason }) as Promise<void>,
   drain: () => ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.drain) as Promise<void>,
+  onOpenCommandPalette: (callback: CommandPaletteOpenCallback) => {
+    const listener = () => {
+      callback();
+    };
+    ipcRenderer.on(DESKTOP_COMMAND_CHANNELS.openCommandPalette, listener);
+    return () => {
+      ipcRenderer.removeListener(DESKTOP_COMMAND_CHANNELS.openCommandPalette, listener);
+    };
+  },
 });

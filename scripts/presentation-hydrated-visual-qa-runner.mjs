@@ -89,6 +89,24 @@ function probeScript(config) {
       const style = getComputedStyle(element);
       return rect.width > 1 && rect.height > 1 && style.visibility !== "hidden" && style.display !== "none";
     };
+    const setNativeInputValue = (input, value) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      if (!setter) {
+        input.value = value;
+      } else {
+        setter.call(input, value);
+      }
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    };
+    const dispatchKey = (target, init) => {
+      const event = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        ...init,
+      });
+      target.dispatchEvent(event);
+      return event.defaultPrevented;
+    };
     const overflow = {
       documentHorizontalPixels: Math.max(
         0,
@@ -111,6 +129,52 @@ function probeScript(config) {
         });
       }
       if (overflow.clippedText.length >= 10) break;
+    }
+    const commandTrigger = document.querySelector('button[aria-label="Open command palette"]');
+    const commandPalette = {
+      triggerFound: Boolean(commandTrigger),
+      shortcutDefaultPrevented: false,
+      openedByShortcut: false,
+      searchFocused: false,
+      optionCount: 0,
+      filteredSystemsActionFound: false,
+      executedSystemsView: false,
+      reopenedByTrigger: false,
+      closedByEscape: false,
+    };
+    commandPalette.shortcutDefaultPrevented = dispatchKey(window, {
+      key: "k",
+      code: "KeyK",
+      ctrlKey: true,
+    });
+    await waitFrame();
+    let commandDialog = document.querySelector('[data-kk-command-palette="open"]');
+    commandPalette.openedByShortcut = Boolean(commandDialog);
+    const searchInput = document.querySelector('input[aria-label="Search workbench commands"]');
+    commandPalette.searchFocused = document.activeElement === searchInput;
+    commandPalette.optionCount = document.querySelectorAll("[data-kk-command-action-kind]").length;
+    if (searchInput instanceof HTMLInputElement) {
+      setNativeInputValue(searchInput, "systems");
+      await waitFrame();
+      commandPalette.filteredSystemsActionFound = Boolean(
+        document.querySelector('[data-kk-command-action-id="view.systems"]'),
+      );
+      dispatchKey(searchInput, { key: "Enter", code: "Enter" });
+      await waitFrame();
+      const shellAfterEnter = document.querySelector("main.kk-shell");
+      commandPalette.executedSystemsView =
+        shellAfterEnter?.getAttribute("data-kk-workbench-view") === "workbench-view-systems";
+    }
+    if (commandTrigger instanceof HTMLElement) {
+      commandTrigger.click();
+      await waitFrame();
+      commandDialog = document.querySelector('[data-kk-command-palette="open"]');
+      commandPalette.reopenedByTrigger = Boolean(commandDialog);
+      if (commandDialog instanceof HTMLElement) {
+        dispatchKey(commandDialog, { key: "Escape", code: "Escape" });
+        await waitFrame();
+        commandPalette.closedByEscape = !document.querySelector('[data-kk-command-palette="open"]');
+      }
     }
     const views = [];
     for (const view of config.views) {
@@ -150,6 +214,7 @@ function probeScript(config) {
       shellFound: Boolean(shell),
       surface,
       views,
+      commandPalette,
       overflow,
       activeElement: document.activeElement ? cssPath(document.activeElement) : null,
     };
@@ -175,6 +240,22 @@ function probeFailures(probe, expectedSurface) {
     if (view.currentNavCount !== 1) failures.push(`expected one current nav item for ${view.id}, saw ${view.currentNavCount}`);
     if (view.textLength < 40) failures.push(`workspace ${view.id} rendered too little text`);
   }
+  const commandPalette = probe.commandPalette ?? {};
+  if (!commandPalette.triggerFound) failures.push("missing command palette trigger");
+  if (!commandPalette.shortcutDefaultPrevented) failures.push("command palette shortcut was not handled");
+  if (!commandPalette.openedByShortcut) failures.push("command palette did not open from shortcut");
+  if (!commandPalette.searchFocused) failures.push("command palette search did not receive focus");
+  if ((commandPalette.optionCount ?? 0) < 3) {
+    failures.push(`command palette rendered too few actions (${commandPalette.optionCount ?? 0})`);
+  }
+  if (!commandPalette.filteredSystemsActionFound) {
+    failures.push("command palette search did not find Systems view action");
+  }
+  if (!commandPalette.executedSystemsView) {
+    failures.push("command palette Enter did not activate Systems view");
+  }
+  if (!commandPalette.reopenedByTrigger) failures.push("command palette trigger did not reopen palette");
+  if (!commandPalette.closedByEscape) failures.push("command palette did not close on Escape");
   if ((probe.overflow?.documentHorizontalPixels ?? 0) > 2) {
     failures.push(`document has horizontal overflow ${probe.overflow.documentHorizontalPixels}px`);
   }

@@ -36,6 +36,11 @@ describe("runtime doctor", () => {
       mode: "container",
       ok: true,
       status: "ok",
+      probeMode: "live",
+      probes: {
+        enabled: true,
+        mode: "live",
+      },
       summary: {
         total: 7,
         ok: 1,
@@ -259,6 +264,12 @@ describe("runtime doctor", () => {
     });
 
     expect(report.ok).toBe(true);
+    expect(report.probeMode).toBe("disabled");
+    expect(report.probes).toMatchObject({
+      enabled: false,
+      mode: "disabled",
+      reason: "Live probes disabled",
+    });
     expect(report.summary.skipped).toBe(report.summary.total);
     expect(report.checks.every((check) => check.detail === "Live probes disabled")).toBe(true);
   });
@@ -277,6 +288,8 @@ describe("runtime doctor", () => {
     const report = JSON.parse(result.stdout);
     expect(report.profile).toBe("workbench-host");
     expect(report.ok).toBe(true);
+    expect(report.probeMode).toBe("disabled");
+    expect(report.probes.enabled).toBe(false);
     expect(JSON.stringify(report)).not.toContain("5173");
   });
 });

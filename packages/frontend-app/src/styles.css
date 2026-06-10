@@ -408,6 +408,21 @@ a:focus-visible {
   font-weight: 700;
 }
 
+.kk-command-shortcut {
+  min-width: 46px;
+  min-height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--kk-border);
+  border-radius: 6px;
+  padding: 0 6px;
+  background: var(--kk-color-surface-subtle);
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
 .kk-command-palette-backdrop {
   position: fixed;
   inset: 0;
@@ -668,6 +683,7 @@ a:focus-visible {
 
 .kk-command-head {
   min-width: 0;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
 }
@@ -679,7 +695,8 @@ a:focus-visible {
 }
 
 .kk-command-status {
-  min-width: min(280px, 100%);
+  flex: 1 1 220px;
+  min-width: 0;
   max-width: 380px;
   gap: 7px;
   border: 1px solid var(--kk-border);
@@ -731,7 +748,7 @@ a:focus-visible {
 .kk-command-grid {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(150px, 0.75fr) repeat(4, minmax(170px, 1fr));
+  grid-template-columns: minmax(120px, 0.7fr) repeat(4, minmax(140px, 1fr));
   gap: 8px;
   align-items: stretch;
 }
@@ -784,12 +801,14 @@ a:focus-visible {
 
 .kk-command-actions {
   min-width: 0;
+  flex-wrap: wrap;
   gap: 6px;
-  justify-content: space-between;
+  justify-content: flex-start;
 }
 
 .kk-command-actions .kk-icon-button {
-  flex: 1 1 auto;
+  flex: 1 1 72px;
+  min-width: 0;
   min-height: 34px;
   justify-content: center;
   padding: 6px 8px;
@@ -797,8 +816,8 @@ a:focus-visible {
 }
 
 .kk-command-priority {
-  flex: 1 1 auto;
-  min-width: 96px;
+  flex: 1 1 112px;
+  min-width: 0;
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--kk-border);
@@ -808,6 +827,7 @@ a:focus-visible {
 
 .kk-command-priority button {
   flex: 1 1 0;
+  min-width: 0;
   min-height: 27px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -832,7 +852,7 @@ a:focus-visible {
 }
 
 .kk-command-block-input {
-  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) auto;
+  grid-template-columns: 1fr;
   align-items: end;
 }
 
@@ -841,7 +861,7 @@ a:focus-visible {
 }
 
 .kk-command-block-resume {
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 1fr;
 }
 
 .kk-command-block-resume .kk-command-actions {
@@ -3880,6 +3900,15 @@ a.kk-system-row:hover,
 
   .kk-command-trigger {
     flex: 1 1 auto;
+  }
+
+  .kk-command-head {
+    align-items: stretch;
+  }
+
+  .kk-command-status {
+    flex-basis: 100%;
+    max-width: none;
   }
 
   .kk-command-palette-backdrop {

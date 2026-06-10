@@ -85,6 +85,7 @@ import {
 import { createMockRuntimeTransport } from "./mock-transport.js";
 
 export type KirakiraPresentationSurface = "web" | "desktop";
+export type CommandPaletteOpenSubscription = (openCommandPalette: () => void) => () => void;
 
 export interface KirakiraWorkbenchProps {
   transport?: RuntimeTransport;
@@ -92,6 +93,7 @@ export interface KirakiraWorkbenchProps {
   productName?: string;
   environmentLabel?: string;
   initialPrompt?: string;
+  commandPaletteOpenSubscription?: CommandPaletteOpenSubscription;
 }
 
 interface RunHistoryItem {
@@ -226,6 +228,7 @@ export function KirakiraWorkbench({
   productName = "Kirakira Agent",
   environmentLabel = "Local runtime",
   initialPrompt = defaultPrompt,
+  commandPaletteOpenSubscription,
 }: KirakiraWorkbenchProps) {
   const runtime = useMemo(() => transport ?? createMockRuntimeTransport(), [transport]);
   const unsubscribeRef = useRef<(() => void) | null>(null);
@@ -260,17 +263,28 @@ export function KirakiraWorkbench({
   const commandPaletteTriggerRef = useRef<HTMLButtonElement | null>(null);
   const commandPaletteSearchRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteWasOpenRef = useRef(false);
+  const openCommandPalette = useCallback(() => {
+    setCommandPaletteOpen(true);
+  }, []);
+
+  useEffect(() => {
+    if (!commandPaletteOpenSubscription) return undefined;
+    return commandPaletteOpenSubscription(openCommandPalette);
+  }, [commandPaletteOpenSubscription, openCommandPalette]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+      const composing = event.isComposing ||
+        (event as KeyboardEvent & { keyCode?: number }).keyCode === 229;
+      if (composing || event.repeat) return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.shiftKey) return;
       if (event.key.toLowerCase() !== "k") return;
       event.preventDefault();
-      setCommandPaletteOpen((open) => !open);
+      openCommandPalette();
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [openCommandPalette]);
 
   useEffect(() => {
     if (commandPaletteOpen) {
@@ -1009,6 +1023,7 @@ export function KirakiraWorkbench({
             >
               <Command size={16} />
               <span>Commands</span>
+              <kbd className="kk-command-shortcut" aria-hidden="true">Ctrl K</kbd>
             </button>
             <div className={`kk-connection kk-connection-${connection}`}>
               <CircleDot size={16} />
@@ -1394,6 +1409,7 @@ function WorkbenchCommandPalette({
         role="dialog"
         aria-modal="true"
         aria-labelledby="kk-command-palette-title"
+        data-kk-command-palette="open"
         onMouseDown={(event) => event.stopPropagation()}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
@@ -1420,6 +1436,7 @@ function WorkbenchCommandPalette({
             id="kk-command-query"
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
+            aria-label="Search workbench commands"
             onKeyDown={(event) => {
               if (event.key === "Enter" && firstEnabledAction) {
                 event.preventDefault();
@@ -1456,6 +1473,8 @@ function WorkbenchCommandPalette({
                         className={`kk-command-option kk-command-option-${action.tone}`}
                         disabled={action.disabled}
                         title={action.disabledReason}
+                        data-kk-command-action-id={action.id}
+                        data-kk-command-action-kind={action.kind}
                         onClick={() => onExecute(action)}
                         onKeyDown={(event) => {
                           if (event.key === "ArrowDown") {

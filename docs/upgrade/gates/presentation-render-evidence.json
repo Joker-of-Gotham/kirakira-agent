@@ -3,7 +3,7 @@
   "gate": "presentation-render-evidence",
   "profile": "workbench-host",
   "status": "passed",
-  "generatedAt": "2026-06-10T09:40:04.404Z",
+  "generatedAt": "2026-06-10T11:43:20.144Z",
   "command": "tsx --tsconfig tsconfig.base.json scripts/presentation-render-evidence.ts --profile workbench-host --write-result C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-render-evidence.json",
   "inputs": {
     "sharedRenderer": "packages/frontend-app/src/workbench.tsx",
@@ -16,8 +16,8 @@
       "transportMode": "browser-gateway",
       "environmentLabel": "Browser gateway",
       "html": {
-        "bytes": 25318,
-        "sha256": "b36563398e9d91bae96bca0354d4e81aba7cd1c24cc29602f341c650c79eeb06"
+        "bytes": 25382,
+        "sha256": "29bf495878b01aa6a131f7102292fe50a44ef07fdfe50e2b352ca49e15776285"
       },
       "selectors": [
         {
@@ -109,8 +109,8 @@
       "transportMode": "desktop-ipc",
       "environmentLabel": "Desktop IPC",
       "html": {
-        "bytes": 25314,
-        "sha256": "d81e2b588c8c3a437135a449bba01ef1222b024098233d00ebdbb26762738435"
+        "bytes": 25378,
+        "sha256": "46ef625ae2de02a064e6e3c634ced2602490d8de1d84811145fa860cd9c130fa"
       },
       "selectors": [
         {
@@ -203,7 +203,7 @@
       "id": "web:html",
       "label": "web SSR markup",
       "status": "pass",
-      "evidence": "bytes=25318; sha256=b36563398e9d91bae96bca0354d4e81aba7cd1c24cc29602f341c650c79eeb06"
+      "evidence": "bytes=25382; sha256=29bf495878b01aa6a131f7102292fe50a44ef07fdfe50e2b352ca49e15776285"
     },
     {
       "id": "web:selectors",
@@ -227,7 +227,7 @@
       "id": "desktop:html",
       "label": "desktop SSR markup",
       "status": "pass",
-      "evidence": "bytes=25314; sha256=d81e2b588c8c3a437135a449bba01ef1222b024098233d00ebdbb26762738435"
+      "evidence": "bytes=25378; sha256=46ef625ae2de02a064e6e3c634ced2602490d8de1d84811145fa860cd9c130fa"
     },
     {
       "id": "desktop:selectors",

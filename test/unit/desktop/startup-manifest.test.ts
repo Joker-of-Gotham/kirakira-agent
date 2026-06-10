@@ -77,9 +77,15 @@ describe("desktop startup manifest", () => {
       "listMcpTools",
       "callMcpTool",
       "subscribeRun",
+      "steer",
+      "enqueue",
       "approve",
+      "provideInput",
+      "resume",
+      "inspect",
       "cancel",
       "drain",
+      "onOpenCommandPalette",
     ]);
   });
 

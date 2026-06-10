@@ -606,7 +606,7 @@
       "targetName": "orchestrator-kernel",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira adds subagent task execution, research task execution, event projection, and runtime bridge contracts while preserving the EAM kernel file set. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, and multiple daemon memory source fanout through the orchestrator research executor.",
+      "behavior": "Kirakira adds subagent task execution, research task execution, event projection, and runtime bridge contracts while preserving the EAM kernel file set. Runtime-daemon KernelBridge coverage now exercises daemon-owned memory research source composition, default memory dependency source creation, bounded recall success and failure events, memory-backed checkpoint selection, subagent swarm composition, and multiple daemon research source fanout through the orchestrator research executor.",
       "extensionFiles": [
         "packages/orchestrator-kernel/src/execution/subagent-task-executor.ts",
         "packages/orchestrator-kernel/src/research/event-bridge.ts",
@@ -615,6 +615,34 @@
         "packages/orchestrator-kernel/src/subagent/runtime-bridge.ts",
         "packages/orchestrator-kernel/src/subagent/topology.ts"
       ],
+      "trackAEvidence": {
+        "source": [
+          "reference_project/eam-agent/packages/orchestrator-kernel/src/subagent/*",
+          "packages/orchestrator-kernel/src/subagent/*",
+          "packages/orchestrator-kernel/src/execution/subagent-task-executor.ts",
+          "packages/orchestrator-kernel/src/research/research-task-executor.ts",
+          "packages/orchestrator-kernel/src/research/event-bridge.ts",
+          "packages/runtime-daemon/src/bridge/kernel-bridge.ts",
+          "packages/runtime-daemon/src/bridge/deep-research.ts"
+        ],
+        "intent": "Preserve the EAM kernel/subagent mechanism while proving Kirakira's delegated swarm and deep-research task extensions as behavior-level additions rather than file drift.",
+        "gate": {
+          "name": "runtime-daemon:composition-smoke",
+          "configPath": "configs/runtime/profiles.json#daemonCompositionGates.runtime-daemon:composition-smoke",
+          "script": "scripts/runtime-daemon-composition-smoke.mjs",
+          "resultPath": "docs/upgrade/gates/runtime-daemon-composition-smoke.json",
+          "command": "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live"
+        },
+        "tests": [
+          "test/unit/orchestrator-kernel/task-executor.test.ts",
+          "test/unit/orchestrator-kernel/subagent-contract.test.ts",
+          "test/unit/orchestrator-kernel/daemon-orchestrator.test.ts",
+          "test/unit/orchestrator-kernel/research-event-bridge.test.ts",
+          "test/unit/runtime-daemon/kernel-bridge-subagent.test.ts",
+          "test/smoke/runtime-daemon/composition-smoke.test.ts"
+        ],
+        "remainingGapEvidence": []
+      },
       "evidence": [
         {
           "kind": "test",
@@ -792,7 +820,45 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, profile-owned live adapter suite/check/test metadata, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, profile-owned live adapter suite/check/test metadata, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, KernelBridge/ResearchTaskExecutor live MCP research event emission, and composition-smoke stdio/http MCP fanout assertions are covered.",
+      "trackAEvidence": {
+        "source": [
+          "reference_project/eam-agent/packages/memory-service/src/recall/*",
+          "reference_project/eam-agent/packages/memory-pipeline/*",
+          "reference_project/eam-agent/packages/orchestrator-kernel/src/research/*",
+          "packages/deep-research/src/source-adapters.ts",
+          "packages/deep-research/src/mcp.ts",
+          "packages/deep-research/src/file.ts",
+          "packages/deep-research/src/web.ts",
+          "packages/orchestrator-kernel/src/research/research-task-executor.ts",
+          "packages/runtime-daemon/src/bridge/deep-research.ts"
+        ],
+        "intent": "Make deep research an explicit Kirakira mechanism extension with source-adapter fanout and daemon-composed memory/MCP evidence, not an unclassified extra package.",
+        "gate": {
+          "name": "deep-research:live-adapters",
+          "configPath": "configs/runtime/profiles.json#deepResearchLiveAdapterGates.deep-research:live-adapters",
+          "script": "scripts/deep-research-live-adapters.mjs",
+          "resultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
+          "command": "node scripts/deep-research-live-adapters.mjs --gate deep-research:live-adapters --profile workbench-host --live"
+        },
+        "compositionGate": {
+          "name": "runtime-daemon:composition-smoke",
+          "test": "test/smoke/runtime-daemon/composition-smoke.test.ts",
+          "assertion": "The KernelBridge smoke asserts memory evidence plus both stdio and HTTP MCP research citations/evidence in one non-Docker run."
+        },
+        "tests": [
+          "test/unit/deep-research/file.test.ts",
+          "test/unit/deep-research/web.test.ts",
+          "test/unit/deep-research/mcp.test.ts",
+          "test/unit/deep-research/planner.test.ts",
+          "test/unit/runtime-daemon/deep-research-mcp-source.test.ts",
+          "test/unit/orchestrator-kernel/task-executor.test.ts",
+          "test/smoke/deep-research/live-adapters-smoke.test.ts",
+          "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
+          "test/smoke/runtime-daemon/composition-smoke.test.ts"
+        ],
+        "remainingGapEvidence": []
+      }
     },
     {
       "targetName": "frontend-app",

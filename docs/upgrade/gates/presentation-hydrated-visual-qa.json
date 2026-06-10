@@ -3,7 +3,7 @@
   "gate": "presentation-hydrated-visual-qa",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T07:29:48.308Z",
+  "passedAt": "2026-06-10T12:02:00.360Z",
   "checks": [
     "presentation:hydrated-web",
     "presentation:hydrated-desktop",
@@ -92,9 +92,9 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 194726,
-            "sampledColors": 155,
-            "alphaPixels": 513,
+            "pngBytes": 220374,
+            "sampledColors": 153,
+            "alphaPixels": 512,
             "nonblank": true
           },
           "consoleMessages": [
@@ -105,22 +105,22 @@
               "source": "http://127.0.0.1:5183/@vite/client"
             },
             {
-              "level": "0",
-              "message": "[vite] connected.",
-              "line": 827,
-              "source": "http://127.0.0.1:5183/@vite/client"
-            },
-            {
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=0c11c8e6"
+              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=9d91774c"
             },
             {
               "level": "2",
               "message": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
               "line": 2,
               "source": "node:electron/js2c/sandbox_bundle"
+            },
+            {
+              "level": "0",
+              "message": "[vite] connected.",
+              "line": 827,
+              "source": "http://127.0.0.1:5183/@vite/client"
             }
           ],
           "pageFailures": [],
@@ -128,7 +128,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 971,
+            "bodyTextLength": 1158,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -173,11 +173,22 @@
                 "textLength": 216
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 9,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         },
@@ -192,7 +203,7 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 261717,
+            "pngBytes": 283087,
             "sampledColors": 123,
             "alphaPixels": 513,
             "nonblank": true
@@ -214,7 +225,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=0c11c8e6"
+              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=9d91774c"
             },
             {
               "level": "2",
@@ -228,7 +239,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 971,
+            "bodyTextLength": 1158,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -273,11 +284,22 @@
                 "textLength": 216
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 9,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         },
@@ -292,8 +314,8 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 622120,
-            "sampledColors": 93,
+            "pngBytes": 657250,
+            "sampledColors": 95,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -314,7 +336,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=0c11c8e6"
+              "source": "http://127.0.0.1:5183/node_modules/.vite/deps/react-dom_client.js?v=9d91774c"
             },
             {
               "level": "2",
@@ -328,7 +350,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent",
             "rootChildCount": 1,
-            "bodyTextLength": 997,
+            "bodyTextLength": 1184,
             "shellFound": true,
             "surface": "web",
             "views": [
@@ -373,11 +395,22 @@
                 "textLength": 216
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 9,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         }
@@ -401,8 +434,8 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 216916,
-            "sampledColors": 156,
+            "pngBytes": 217861,
+            "sampledColors": 148,
             "alphaPixels": 512,
             "nonblank": true
           },
@@ -423,7 +456,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4e06c479"
             },
             {
               "level": "2",
@@ -437,7 +470,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent Desktop",
             "rootChildCount": 1,
-            "bodyTextLength": 1565,
+            "bodyTextLength": 1752,
             "shellFound": true,
             "surface": "desktop",
             "views": [
@@ -482,11 +515,22 @@
                 "textLength": 689
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 11,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         },
@@ -501,8 +545,8 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 293468,
-            "sampledColors": 117,
+            "pngBytes": 281757,
+            "sampledColors": 129,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -523,7 +567,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4e06c479"
             },
             {
               "level": "2",
@@ -537,7 +581,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent Desktop",
             "rootChildCount": 1,
-            "bodyTextLength": 1565,
+            "bodyTextLength": 1752,
             "shellFound": true,
             "surface": "desktop",
             "views": [
@@ -582,11 +626,22 @@
                 "textLength": 689
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 11,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         },
@@ -601,8 +656,8 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 750264,
-            "sampledColors": 102,
+            "pngBytes": 724704,
+            "sampledColors": 100,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -623,7 +678,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4e06c479"
             },
             {
               "level": "2",
@@ -637,7 +692,7 @@
             "readyState": "complete",
             "title": "Kirakira Agent Desktop",
             "rootChildCount": 1,
-            "bodyTextLength": 1591,
+            "bodyTextLength": 1778,
             "shellFound": true,
             "surface": "desktop",
             "views": [
@@ -682,11 +737,22 @@
                 "textLength": 689
               }
             ],
+            "commandPalette": {
+              "triggerFound": true,
+              "shortcutDefaultPrevented": true,
+              "openedByShortcut": true,
+              "searchFocused": true,
+              "optionCount": 11,
+              "filteredSystemsActionFound": true,
+              "executedSystemsView": true,
+              "reopenedByTrigger": true,
+              "closedByEscape": true
+            },
             "overflow": {
               "documentHorizontalPixels": 0,
               "clippedText": []
             },
-            "activeElement": "html > body"
+            "activeElement": "section.kk-workspace > header.kk-topbar > div.kk-topbar-actions > button.kk-command-trigger"
           },
           "failures": []
         }

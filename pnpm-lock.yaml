@@ -353,6 +353,9 @@ importers:
       '@kirakira/core':
         specifier: workspace:*
         version: link:../core
+      '@kirakira/runtime-contracts':
+        specifier: workspace:*
+        version: link:../runtime-contracts
       smol-toml:
         specifier: ^1.3.0
         version: 1.6.1

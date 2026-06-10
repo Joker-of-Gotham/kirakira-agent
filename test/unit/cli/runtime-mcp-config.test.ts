@@ -147,5 +147,11 @@ describe("runtime MCP config resolver", () => {
         env: { KIRAKIRA_REPO_ROOT: repoRoot },
       }),
     ).rejects.toThrow(/Local MCP config not found/u);
+    await expect(
+      resolveRuntimeMcpConfig({
+        cwd,
+        env: { KIRAKIRA_REPO_ROOT: repoRoot },
+      }),
+    ).rejects.toThrow(/Runtime script not found/u);
   });
 });

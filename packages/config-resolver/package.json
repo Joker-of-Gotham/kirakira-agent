@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@kirakira/core": "workspace:*",
+    "@kirakira/runtime-contracts": "workspace:*",
     "smol-toml": "^1.3.0",
     "yaml": "^2.7.0"
   },

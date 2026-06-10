@@ -249,6 +249,7 @@ export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
     fetcher: options.fetcher,
     transport: options.transport,
   };
+  const probeMode = normalizedOptions.probe ? "live" : "disabled";
   const checks = [];
   for (const check of plan.checks ?? []) {
     if (!isRecord(check)) continue;
@@ -264,6 +265,13 @@ export async function evaluateRuntimeReadinessPlan(plan, options = {}) {
     mode: plan.mode,
     ok: failed === 0,
     status: failed > 0 ? "fail" : warned > 0 ? "warn" : "ok",
+    probeMode,
+    probes: {
+      enabled: normalizedOptions.probe,
+      ...(normalizedOptions.probe
+        ? { mode: "live" }
+        : { mode: "disabled", reason: "Live probes disabled" }),
+    },
     durationMs: elapsedSince(started),
     compose: plan.compose,
     summary: {
@@ -336,6 +344,7 @@ function parseArgs(argv) {
 function formatDoctorReport(report) {
   const lines = [
     `Kirakira runtime doctor: ${report.profile} (${report.status})`,
+    `Probe mode: ${report.probeMode}${report.probes?.enabled === false ? " (plan-only; live probes disabled)" : ""}`,
     `Checks: ${report.summary.ok} ok, ${report.summary.failed} failed, ${report.summary.warned} warnings, ${report.summary.skipped} skipped`,
   ];
   if (report.compose) {

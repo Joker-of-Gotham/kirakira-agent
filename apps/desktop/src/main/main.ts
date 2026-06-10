@@ -20,6 +20,7 @@ import {
   desktopWindowOptionsFromManifest,
   resolveDesktopStartupManifest,
 } from "./startup-manifest.js";
+import { installWorkbenchMenu } from "./workbench-menu.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const startupManifest = resolveDesktopStartupManifest({ mainDir: __dirname });
@@ -133,6 +134,7 @@ const createWindow = async () => {
 };
 
 app.whenReady().then(() => {
+  installWorkbenchMenu();
   void createWindow().catch((error) => {
     if (isWorkbenchElectronSmoke()) {
       finishElectronSmoke(error);

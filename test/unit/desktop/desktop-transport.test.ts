@@ -55,6 +55,7 @@ const bridgeStub = (
   })),
   cancel: vi.fn(async () => {}),
   drain: vi.fn(async () => {}),
+  onOpenCommandPalette: vi.fn(() => () => {}),
   ...overrides,
 });
 

@@ -40,6 +40,7 @@ export interface KirakiraDesktopRuntimeBridge {
   inspect(request: InspectRunRequest): Promise<{ runId: string; state: unknown }>;
   cancel(runId: string, reason?: string): Promise<void>;
   drain(): Promise<void>;
+  onOpenCommandPalette(callback: () => void): Unsubscribe;
 }
 
 declare global {

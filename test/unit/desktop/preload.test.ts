@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
+  DESKTOP_COMMAND_CHANNELS,
   KIRAKIRA_PRELOAD_API_KEY,
   KIRAKIRA_PRELOAD_API_METHODS,
   RUNTIME_IPC_CHANNELS,
@@ -17,14 +18,26 @@ describe("desktop preload bridge", () => {
     expect(KIRAKIRA_PRELOAD_API_KEY).toBe("kirakiraRuntime");
     expect(KIRAKIRA_PRELOAD_API_METHODS).toContain("getStatus");
     expect(KIRAKIRA_PRELOAD_API_METHODS).toEqual(
-      expect.arrayContaining(["steer", "enqueue", "provideInput", "resume", "inspect"]),
+      expect.arrayContaining([
+        "steer",
+        "enqueue",
+        "provideInput",
+        "resume",
+        "inspect",
+        "onOpenCommandPalette",
+      ]),
     );
     expect(RUNTIME_IPC_CHANNELS.getStatus).toBe("runtime:getStatus");
     expect(RUNTIME_IPC_CHANNELS.inspect).toBe("runtime:inspect");
+    expect(DESKTOP_COMMAND_CHANNELS.openCommandPalette).toBe(
+      "desktop-command:open-command-palette",
+    );
     expect(source).toContain("contextBridge.exposeInMainWorld(KIRAKIRA_PRELOAD_API_KEY");
     expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.getStatus)");
     expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.steer");
     expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.inspect");
+    expect(source).toContain("ipcRenderer.on(DESKTOP_COMMAND_CHANNELS.openCommandPalette");
+    expect(source).toContain("ipcRenderer.removeListener(DESKTOP_COMMAND_CHANNELS.openCommandPalette");
     expect(source).not.toContain("get_status");
     expect(source).not.toContain("send: ipcRenderer.send");
     expect(source).not.toContain("invoke: ipcRenderer.invoke");

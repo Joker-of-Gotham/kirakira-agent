@@ -10,12 +10,15 @@ if (!root) {
   throw new Error("Missing root element");
 }
 
+const desktopBridge = window.kirakiraRuntime;
+
 createRoot(root).render(
   <StrictMode>
     <KirakiraWorkbench
       environmentLabel="Desktop IPC"
       presentationSurface="desktop"
       transport={createDesktopRuntimeTransport() ?? undefined}
+      commandPaletteOpenSubscription={desktopBridge?.onOpenCommandPalette}
     />
   </StrictMode>,
 );

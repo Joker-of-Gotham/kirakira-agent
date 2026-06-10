@@ -15,6 +15,24 @@ function count(value) {
   return Array.isArray(value) ? value.length : 0;
 }
 
+function startupSurfaceSummaries(startup) {
+  if (!isRecord(startup?.surfaces)) return [];
+  return Object.entries(startup.surfaces)
+    .filter(([surface, plan]) => typeof surface === "string" && isRecord(plan))
+    .map(([surface, plan]) => {
+      const steps = Array.isArray(plan.steps) ? plan.steps : [];
+      const readinessChecks = Array.isArray(plan.readiness?.checks) ? plan.readiness.checks : [];
+      return {
+        surface,
+        steps: steps.length,
+        stepNames: steps
+          .map((step) => step?.name)
+          .filter((name) => typeof name === "string" && name.length > 0),
+        readinessChecks: readinessChecks.length,
+      };
+    });
+}
+
 export function buildRuntimeReadyReport(profileName = undefined, options = {}) {
   const config = options.config ?? loadRuntimeProfiles();
   const profile = resolveRuntimeProfile(profileName, config, options.env ?? process.env);
@@ -23,6 +41,9 @@ export function buildRuntimeReadyReport(profileName = undefined, options = {}) {
   const mcpConfig = projection.fragments?.mcpConfig ?? {};
   const startup = projection.fragments?.startup ?? {};
   const mcp = projection.mcp ?? {};
+  const startupSurfaces = startupSurfaceSummaries(startup);
+  const topLevelStartupSteps = count(startup.steps);
+  const surfaceStartupSteps = startupSurfaces.reduce((total, surface) => total + surface.steps, 0);
 
   return {
     schemaVersion: 1,
@@ -44,10 +65,14 @@ export function buildRuntimeReadyReport(profileName = undefined, options = {}) {
     compose: readiness.compose,
     readiness,
     startup,
+    startupSurfaces,
     summary: {
       readinessChecks: count(readiness.checks),
       mcpServers: count(mcp.servers),
-      startupSteps: count(startup.steps),
+      startupSteps: topLevelStartupSteps + surfaceStartupSteps,
+      topLevelStartupSteps,
+      startupSurfaces: startupSurfaces.length,
+      surfaceStartupSteps,
       composeServices: count(readiness.compose?.services),
     },
   };
@@ -96,6 +121,9 @@ function formatRuntimeReadyReport(report) {
     "Plan only: no live probes, process startup, Docker execution, or local MCP overlay",
     `Readiness checks: ${report.summary.readinessChecks}`,
     `MCP servers: ${report.summary.mcpServers} from ${report.mcp.source}`,
+    `Startup surfaces: ${report.startupSurfaces.length > 0
+      ? report.startupSurfaces.map((surface) => `${surface.surface}(${surface.steps})`).join(", ")
+      : "none"}`,
   ];
   if (isRecord(report.compose)) {
     lines.push(`Compose plan: ${report.compose.command} ${report.compose.args.join(" ")}`);

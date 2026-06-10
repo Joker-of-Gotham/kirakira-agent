@@ -361,6 +361,19 @@ describe("runtime daemon composition smoke", () => {
           otelSpanName: `tools/call ${DEEP_RESEARCH_LIVE_MCP_TOOL}`,
         }),
       });
+      const mcpCitationUris = seen
+        .filter((event) => event.kind === "research.citation.added" && event.payload.sourceKind === "mcp")
+        .map((event) => event.payload.uri)
+        .sort();
+      expect(mcpCitationUris).toEqual([
+        "mcp+smoke://http/research-evidence",
+        "mcp+smoke://stdio/research-evidence",
+      ]);
+      const mcpCitationTransports = seen
+        .filter((event) => event.kind === "research.citation.added" && event.payload.sourceKind === "mcp")
+        .map((event) => (event.payload.metadata as Record<string, unknown> | undefined)?.liveTransport)
+        .sort();
+      expect(mcpCitationTransports).toEqual(["http", "stdio"]);
       const researchCompleted = eventOf(seen, "task.completed", "research-composition");
       expect(researchCompleted?.payload.result).toMatchObject({
         output: {
@@ -373,11 +386,33 @@ describe("runtime daemon composition smoke", () => {
                 bundleId: "bundle-composition-memory",
               }),
             }),
+            expect.objectContaining({
+              sourceKind: "mcp",
+              metadata: expect.objectContaining({
+                server: DEEP_RESEARCH_HTTP_SERVER,
+                liveTransport: "http",
+              }),
+            }),
+            expect.objectContaining({
+              sourceKind: "mcp",
+              metadata: expect.objectContaining({
+                server: DEEP_RESEARCH_STDIO_SERVER,
+                liveTransport: "stdio",
+              }),
+            }),
           ]),
           citations: expect.arrayContaining([
             expect.objectContaining({
               sourceKind: "memory",
               artifactPointer: "artifact://composition/memory#L10",
+            }),
+            expect.objectContaining({
+              sourceKind: "mcp",
+              uri: "mcp+smoke://http/research-evidence",
+            }),
+            expect.objectContaining({
+              sourceKind: "mcp",
+              uri: "mcp+smoke://stdio/research-evidence",
             }),
           ]),
         },

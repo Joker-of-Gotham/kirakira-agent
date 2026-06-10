@@ -4,6 +4,16 @@ import type {
   ResolvedRuntimeServiceState,
   ResolvedRuntimeState,
 } from "./types.js";
+import {
+  RUNTIME_PRESENTATION_READINESS_CHECKS,
+  RUNTIME_READINESS_CHECKS,
+  RUNTIME_READINESS_CHECK_TYPES,
+  RUNTIME_READINESS_HEALTH_SCHEMAS,
+  RUNTIME_READINESS_SOURCES,
+  runtimePresentationReadinessCheckName,
+  runtimeServiceReadinessCheckName,
+  runtimeWorkbenchSurfaceReadinessCheckNames,
+} from "@kirakira/runtime-contracts";
 
 export interface RuntimeProjectionMcpConfigPlan {
   schemaVersion: 1;
@@ -79,6 +89,7 @@ export interface RuntimeProjectionReadinessCheck {
   composeService?: string;
   target?: string;
   endpoint?: string;
+  responseSchema?: string;
   urlEnv?: string;
   topology?: unknown;
 }
@@ -329,11 +340,13 @@ function serviceReadinessCheck(
 ): RuntimeProjectionReadinessCheck {
   const service = servicesByName.get(serviceName);
   return {
-    name: `service:${serviceName}`,
-    type: composeEnabled ? "compose-service" : "external-service",
+    name: runtimeServiceReadinessCheckName(serviceName),
+    type: composeEnabled
+      ? RUNTIME_READINESS_CHECK_TYPES.composeService
+      : RUNTIME_READINESS_CHECK_TYPES.externalService,
     service: serviceName,
     composeService: composeServiceName(serviceName, servicesByName),
-    source: "services",
+    source: RUNTIME_READINESS_SOURCES.services,
     required: service?.required !== false,
     ...(service?.url_env !== undefined ? { urlEnv: service.url_env } : {}),
   };
@@ -481,11 +494,12 @@ export function buildResolvedRuntimeReadinessPlan(
   const browserGatewayHealth = browserGatewayHealthUrl(browserGatewayEndpoint);
   if (browserGatewayHealth) {
     checks.push({
-      name: "daemon:browser-gateway",
-      type: "http-health",
-      source: "browser_gateway",
+      name: RUNTIME_READINESS_CHECKS.daemonBrowserGateway,
+      type: RUNTIME_READINESS_CHECK_TYPES.httpHealth,
+      source: RUNTIME_READINESS_SOURCES.resolvedBrowserGateway,
       target: browserGatewayHealth,
       ...(browserGatewayEndpoint ? { endpoint: browserGatewayEndpoint } : {}),
+      responseSchema: RUNTIME_READINESS_HEALTH_SCHEMAS.browserGateway,
       required: true,
     });
   }
@@ -493,9 +507,9 @@ export function buildResolvedRuntimeReadinessPlan(
   const webUrl = sanitizedUrl(profile.presentation?.web?.url);
   if (webUrl) {
     checks.push({
-      name: "presentation:web",
-      type: "http",
-      source: "presentation.web.url",
+      name: RUNTIME_PRESENTATION_READINESS_CHECKS.web,
+      type: RUNTIME_READINESS_CHECK_TYPES.http,
+      source: RUNTIME_READINESS_SOURCES.presentationWebUrl,
       target: webUrl,
       required: true,
     });
@@ -504,9 +518,9 @@ export function buildResolvedRuntimeReadinessPlan(
   const desktopUrl = sanitizedUrl(profile.presentation?.desktop?.renderer_url);
   if (desktopUrl) {
     checks.push({
-      name: "presentation:desktop",
-      type: "http",
-      source: "presentation.desktop.renderer_url",
+      name: RUNTIME_PRESENTATION_READINESS_CHECKS.desktop,
+      type: RUNTIME_READINESS_CHECK_TYPES.http,
+      source: RUNTIME_READINESS_SOURCES.resolvedPresentationDesktopRendererUrl,
       target: desktopUrl,
       required: true,
     });
@@ -515,9 +529,9 @@ export function buildResolvedRuntimeReadinessPlan(
   const topology = topologySummary(profile);
   if (topology && typeof topology === "object" && Object.keys(topology).length > 0) {
     checks.push({
-      name: "orchestration:topology",
-      type: "orchestration-topology",
-      source: "orchestration",
+      name: RUNTIME_READINESS_CHECKS.orchestrationTopology,
+      type: RUNTIME_READINESS_CHECK_TYPES.orchestrationTopology,
+      source: RUNTIME_READINESS_SOURCES.resolvedOrchestration,
       required: true,
       topology,
     });
@@ -683,15 +697,8 @@ function surfaceReadinessChecks(
   readiness: RuntimeProjectionReadinessPlan,
   surface: "web" | "desktop",
 ): string[] {
-  const daemonChecks = (surface === "desktop"
-    ? ["daemon:socket", "daemon:browser-gateway"]
-    : ["daemon:browser-gateway"])
+  return runtimeWorkbenchSurfaceReadinessCheckNames(surface)
     .filter((check) => readinessHasCheck(readiness, check));
-  const presentationCheck = `presentation:${surface}`;
-  return [
-    ...daemonChecks,
-    ...(readinessHasCheck(readiness, presentationCheck) ? [presentationCheck] : []),
-  ];
 }
 
 function normalizedWorkbenchWaitFor(
@@ -715,9 +722,11 @@ function workbenchSmokeChecks(
   if (surface === "web" || surface === "desktop") {
     return surfaceReadinessChecks(readiness, surface);
   }
-  const presentationCheck = `presentation:${surface}`;
+  const presentationCheck = runtimePresentationReadinessCheckName(surface);
   return [
-    ...(readinessHasCheck(readiness, "daemon:browser-gateway") ? ["daemon:browser-gateway"] : []),
+    ...(readinessHasCheck(readiness, RUNTIME_READINESS_CHECKS.daemonBrowserGateway)
+      ? [RUNTIME_READINESS_CHECKS.daemonBrowserGateway]
+      : []),
     ...(readinessHasCheck(readiness, presentationCheck) ? [presentationCheck] : []),
   ];
 }
@@ -761,7 +770,7 @@ function fallbackWorkbenchSurfaceSteps(
         name: "web",
         package_ref: "web",
         mode: "foreground",
-        wait_for: ["daemon:browser-gateway"],
+        wait_for: [RUNTIME_READINESS_CHECKS.daemonBrowserGateway],
       },
     ];
   }
@@ -777,7 +786,11 @@ function fallbackWorkbenchSurfaceSteps(
         name: "desktop-shell",
         package_ref: "desktop-shell",
         mode: "foreground",
-        wait_for: ["daemon:socket", "daemon:browser-gateway", "presentation:desktop"],
+        wait_for: [
+          RUNTIME_READINESS_CHECKS.daemonSocket,
+          RUNTIME_READINESS_CHECKS.daemonBrowserGateway,
+          RUNTIME_PRESENTATION_READINESS_CHECKS.desktop,
+        ],
       },
     ];
   }

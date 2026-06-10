@@ -2,14 +2,9 @@ import {
   buildRuntimeScriptInvocation,
   type RuntimeScriptInvocation,
 } from "./runtime-script-command.js";
+import type { RuntimeDoctorScriptOptions } from "./runtime-script-registry.js";
 
-export interface RuntimeDoctorCliOptions {
-  profile?: string;
-  json?: boolean;
-  noProbe?: boolean;
-  planOnly?: boolean;
-  timeoutMs?: number;
-}
+export type RuntimeDoctorCliOptions = RuntimeDoctorScriptOptions;
 
 export type RuntimeDoctorScriptInvocation = RuntimeScriptInvocation;
 
@@ -17,16 +12,8 @@ export function buildRuntimeDoctorScriptInvocation(
   options: RuntimeDoctorCliOptions = {},
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeDoctorScriptInvocation {
-  const args = [];
-  if (options.profile) args.push(options.profile);
-  if (options.json) args.push("--json");
-  if (options.noProbe) args.push("--no-probe");
-  if (options.planOnly) args.push("--plan-only");
-  if (options.timeoutMs !== undefined) {
-    args.push("--timeout-ms", String(options.timeoutMs));
-  }
   return buildRuntimeScriptInvocation({
     scriptId: "doctor",
-    args,
+    scriptOptions: options,
   }, env);
 }

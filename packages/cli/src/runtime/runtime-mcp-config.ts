@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import {
@@ -14,7 +13,7 @@ import {
   type ToolAlias,
 } from "@kirakira/mcp-adapter";
 
-import { resolveKirakiraRepoRoot } from "./runtime-script-command.js";
+import { resolveRuntimeScriptPath } from "./runtime-script-command.js";
 
 type RuntimeMcpConfigFile = McpConfigFile & {
   mcpAliases?: ToolAlias[];
@@ -125,11 +124,7 @@ function assertRuntimeProfileModule(moduleValue: unknown): RuntimeProfileModule 
 async function loadRuntimeProfileModule(
   env: NodeJS.ProcessEnv,
 ): Promise<RuntimeProfileModule> {
-  const repoRoot = resolveKirakiraRepoRoot(env);
-  const scriptPath = join(repoRoot, "scripts", "runtime-profile.mjs");
-  if (!existsSync(scriptPath)) {
-    throw new Error(`Runtime profile script not found: ${scriptPath}`);
-  }
+  const { scriptPath } = resolveRuntimeScriptPath("profile", env);
   return assertRuntimeProfileModule(await import(pathToFileURL(scriptPath).href));
 }
 

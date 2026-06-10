@@ -33,6 +33,32 @@ describe("runtime ready plan", () => {
       ]),
     );
     expect(JSON.stringify(report.readiness.checks)).not.toMatch(/"status":"(ok|fail|warn|skipped)"/u);
+    expect(report.startupSurfaces).toEqual([
+      {
+        surface: "daemon",
+        steps: 2,
+        stepNames: ["infra", "daemon"],
+        readinessChecks: 11,
+      },
+      {
+        surface: "desktop",
+        steps: 4,
+        stepNames: ["infra", "daemon", "desktop-renderer", "desktop-shell"],
+        readinessChecks: 11,
+      },
+      {
+        surface: "web",
+        steps: 3,
+        stepNames: ["infra", "daemon", "web"],
+        readinessChecks: 11,
+      },
+    ]);
+    expect(report.summary).toMatchObject({
+      startupSteps: 9,
+      topLevelStartupSteps: 0,
+      startupSurfaces: 3,
+      surfaceStartupSteps: 9,
+    });
     expect(JSON.stringify(report)).not.toContain("5173");
   });
 
