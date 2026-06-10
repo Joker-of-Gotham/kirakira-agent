@@ -605,7 +605,17 @@ function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env)
   const targetNames = Object.keys(artifact.targets ?? {}).sort();
   const lifecycleSteps = Array.isArray(artifact.lifecycleSteps) ? artifact.lifecycleSteps : [];
   const checks = Array.isArray(artifact.checks) ? artifact.checks : [];
-  const preflightStatus = artifact.preflight?.status ?? "missing";
+  const preflight = artifact.preflight && typeof artifact.preflight === "object"
+    ? artifact.preflight
+    : {};
+  const failedPreflight = Array.isArray(preflight.checks)
+    ? preflight.checks.find((check) => check?.status === "failed")
+    : undefined;
+  const preflightStatus = preflight.status ?? "missing";
+  const preflightCode = preflight.code ?? failedPreflight?.code;
+  const preflightGuidance = preflight.guidance ?? failedPreflight?.guidance;
+  const preflightReference = preflight.reference ?? failedPreflight?.reference;
+  const failedPreflightCheck = preflight.failedCheck ?? failedPreflight?.id;
   const containsForbiddenPort = JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT);
   const resultMatches =
     artifact.gate === "runtime-full-lifecycle" &&
@@ -637,11 +647,18 @@ function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env)
     lifecycleSteps,
     targets: targetNames,
     containsForbiddenPort,
+    preflightCode,
+    preflightGuidance,
+    preflightReference,
+    failedPreflightCheck,
     evidence: [
       `result=${RUNTIME_FULL_LIFECYCLE_GATE_PATH}`,
       `status=${artifact.status ?? "missing"}`,
       `profile=${artifact.profile ?? "missing"}`,
       `preflight=${preflightStatus}`,
+      ...(failedPreflightCheck ? [`failedPreflight=${failedPreflightCheck}`] : []),
+      ...(preflightCode ? [`preflightCode=${preflightCode}`] : []),
+      ...(preflightGuidance ? [`guidance=${preflightGuidance}`] : []),
       `steps=${lifecycleSteps.join(",") || "none"}`,
       `targets=${targetNames.join(",") || "none"}`,
       `forbiddenPort=${containsForbiddenPort ? "present" : "absent"}`,

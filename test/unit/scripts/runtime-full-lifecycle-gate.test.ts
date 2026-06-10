@@ -45,7 +45,19 @@ describe("runtime full lifecycle gate", () => {
       live: false,
       status: "skipped",
       integrationGate: "full-lifecycle",
-      requiredPreflights: ["docker compose"],
+      requiredPreflights: ["docker-compose-cli", "docker-daemon"],
+      preflightChecks: [
+        {
+          id: "docker-compose-cli",
+          command: "docker",
+          args: ["compose", "version"],
+        },
+        {
+          id: "docker-daemon",
+          command: "docker",
+          args: ["info"],
+        },
+      ],
       lifecycleSteps: expect.arrayContaining([
         "docker-compose:up-wait",
         "workbench:web-gateway",
@@ -86,6 +98,7 @@ describe("runtime full lifecycle gate", () => {
           status: "failed",
           command: "docker compose version",
           detail: "Docker Desktop is not running",
+          guidance: "Start Docker Desktop, then rerun the lifecycle gate.",
         },
       }, resultPath);
       const replay = buildRuntimeFullLifecycleGateCommand(
@@ -130,7 +143,7 @@ describe("runtime full lifecycle gate", () => {
         code: 0,
         preflight: {
           status: "passed",
-          command: "docker compose version",
+          command: "docker compose version && docker info",
           detail: "Docker Compose version v2.0.0",
         },
       }, resultPath);
@@ -178,5 +191,69 @@ describe("runtime full lifecycle gate", () => {
     expect(run.code).toBe(1);
     expect(run.preflight.status).toBe("failed");
     expect(calls).toEqual([]);
+  });
+
+  it("runs profile-declared preflight checks in order before child gates", async () => {
+    const command = buildRuntimeFullLifecycleGateCommand(
+      {
+        gateName: "runtime-full-lifecycle",
+        live: true,
+        resultPath: null,
+      },
+      {},
+    );
+    const preflightCalls: string[] = [];
+    const childCalls: string[] = [];
+    const run = await runRuntimeFullLifecycleGate(command, {
+      preflightRunner: (check: { command: string; args: string[] }) => {
+        preflightCalls.push([check.command, ...check.args].join(" "));
+        return { status: 0, stdout: `${check.command} ok` };
+      },
+      runner: (executable: string, args: string[]) => {
+        childCalls.push([executable, ...args].join(" "));
+        return 0;
+      },
+    });
+
+    expect(run.code).toBe(0);
+    expect(run.preflight).toMatchObject({
+      status: "passed",
+      checks: [
+        { id: "docker-compose-cli", command: "docker compose version" },
+        { id: "docker-daemon", command: "docker info" },
+      ],
+    });
+    expect(preflightCalls).toEqual(["docker compose version", "docker info"]);
+    expect(childCalls).not.toEqual([]);
+  });
+
+  it("surfaces profile-owned preflight guidance on matching failures", async () => {
+    const command = buildRuntimeFullLifecycleGateCommand(
+      {
+        gateName: "runtime-full-lifecycle",
+        live: true,
+        resultPath: null,
+      },
+      {},
+    );
+    const run = await runRuntimeFullLifecycleGate(command, {
+      preflightRunner: (check: { id: string }) => {
+        if (check.id === "docker-compose-cli") return { status: 0, stdout: "Docker Compose version v2.0.0" };
+        return {
+          status: 1,
+          stderr: "failed to connect to the docker API at npipe:////./pipe/docker_engine",
+        };
+      },
+      runner: () => 0,
+    });
+
+    expect(run.code).toBe(1);
+    expect(run.preflight).toMatchObject({
+      status: "failed",
+      failedCheck: "docker-daemon",
+      code: "docker-daemon-unavailable",
+      guidance: "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+      reference: "https://docs.docker.com/reference/cli/docker/system/info/",
+    });
   });
 });

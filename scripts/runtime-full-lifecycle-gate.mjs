@@ -172,6 +172,7 @@ export function buildRuntimeFullLifecycleGateCommand(
     checks: gate.checks,
     lifecycleSteps: gate.lifecycleSteps,
     requiredPreflights: gate.requiredPreflights,
+    preflightChecks: gate.preflightChecks,
     integrationGate: integration.gate,
     integration,
     compose: composePlan
@@ -206,6 +207,7 @@ export function buildRuntimeFullLifecycleGateCommand(
       command: `node scripts/runtime-full-lifecycle-gate.mjs --gate ${gate.name} --profile ${profileName} --live`,
       integrationCommand: integration.liveGate?.command,
       requiredPreflights: gate.requiredPreflights,
+      preflightChecks: gate.preflightChecks,
       lifecycleSteps: gate.lifecycleSteps,
       checks: gate.checks,
       targets: collectStepTargets(integration.steps),
@@ -227,8 +229,8 @@ export function buildRuntimeFullLifecycleGateCommand(
 
 export async function runRuntimeFullLifecycleGate(command, options = {}) {
   const preflight = command.skipDockerPreflight
-    ? skippedPreflight()
-    : runDockerPreflight(command, options);
+    ? skippedPreflight(command.preflightChecks)
+    : runRequiredPreflights(command, options);
   if (preflight.status !== "passed" && preflight.status !== "skipped") {
     return {
       code: 1,
@@ -260,6 +262,7 @@ export function writeRuntimeFullLifecycleGateResult(
     checks: command.checks,
     lifecycleSteps: command.lifecycleSteps,
     requiredPreflights: command.requiredPreflights,
+    preflightChecks: command.preflightChecks,
     preflight: run.preflight,
     steps: command.integration.steps.map(stepResultIdentity),
     targets: command.targets,
@@ -288,6 +291,7 @@ export function runtimeFullLifecycleGateReport(command) {
     checks: command.checks,
     lifecycleSteps: command.lifecycleSteps,
     requiredPreflights: command.requiredPreflights,
+    preflightChecks: command.preflightChecks,
     integrationGate: command.integrationGate,
     compose: command.compose,
     targets: command.targets,
@@ -297,21 +301,22 @@ export function runtimeFullLifecycleGateReport(command) {
   };
 }
 
-function runDockerPreflight(command, options = {}) {
+function runRequiredPreflights(command, options = {}) {
   if (options.dockerPreflight) return options.dockerPreflight(command);
-  const compose = runDockerPreflightCommand(["compose", "version"], command.timeoutMs);
-  if (compose.status !== "passed") return compose;
-  const daemon = runDockerPreflightCommand(["info"], command.timeoutMs);
-  if (daemon.status !== "passed") return daemon;
-  return {
-    status: "passed",
-    command: "docker compose version && docker info",
-    detail: [compose.detail, daemon.detail].filter(Boolean).join("; "),
-  };
+  const checks = [];
+  for (const check of command.preflightChecks) {
+    const result = runPreflightCheck(check, command.timeoutMs, options);
+    checks.push(result);
+    if (result.status !== "passed") return aggregatePreflight("failed", checks);
+  }
+  return aggregatePreflight("passed", checks);
 }
 
-function runDockerPreflightCommand(args, timeoutMs) {
-  const result = spawnSync("docker", args, {
+function runPreflightCheck(check, timeoutMs, options = {}) {
+  if (options.preflightRunner) {
+    return normalizePreflightRunnerResult(check, options.preflightRunner(check, timeoutMs));
+  }
+  const result = spawnSync(check.command, check.args, {
     cwd: repoRoot,
     env: {
       ...process.env,
@@ -319,36 +324,117 @@ function runDockerPreflightCommand(args, timeoutMs) {
     },
     encoding: "utf8",
     timeout: Math.min(timeoutMs, 30_000),
-    shell: process.platform === "win32",
+    windowsHide: true,
   });
-  const label = `docker ${args.join(" ")}`;
-  if (result.error) {
-    return failedPreflight(label, result.error.message);
+  return normalizePreflightRunnerResult(check, result);
+}
+
+function normalizePreflightRunnerResult(check, result) {
+  const command = displayPreflightCommand(check);
+  if (isRecord(result) && typeof result.status === "string") {
+    return {
+      ...preflightCheckBase(check),
+      ...result,
+      command: result.command ?? command,
+    };
   }
-  const code = result.status ?? 1;
-  if (code !== 0) {
-    return failedPreflight(label, String(result.stderr || result.stdout || `${label} exited ${code}`));
+  if (result?.error) {
+    return failedPreflightCheck(check, command, result.error.message, result.error.code);
+  }
+  const statusCode = Number.isInteger(result?.status)
+    ? result.status
+    : Number.isInteger(result?.exitCode)
+      ? result.exitCode
+      : 1;
+  const detail = String(result?.stderr || result?.stdout || "").trim();
+  if (statusCode !== 0) {
+    return failedPreflightCheck(
+      check,
+      command,
+      detail || `${command} exited ${statusCode}`,
+    );
   }
   return {
     status: "passed",
-    command: label,
-    detail: String(result.stdout || "").trim(),
+    ...preflightCheckBase(check),
+    command,
+    detail,
   };
 }
 
-function failedPreflight(command, detail) {
+function aggregatePreflight(status, checks) {
+  const failed = checks.find((check) => check.status !== "passed");
+  return {
+    status,
+    command: checks.map((check) => check.command).filter(Boolean).join(" && "),
+    detail: failed?.detail ?? checks.map((check) => check.detail).filter(Boolean).join("; "),
+    ...(failed
+      ? {
+          failedCheck: failed.id,
+          code: failed.code,
+          guidance: failed.guidance,
+          reference: failed.reference,
+        }
+      : {}),
+    checks,
+  };
+}
+
+function failedPreflightCheck(check, command, detail, errorCode) {
+  const hint = matchFailureHint(check, detail);
   return {
     status: "failed",
+    ...preflightCheckBase(check),
     command,
     detail: String(detail).trim(),
+    code: hint?.code ?? (errorCode === "ENOENT" ? "command-not-found" : "preflight-failed"),
+    guidance: hint?.guidance ?? defaultPreflightGuidance(check, errorCode),
   };
 }
 
-function skippedPreflight() {
+function preflightCheckBase(check) {
+  return {
+    id: check.id,
+    kind: check.kind,
+    label: check.label,
+    executable: check.command,
+    args: check.args,
+    reference: check.reference,
+  };
+}
+
+function matchFailureHint(check, detail) {
+  const text = String(detail ?? "");
+  for (const hint of check.failureHints) {
+    const contains = typeof hint.contains === "string" ? hint.contains : undefined;
+    if (!contains) continue;
+    const matched = hint.caseSensitive === true
+      ? text.includes(contains)
+      : text.toLowerCase().includes(contains.toLowerCase());
+    if (matched) return hint;
+  }
+  return undefined;
+}
+
+function defaultPreflightGuidance(check, errorCode) {
+  if (errorCode === "ENOENT") {
+    return `Install ${check.command} or make it available on PATH, then rerun the lifecycle gate.`;
+  }
+  return `Resolve the failed preflight "${check.id}", then rerun the lifecycle gate.`;
+}
+
+function skippedPreflight(preflightChecks = []) {
+  const checks = preflightChecks.map((check) => ({
+    status: "skipped",
+    ...preflightCheckBase(check),
+    command: displayPreflightCommand(check),
+    detail: "preflight skipped by --skip-docker-preflight",
+  }));
   return {
     status: "skipped",
-    command: "docker compose version",
+    command: checks.map((check) => check.command).join(" && "),
     detail: "preflight skipped by --skip-docker-preflight",
+    checks,
   };
 }
 
@@ -360,6 +446,10 @@ function runtimeLifecycleGateConfig(config, gateName) {
     throw new Error(`Unknown runtime lifecycle gate "${gateName}". Available: ${available}`);
   }
   const checks = stringArray(gate.checks);
+  const preflightChecks = normalizePreflightChecks(gate.requiredPreflights);
+  if (preflightChecks.length === 0) {
+    throw new Error(`Runtime lifecycle gate "${gateName}" must declare command requiredPreflights`);
+  }
   return {
     name: gateName,
     description: stringValue(gate.description),
@@ -369,11 +459,52 @@ function runtimeLifecycleGateConfig(config, gateName) {
     passedEnv: stringValue(gate.passedEnv) ?? `${FALLBACK_LIVE_ENV}_PASSED`,
     resultPath: stringValue(gate.resultPath) ?? FALLBACK_RESULT_PATH,
     timeoutMs: positiveIntegerOrUndefined(gate.timeoutMs),
-    requiredPreflights: stringArray(gate.requiredPreflights),
+    requiredPreflights: preflightChecks.map((check) => check.id),
+    preflightChecks,
     lifecycleSteps: stringArray(gate.lifecycleSteps),
     checks: checks.length > 0 ? checks : [...DEFAULT_CHECKS],
     references: normalizeReferences(gate.references),
   };
+}
+
+function normalizePreflightChecks(value) {
+  const checks = [];
+  const entries = Array.isArray(value) ? value : [];
+  for (const entry of entries) {
+    checks.push(...normalizePreflightEntry(entry));
+  }
+  return checks;
+}
+
+function normalizePreflightEntry(entry) {
+  if (!isRecord(entry)) return [];
+  const id = stringValue(entry.id);
+  const kind = stringValue(entry.kind) ?? "command";
+  const command = stringValue(entry.command);
+  if (!id || kind !== "command" || !command) return [];
+  return [
+    {
+      id,
+      kind,
+      label: stringValue(entry.label) ?? id,
+      command,
+      args: stringArray(entry.args),
+      reference: stringValue(entry.reference),
+      failureHints: normalizeFailureHints(entry.failureHints),
+    },
+  ];
+}
+
+function normalizeFailureHints(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => isRecord(item) && stringValue(item.contains))
+    .map((item) => ({
+      contains: stringValue(item.contains),
+      code: stringValue(item.code) ?? "preflight-failed",
+      guidance: stringValue(item.guidance) ?? "Resolve the matching preflight failure and rerun the lifecycle gate.",
+      caseSensitive: item.caseSensitive === true,
+    }));
 }
 
 function normalizeReferences(value) {
@@ -455,6 +586,10 @@ function readResult(path) {
   } catch {
     return { schemaVersion: 1, status: "invalid", path: relativePath(path) };
   }
+}
+
+function displayPreflightCommand(check) {
+  return [check.command, ...check.args].join(" ");
 }
 
 function relativePath(path) {

@@ -4,7 +4,7 @@
   "profile": "workbench-host",
   "integrationGate": "full-lifecycle",
   "status": "blocked",
-  "recordedAt": "2026-06-10T06:49:36.537Z",
+  "recordedAt": "2026-06-10T07:48:06.448Z",
   "checks": [
     "runtime-lifecycle:docker-compose-ready",
     "runtime-lifecycle:daemon-gateway",
@@ -22,12 +22,111 @@
     "presentation:hydrated-visual-qa"
   ],
   "requiredPreflights": [
-    "docker compose"
+    "docker-compose-cli",
+    "docker-daemon"
+  ],
+  "preflightChecks": [
+    {
+      "id": "docker-compose-cli",
+      "kind": "command",
+      "label": "Docker Compose CLI is available",
+      "command": "docker",
+      "args": [
+        "compose",
+        "version"
+      ],
+      "reference": "https://docs.docker.com/reference/cli/docker/compose/version/",
+      "failureHints": [
+        {
+          "contains": "is not a docker command",
+          "code": "docker-compose-unavailable",
+          "guidance": "Install or enable the Docker Compose v2 plugin, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        }
+      ]
+    },
+    {
+      "id": "docker-daemon",
+      "kind": "command",
+      "label": "Docker daemon is reachable",
+      "command": "docker",
+      "args": [
+        "info"
+      ],
+      "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
+      "failureHints": [
+        {
+          "contains": "docker_engine",
+          "code": "docker-daemon-unavailable",
+          "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        },
+        {
+          "contains": "Cannot connect to the Docker daemon",
+          "code": "docker-daemon-unavailable",
+          "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        },
+        {
+          "contains": "daemon is running",
+          "code": "docker-daemon-unavailable",
+          "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        },
+        {
+          "contains": "dockerDesktopLinuxEngine",
+          "code": "docker-daemon-unavailable",
+          "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        },
+        {
+          "contains": "Access is denied",
+          "code": "docker-config-inaccessible",
+          "guidance": "Fix permissions for the current user to read the Docker CLI config, then rerun the lifecycle gate.",
+          "caseSensitive": false
+        }
+      ]
+    }
   ],
   "preflight": {
     "status": "failed",
-    "command": "docker info",
-    "detail": "WARNING: Error loading config file: open C:\\Users\\explo\\.docker\\config.json: Access is denied.\nfailed to connect to the docker API at npipe:////./pipe/docker_engine; check if the path is correct and if the daemon is running: open //./pipe/docker_engine: The system cannot find the file specified."
+    "command": "docker compose version && docker info",
+    "detail": "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
+    "failedCheck": "docker-daemon",
+    "code": "docker-daemon-unavailable",
+    "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.",
+    "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
+    "checks": [
+      {
+        "status": "passed",
+        "id": "docker-compose-cli",
+        "kind": "command",
+        "label": "Docker Compose CLI is available",
+        "executable": "docker",
+        "args": [
+          "compose",
+          "version"
+        ],
+        "reference": "https://docs.docker.com/reference/cli/docker/compose/version/",
+        "command": "docker compose version",
+        "detail": "Docker Compose version v5.1.0"
+      },
+      {
+        "status": "failed",
+        "id": "docker-daemon",
+        "kind": "command",
+        "label": "Docker daemon is reachable",
+        "executable": "docker",
+        "args": [
+          "info"
+        ],
+        "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
+        "command": "docker info",
+        "detail": "failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine; check if the path is correct and if the daemon is running: open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified.",
+        "code": "docker-daemon-unavailable",
+        "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+      }
+    ]
   },
   "steps": [
     {

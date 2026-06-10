@@ -1,6 +1,6 @@
 # Kirakira Upgrade Readiness
 
-Generated: 2026-06-10T07:30:20.843Z
+Generated: 2026-06-10T07:48:21.972Z
 Profile: `workbench-host`
 Workspace: `C:/technical-development/kirakira-agent`
 
@@ -16,7 +16,7 @@ Workspace: `C:/technical-development/kirakira-agent`
 
 | Track | Status | Item | Evidence |
 | --- | --- | --- | --- |
-| Docker / Local Ecosystem | warn | Full Docker-backed web/Electron lifecycle gate is evidenced | result=docs/upgrade/gates/runtime-full-lifecycle-gate.json; status=blocked; profile=workbench-host; preflight=failed; steps=runtime-ready:plan,docker-compose:up-wait,runtime-daemon:kernelbridge-composition,workbench:web-gateway,workbench:desktop-electron,presentation:hydrated-visual-qa; targets=daemon:browser-gateway,daemon:socket,desktop,presentation:desktop,presentation:web,service:minio,service:neo4j,service:postgres,service:qdrant,service:redis,web; forbiddenPort=absent |
+| Docker / Local Ecosystem | warn | Full Docker-backed web/Electron lifecycle gate is evidenced | result=docs/upgrade/gates/runtime-full-lifecycle-gate.json; status=blocked; profile=workbench-host; preflight=failed; failedPreflight=docker-daemon; preflightCode=docker-daemon-unavailable; guidance=Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.; steps=runtime-ready:plan,docker-compose:up-wait,runtime-daemon:kernelbridge-composition,workbench:web-gateway,workbench:desktop-electron,presentation:hydrated-visual-qa; targets=daemon:browser-gateway,daemon:socket,desktop,presentation:desktop,presentation:web,service:minio,service:neo4j,service:postgres,service:qdrant,service:redis,web; forbiddenPort=absent |
 
 ## EAM Mechanism Parity
 
@@ -69,4 +69,4 @@ Score: 94%
 | pass | Memory retain/reflect unit contract is separate from live persistence | unit=test/unit/runtime-daemon/memory-runtime-deps.test.ts, test/unit/runtime/memory-test-host-env.test.ts; command=pnpm vitest run test/unit/runtime-daemon/memory-runtime-deps.test.ts test/unit/runtime/memory-test-host-env.test.ts |
 | pass | Memory-store checkpoint + retain/reflect live persistence gate | passed=memory-store:persistence; profile=test-host |
 | pass | Profile-owned runtime integration gate aggregates child gates | gate=upgrade; status=passed; steps=deep-research:live-adapters:passed,memory-store:persistence:passed,runtime-daemon:composition-smoke:passed,workbench:presentation:passed,presentation:hydrated-visual-qa:passed; result=docs/upgrade/gates/runtime-integration-gate.json; childGatesPassed=true |
-| warn | Full Docker-backed web/Electron lifecycle gate is evidenced | result=docs/upgrade/gates/runtime-full-lifecycle-gate.json; status=blocked; profile=workbench-host; preflight=failed; steps=runtime-ready:plan,docker-compose:up-wait,runtime-daemon:kernelbridge-composition,workbench:web-gateway,workbench:desktop-electron,presentation:hydrated-visual-qa; targets=daemon:browser-gateway,daemon:socket,desktop,presentation:desktop,presentation:web,service:minio,service:neo4j,service:postgres,service:qdrant,service:redis,web; forbiddenPort=absent |
+| warn | Full Docker-backed web/Electron lifecycle gate is evidenced | result=docs/upgrade/gates/runtime-full-lifecycle-gate.json; status=blocked; profile=workbench-host; preflight=failed; failedPreflight=docker-daemon; preflightCode=docker-daemon-unavailable; guidance=Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate.; steps=runtime-ready:plan,docker-compose:up-wait,runtime-daemon:kernelbridge-composition,workbench:web-gateway,workbench:desktop-electron,presentation:hydrated-visual-qa; targets=daemon:browser-gateway,daemon:socket,desktop,presentation:desktop,presentation:web,service:minio,service:neo4j,service:postgres,service:qdrant,service:redis,web; forbiddenPort=absent |

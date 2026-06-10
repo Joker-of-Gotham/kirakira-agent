@@ -490,7 +490,58 @@
       "passedEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_PASSED",
       "resultPath": "docs/upgrade/gates/runtime-full-lifecycle-gate.json",
       "timeoutMs": 240000,
-      "requiredPreflights": ["docker compose"],
+      "requiredPreflights": [
+        {
+          "id": "docker-compose-cli",
+          "kind": "command",
+          "label": "Docker Compose CLI is available",
+          "command": "docker",
+          "args": ["compose", "version"],
+          "reference": "https://docs.docker.com/reference/cli/docker/compose/version/",
+          "failureHints": [
+            {
+              "contains": "is not a docker command",
+              "code": "docker-compose-unavailable",
+              "guidance": "Install or enable the Docker Compose v2 plugin, then rerun the lifecycle gate."
+            }
+          ]
+        },
+        {
+          "id": "docker-daemon",
+          "kind": "command",
+          "label": "Docker daemon is reachable",
+          "command": "docker",
+          "args": ["info"],
+          "reference": "https://docs.docker.com/reference/cli/docker/system/info/",
+          "failureHints": [
+            {
+              "contains": "docker_engine",
+              "code": "docker-daemon-unavailable",
+              "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+            },
+            {
+              "contains": "Cannot connect to the Docker daemon",
+              "code": "docker-daemon-unavailable",
+              "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+            },
+            {
+              "contains": "daemon is running",
+              "code": "docker-daemon-unavailable",
+              "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+            },
+            {
+              "contains": "dockerDesktopLinuxEngine",
+              "code": "docker-daemon-unavailable",
+              "guidance": "Start Docker Desktop or the Docker daemon, then rerun the lifecycle gate."
+            },
+            {
+              "contains": "Access is denied",
+              "code": "docker-config-inaccessible",
+              "guidance": "Fix permissions for the current user to read the Docker CLI config, then rerun the lifecycle gate."
+            }
+          ]
+        }
+      ],
       "lifecycleSteps": [
         "runtime-ready:plan",
         "docker-compose:up-wait",
