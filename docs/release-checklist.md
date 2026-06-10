@@ -17,6 +17,20 @@ Kirakira is release-complete only when all of these are true:
 - The final commit is pushed and verified with
   `git ls-remote origin refs/heads/codex/runtime-orchestration-profile-baseline`.
 
+## Current Status
+
+Current terminal-upgrade evidence is complete as of commit `31c9106`:
+
+- `upgrade-readiness`: `25 pass / 0 warn / 0 fail`.
+- EAM parity: `missing=0`; all ten behavior drift rows are covered.
+- Full lifecycle: `docs/upgrade/gates/runtime-full-lifecycle-gate.json` is
+  `passed` with Docker preflight passed and `targetCollisions=0`.
+- Fast hydrated QA and full-lifecycle hydrated QA use separate artifacts:
+  `presentation-hydrated-visual-qa.json` and
+  `presentation-hydrated-visual-qa-full-lifecycle.json`.
+- Local-only exclusions remain `.mcp.json`, `.agents/`, `reference_project/`,
+  and generated `skills-lock.json`.
+
 ## Local Commands
 
 Fast non-Docker release check:
@@ -47,6 +61,7 @@ auditable workspace lockfile is `kirakira.lock`, backed by
 
 ## Docker Requirement
 
-If Docker Desktop or the Docker daemon is unavailable, keep the blocked
-full-lifecycle artifact as open work. Do not replace it with renderer-only or
-mock evidence.
+The current release artifact is passed. If Docker Desktop or the Docker daemon
+is unavailable during a future rerun, record that rerun as blocked evidence and
+do not announce a refreshed release-complete state from renderer-only or mock
+evidence.

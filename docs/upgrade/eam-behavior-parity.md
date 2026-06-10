@@ -208,9 +208,10 @@ identity.
 `gates.runtimeFullLifecycle` is the separate slow lifecycle gate. It reads
 `docs/upgrade/gates/runtime-full-lifecycle-gate.json`, expects
 `integrationGate=full-lifecycle`, checks the Docker preflight, verifies
-profile-derived lifecycle steps and web/desktop/gateway targets, and reports
-the current Docker Desktop unavailability as actionable open work rather than
-as completed upgrade evidence.
+profile-derived lifecycle steps and web/desktop/gateway targets, and now has
+passed Docker-backed release evidence. Future Docker daemon unavailability
+must be recorded as blocked evidence for that rerun, but it must not replace
+the current passed artifact unless the full no-skip lifecycle is rerun.
 
 ## Readiness Interpretation
 
