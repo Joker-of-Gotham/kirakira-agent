@@ -4,7 +4,7 @@
   "profile": "workbench-host",
   "integrationGate": "full-lifecycle",
   "status": "blocked",
-  "recordedAt": "2026-06-10T07:48:06.448Z",
+  "recordedAt": "2026-06-10T12:41:28.937Z",
   "checks": [
     "runtime-lifecycle:docker-compose-ready",
     "runtime-lifecycle:daemon-gateway",
@@ -208,6 +208,108 @@
     "web": "http://127.0.0.1:5183/",
     "desktop": "http://127.0.0.1:5174/"
   },
+  "targetSources": {
+    "service:postgres": [
+      {
+        "stepId": "memory-store:persistence",
+        "kind": "memory-persistence",
+        "profile": "test-host",
+        "gate": "memory-store:persistence",
+        "value": "postgres://127.0.0.1:5432/kirakira_test"
+      }
+    ],
+    "service:redis": [
+      {
+        "stepId": "memory-store:persistence",
+        "kind": "memory-persistence",
+        "profile": "test-host",
+        "gate": "memory-store:persistence",
+        "value": "redis://127.0.0.1:6379"
+      }
+    ],
+    "service:qdrant": [
+      {
+        "stepId": "memory-store:persistence",
+        "kind": "memory-persistence",
+        "profile": "test-host",
+        "gate": "memory-store:persistence",
+        "value": "http://127.0.0.1:6333/"
+      }
+    ],
+    "service:neo4j": [
+      {
+        "stepId": "memory-store:persistence",
+        "kind": "memory-persistence",
+        "profile": "test-host",
+        "gate": "memory-store:persistence",
+        "value": "bolt://127.0.0.1:7687"
+      }
+    ],
+    "service:minio": [
+      {
+        "stepId": "memory-store:persistence",
+        "kind": "memory-persistence",
+        "profile": "test-host",
+        "gate": "memory-store:persistence",
+        "value": "http://127.0.0.1:9000/"
+      }
+    ],
+    "daemon:browser-gateway": [
+      {
+        "stepId": "workbench:presentation",
+        "kind": "workbench-smoke",
+        "profile": "workbench-host",
+        "gate": "presentation",
+        "value": "http://127.0.0.1:17373/healthz"
+      }
+    ],
+    "presentation:web": [
+      {
+        "stepId": "workbench:presentation",
+        "kind": "workbench-smoke",
+        "profile": "workbench-host",
+        "gate": "presentation",
+        "value": "http://127.0.0.1:5183/"
+      }
+    ],
+    "daemon:socket": [
+      {
+        "stepId": "workbench:presentation",
+        "kind": "workbench-smoke",
+        "profile": "workbench-host",
+        "gate": "presentation",
+        "value": "\\\\.\\pipe\\kirakira-agent-daemon-b48b29c06414"
+      }
+    ],
+    "presentation:desktop": [
+      {
+        "stepId": "workbench:presentation",
+        "kind": "workbench-smoke",
+        "profile": "workbench-host",
+        "gate": "presentation",
+        "value": "http://127.0.0.1:5174/"
+      }
+    ],
+    "web": [
+      {
+        "stepId": "presentation:hydrated-visual-qa",
+        "kind": "presentation-hydrated-visual-qa",
+        "profile": "workbench-host",
+        "gate": "presentation-hydrated-visual-qa",
+        "value": "http://127.0.0.1:5183/"
+      }
+    ],
+    "desktop": [
+      {
+        "stepId": "presentation:hydrated-visual-qa",
+        "kind": "presentation-hydrated-visual-qa",
+        "profile": "workbench-host",
+        "gate": "presentation-hydrated-visual-qa",
+        "value": "http://127.0.0.1:5174/"
+      }
+    ]
+  },
+  "targetCollisions": [],
   "compose": {
     "command": "docker",
     "args": [

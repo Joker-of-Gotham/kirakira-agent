@@ -592,17 +592,25 @@ function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env)
       checks: command.checks,
       lifecycleSteps: command.lifecycleSteps,
       targets: Object.keys(command.targets ?? {}).sort(),
+      targetCollisions: command.targetCollisions ?? [],
       evidence: [
         `result=${RUNTIME_FULL_LIFECYCLE_GATE_PATH}`,
         "status=missing",
         `profile=${profileName}`,
         "preflight=missing",
         "fullLifecycle=not-run",
+        `targetCollisions=${command.targetCollisions?.length ?? 0}`,
       ].join("; "),
     };
   }
   const artifact = readJson(resultPath);
   const targetNames = Object.keys(artifact.targets ?? {}).sort();
+  const targetCollisions = Array.isArray(artifact.targetCollisions)
+    ? artifact.targetCollisions
+    : [];
+  const targetCollisionNames = targetCollisions
+    .map((collision) => collision?.name)
+    .filter((name) => typeof name === "string");
   const lifecycleSteps = Array.isArray(artifact.lifecycleSteps) ? artifact.lifecycleSteps : [];
   const checks = Array.isArray(artifact.checks) ? artifact.checks : [];
   const preflight = artifact.preflight && typeof artifact.preflight === "object"
@@ -646,6 +654,10 @@ function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env)
     checks,
     lifecycleSteps,
     targets: targetNames,
+    targetSources: artifact.targetSources && typeof artifact.targetSources === "object"
+      ? artifact.targetSources
+      : {},
+    targetCollisions,
     containsForbiddenPort,
     preflightCode,
     preflightGuidance,
@@ -661,6 +673,10 @@ function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env)
       ...(preflightGuidance ? [`guidance=${preflightGuidance}`] : []),
       `steps=${lifecycleSteps.join(",") || "none"}`,
       `targets=${targetNames.join(",") || "none"}`,
+      `targetCollisions=${targetCollisions.length}`,
+      ...(targetCollisionNames.length > 0
+        ? [`targetCollisionKeys=${targetCollisionNames.join(",")}`]
+        : []),
       `forbiddenPort=${containsForbiddenPort ? "present" : "absent"}`,
     ].join("; "),
   };

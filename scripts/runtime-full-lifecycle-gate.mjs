@@ -13,6 +13,11 @@ import {
   loadRuntimeProfiles,
   resolveRuntimeProfile,
 } from "./runtime-profile.mjs";
+import {
+  runtimeGateIdentity,
+  runtimeGateResultMatches,
+  runtimeGateStepIdentity,
+} from "./runtime-gate-contracts.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_GATE = "runtime-full-lifecycle";
@@ -142,7 +147,8 @@ export function buildRuntimeFullLifecycleGateCommand(
     skipInfra: options.skipInfra,
   }, env);
   const result = readResult(resultPath);
-  const expected = lifecycleIdentity({
+  const targetSummary = collectStepTargetSummary(integration.steps);
+  const expected = runtimeGateIdentity({
     gate: gate.name,
     profile: profileName,
     integrationGate: integration.gate,
@@ -150,7 +156,7 @@ export function buildRuntimeFullLifecycleGateCommand(
     lifecycleSteps: gate.lifecycleSteps,
     steps: integration.steps,
   });
-  const resultMatches = lifecycleResultMatches(result, expected);
+  const resultMatches = runtimeGateResultMatches(result, expected);
   const externallyPassed = env[gate.passedEnv] === "1" || resultMatches;
   const skipReason = externallyPassed
     ? undefined
@@ -185,7 +191,9 @@ export function buildRuntimeFullLifecycleGateCommand(
           wait: composePlan.wait,
         }
       : undefined,
-    targets: collectStepTargets(integration.steps),
+    targets: targetSummary.targets,
+    targetSources: targetSummary.targetSources,
+    targetCollisions: targetSummary.targetCollisions,
     evidence: {
       resultPath: relativePath(resultPath),
       ...(isRecord(result)
@@ -210,7 +218,9 @@ export function buildRuntimeFullLifecycleGateCommand(
       preflightChecks: gate.preflightChecks,
       lifecycleSteps: gate.lifecycleSteps,
       checks: gate.checks,
-      targets: collectStepTargets(integration.steps),
+      targets: targetSummary.targets,
+      targetSources: targetSummary.targetSources,
+      targetCollisions: targetSummary.targetCollisions,
     },
     references: gate.references,
   };
@@ -264,8 +274,10 @@ export function writeRuntimeFullLifecycleGateResult(
     requiredPreflights: command.requiredPreflights,
     preflightChecks: command.preflightChecks,
     preflight: run.preflight,
-    steps: command.integration.steps.map(stepResultIdentity),
+    steps: command.integration.steps.map(runtimeGateStepIdentity),
     targets: command.targets,
+    targetSources: command.targetSources,
+    targetCollisions: command.targetCollisions,
     compose: command.compose,
     command: command.liveGate.command,
     references: command.references,
@@ -295,6 +307,8 @@ export function runtimeFullLifecycleGateReport(command) {
     integrationGate: command.integrationGate,
     compose: command.compose,
     targets: command.targets,
+    targetSources: command.targetSources,
+    targetCollisions: command.targetCollisions,
     evidence: command.evidence,
     liveGate: command.liveGate,
     references: command.references,
@@ -514,58 +528,40 @@ function normalizeReferences(value) {
   return references.length > 0 ? references : [...REFERENCES];
 }
 
-function collectStepTargets(steps) {
+function collectStepTargetSummary(steps) {
   const targets = {};
+  const targetSources = {};
   for (const step of steps) {
     if (!isRecord(step.targets)) continue;
     for (const [name, value] of Object.entries(step.targets)) {
-      targets[name] = isRecord(value) && typeof value.target === "string" ? value.target : value;
+      const target = isRecord(value) && typeof value.target === "string" ? value.target : value;
+      targets[name] = target;
+      const source = {
+        stepId: step.id,
+        kind: step.kind,
+        profile: step.profile,
+        gate: step.gate,
+        value: target,
+      };
+      targetSources[name] = [...(targetSources[name] ?? []), source];
     }
   }
-  return targets;
-}
-
-function lifecycleIdentity(command) {
   return {
-    gate: command.gate,
-    profile: command.profile,
-    integrationGate: command.integrationGate,
-    checks: command.checks,
-    lifecycleSteps: command.lifecycleSteps,
-    steps: command.steps.map(stepResultIdentity),
-  };
-}
-
-function lifecycleResultMatches(result, expected) {
-  if (!isRecord(result) || result.schemaVersion !== 1 || result.status !== "passed") return false;
-  if (
-    result.gate !== expected.gate ||
-    result.profile !== expected.profile ||
-    result.integrationGate !== expected.integrationGate
-  ) {
-    return false;
-  }
-  if (!sameStringArray(result.checks, expected.checks)) return false;
-  if (!sameStringArray(result.lifecycleSteps, expected.lifecycleSteps)) return false;
-  if (!Array.isArray(result.steps) || result.steps.length !== expected.steps.length) return false;
-  return expected.steps.every((step, index) => {
-    const actual = result.steps[index];
-    return isRecord(actual) &&
-      actual.id === step.id &&
-      actual.kind === step.kind &&
-      actual.profile === step.profile &&
-      actual.gate === step.gate &&
-      sameStringArray(actual.checks, step.checks);
-  });
-}
-
-function stepResultIdentity(step) {
-  return {
-    id: step.id,
-    kind: step.kind,
-    profile: step.profile,
-    gate: step.gate,
-    checks: step.checks,
+    targets,
+    targetSources,
+    targetCollisions: Object.entries(targetSources)
+      .map(([name, sources]) => {
+        const values = uniqueStrings(sources.map((source) => source.value));
+        const profiles = uniqueStrings(sources.map((source) => source.profile));
+        if (sources.length < 2 || (values.length < 2 && profiles.length < 2)) return undefined;
+        return {
+          name,
+          values,
+          profiles,
+          sources,
+        };
+      })
+      .filter(Boolean),
   };
 }
 
@@ -632,13 +628,8 @@ function isRecord(value) {
   return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function sameStringArray(left, right) {
-  return (
-    Array.isArray(left) &&
-    Array.isArray(right) &&
-    left.length === right.length &&
-    left.every((item, index) => item === right[index])
-  );
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
 }
 
 function printHelp() {

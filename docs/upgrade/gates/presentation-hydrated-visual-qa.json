@@ -3,7 +3,7 @@
   "gate": "presentation-hydrated-visual-qa",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T12:02:00.360Z",
+  "passedAt": "2026-06-10T12:45:18.387Z",
   "checks": [
     "presentation:hydrated-web",
     "presentation:hydrated-desktop",
@@ -92,7 +92,7 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 220374,
+            "pngBytes": 220279,
             "sampledColors": 153,
             "alphaPixels": 512,
             "nonblank": true
@@ -102,6 +102,12 @@
               "level": "0",
               "message": "[vite] connecting...",
               "line": 733,
+              "source": "http://127.0.0.1:5183/@vite/client"
+            },
+            {
+              "level": "0",
+              "message": "[vite] connected.",
+              "line": 827,
               "source": "http://127.0.0.1:5183/@vite/client"
             },
             {
@@ -115,12 +121,6 @@
               "message": "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://electronjs.org/docs/tutorial/security.\nThis warning will not show up\nonce the app is packaged.",
               "line": 2,
               "source": "node:electron/js2c/sandbox_bundle"
-            },
-            {
-              "level": "0",
-              "message": "[vite] connected.",
-              "line": 827,
-              "source": "http://127.0.0.1:5183/@vite/client"
             }
           ],
           "pageFailures": [],
@@ -203,7 +203,7 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 283087,
+            "pngBytes": 283107,
             "sampledColors": 123,
             "alphaPixels": 513,
             "nonblank": true
@@ -314,8 +314,8 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 657250,
-            "sampledColors": 95,
+            "pngBytes": 657130,
+            "sampledColors": 96,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -434,7 +434,7 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 217861,
+            "pngBytes": 217787,
             "sampledColors": 148,
             "alphaPixels": 512,
             "nonblank": true
@@ -545,7 +545,7 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 281757,
+            "pngBytes": 281774,
             "sampledColors": 129,
             "alphaPixels": 513,
             "nonblank": true
@@ -656,8 +656,8 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 724704,
-            "sampledColors": 100,
+            "pngBytes": 724598,
+            "sampledColors": 101,
             "alphaPixels": 513,
             "nonblank": true
           },

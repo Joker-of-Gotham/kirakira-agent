@@ -103,6 +103,20 @@ export type {
   RuntimeReadinessHealthSchema,
   RuntimeReadinessSource,
 } from "./readiness.js";
+export {
+  runtimeGateEntryEnv,
+  runtimeGateIdentity,
+  runtimeGateResultMatches,
+  runtimeGateStepExecutionStatus,
+  runtimeGateStepIdentity,
+  runtimeGateStepMatches,
+} from "./gates.js";
+export type {
+  RuntimeGateCommandLike,
+  RuntimeGateEvidenceLike,
+  RuntimeGateIdentity,
+  RuntimeGateStepIdentity,
+} from "./gates.js";
 export type {
   ApprovalRecord,
   ArtifactRecord,

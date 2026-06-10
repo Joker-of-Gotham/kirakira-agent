@@ -9,6 +9,13 @@ import { buildWorkbenchSmokeGateCommand } from "./kirakira-workbench-smoke.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
 import { buildPresentationHydratedVisualQaCommand } from "./presentation-hydrated-visual-qa.mjs";
 import { buildRuntimeDaemonCompositionSmokeCommand } from "./runtime-daemon-composition-smoke.mjs";
+import {
+  runtimeGateEntryEnv,
+  runtimeGateIdentity,
+  runtimeGateResultMatches,
+  runtimeGateStepExecutionStatus,
+  runtimeGateStepIdentity,
+} from "./runtime-gate-contracts.mjs";
 import { loadRuntimeProfiles } from "./runtime-profile.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -112,8 +119,8 @@ export function buildRuntimeIntegrationGateCommand(
     config,
   }, env, adapters));
   const result = readGateResult(resultPath);
-  const expectedIdentity = integrationIdentity(gate, steps);
-  const resultMatches = integrationResultMatches(result, expectedIdentity);
+  const expectedIdentity = runtimeGateIdentity({ gate: gate.name, steps });
+  const resultMatches = runtimeGateResultMatches(result, expectedIdentity);
   const externallyPassed =
     env[gate.passedEnv] === "1" ||
     resultMatches ||
@@ -203,7 +210,7 @@ export function writeRuntimeIntegrationGateResult(command, path) {
     status: "passed",
     passedAt: new Date().toISOString(),
     checks: command.checks,
-    steps: command.steps.map(stepResultIdentity),
+    steps: command.steps.map(runtimeGateStepIdentity),
     command: command.liveGate.command,
     references: command.references,
   };
@@ -274,7 +281,7 @@ function buildStep(entry, options, env, adapters) {
 function buildDeepResearchStep(entry, options, env) {
   const profile = requiredString(entry.profile, "deep-research-live-adapters.profile");
   const gateName = stringValue(entry.gate) ?? "deep-research:live-adapters";
-  const childEnv = entryEnv(entry);
+  const childEnv = runtimeGateEntryEnv(entry);
   const command = buildDeepResearchLiveAdaptersCommand({
     gateName,
     profileName: profile,
@@ -307,7 +314,7 @@ function buildDeepResearchStep(entry, options, env) {
 function buildMemoryPersistenceStep(entry, options, env) {
   const profile = requiredString(entry.profile, "memory-persistence.profile");
   const skipCompose = entry.skipCompose === true || options.skipCompose === true;
-  const childEnv = entryEnv(entry);
+  const childEnv = runtimeGateEntryEnv(entry);
   const command = buildMemoryPersistenceSmokeCommand({
     profileName: profile,
     live: options.live,
@@ -338,7 +345,7 @@ function buildMemoryPersistenceStep(entry, options, env) {
 function buildRuntimeDaemonCompositionStep(entry, options, env) {
   const profile = requiredString(entry.profile, "runtime-daemon-composition.profile");
   const gateName = stringValue(entry.gate) ?? "runtime-daemon:composition-smoke";
-  const childEnv = entryEnv(entry);
+  const childEnv = runtimeGateEntryEnv(entry);
   const command = buildRuntimeDaemonCompositionSmokeCommand({
     gateName,
     profileName: profile,
@@ -372,7 +379,7 @@ function buildPresentationHydratedVisualQaStep(entry, options, env) {
   const gateName = requiredString(entry.gate, "presentation-hydrated-visual-qa.gate");
   const skipInfra = entry.skipInfra === true || options.skipInfra === true;
   const skipDaemon = entry.skipDaemon === true;
-  const childEnv = entryEnv(entry);
+  const childEnv = runtimeGateEntryEnv(entry);
   const command = buildPresentationHydratedVisualQaCommand({
     gateName,
     profileName: profile,
@@ -409,7 +416,7 @@ function buildWorkbenchSmokeStep(entry, options, env) {
   const profile = requiredString(entry.profile, "workbench-smoke.profile");
   const gateName = requiredString(entry.gate, "workbench-smoke.gate");
   const skipInfra = entry.skipInfra === true || options.skipInfra === true;
-  const childEnv = entryEnv(entry);
+  const childEnv = runtimeGateEntryEnv(entry);
   const command = buildWorkbenchSmokeGateCommand({
     profileName: profile,
     gateName,
@@ -440,24 +447,10 @@ function buildWorkbenchSmokeStep(entry, options, env) {
   };
 }
 
-function entryEnv(entry) {
-  if (!isRecord(entry.env)) return {};
-  return Object.fromEntries(
-    Object.entries(entry.env).filter(([, value]) => typeof value === "string"),
-  );
-}
-
 function stepSummary(entry, built, kind) {
   const command = built.command;
   const evidence = command.evidence ?? {};
-  const mismatch = evidence.resultStatus !== undefined && evidence.resultMatches === false;
-  const status = mismatch
-    ? "mismatch"
-    : command.status === "passed"
-      ? "passed"
-      : command.live
-        ? "pending"
-        : "skipped";
+  const status = runtimeGateStepExecutionStatus(command);
   return {
     id: stringValue(entry.id) ?? command.gate,
     kind,
@@ -513,40 +506,6 @@ function integrationGateConfig(config, gateName) {
     timeoutMs: positiveIntegerOrUndefined(gate.timeoutMs),
     gates: entries,
   };
-}
-
-function integrationIdentity(gate, steps) {
-  return {
-    gate: gate.name,
-    steps: steps.map(stepResultIdentity),
-  };
-}
-
-function stepResultIdentity(step) {
-  return {
-    id: step.id,
-    kind: step.kind,
-    profile: step.profile,
-    gate: step.gate,
-    checks: step.checks,
-  };
-}
-
-function integrationResultMatches(result, expected) {
-  if (!isRecord(result) || result.schemaVersion !== 1 || result.status !== "passed") {
-    return false;
-  }
-  if (result.gate !== expected.gate) return false;
-  if (!Array.isArray(result.steps) || result.steps.length !== expected.steps.length) return false;
-  return expected.steps.every((step, index) => {
-    const actual = result.steps[index];
-    return isRecord(actual) &&
-      actual.id === step.id &&
-      actual.kind === step.kind &&
-      actual.profile === step.profile &&
-      actual.gate === step.gate &&
-      sameStringArray(actual.checks, step.checks);
-  });
 }
 
 function liveRequested(options, env, gate) {
@@ -641,15 +600,6 @@ function isRecord(value) {
 
 function uniqueStrings(values) {
   return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
-}
-
-function sameStringArray(left, right) {
-  return (
-    Array.isArray(left) &&
-    Array.isArray(right) &&
-    left.length === right.length &&
-    left.every((item, index) => item === right[index])
-  );
 }
 
 function printHelp() {

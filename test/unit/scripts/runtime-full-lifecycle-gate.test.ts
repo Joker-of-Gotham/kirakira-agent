@@ -75,6 +75,14 @@ describe("runtime full lifecycle gate", () => {
       "presentation:web": "http://127.0.0.1:5183/",
       "presentation:desktop": "http://127.0.0.1:5174/",
     });
+    expect(command.targetSources["service:postgres"]).toEqual([
+      expect.objectContaining({
+        stepId: "memory-store:persistence",
+        profile: "test-host",
+        value: "postgres://127.0.0.1:5432/kirakira_test",
+      }),
+    ]);
+    expect(command.targetCollisions).toEqual([]);
     expect(command.integration.steps.at(-1)?.command).toBe(
       "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 240000 --live",
     );
@@ -113,6 +121,15 @@ describe("runtime full lifecycle gate", () => {
         gate: "runtime-full-lifecycle",
         profile: "workbench-host",
         status: "blocked",
+        targetSources: {
+          "service:postgres": [
+            expect.objectContaining({
+              stepId: "memory-store:persistence",
+              profile: "test-host",
+            }),
+          ],
+        },
+        targetCollisions: [],
         preflight: {
           status: "failed",
         },

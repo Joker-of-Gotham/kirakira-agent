@@ -110,7 +110,9 @@ describe("upgrade readiness gate", () => {
       resultStatus: "blocked",
       resultMatches: false,
       preflightStatus: "failed",
+      targetCollisions: [],
     });
+    expect(report.gates.runtimeFullLifecycle.evidence).toContain("targetCollisions=0");
     expect(report.gates.presentationProjection).toMatchObject({
       status: "pass",
       source: "runtime-profile-projection",
