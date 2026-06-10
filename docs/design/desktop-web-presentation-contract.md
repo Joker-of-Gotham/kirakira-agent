@@ -66,6 +66,7 @@ Run these after desktop presentation changes:
 ```powershell
 node scripts/presentation-quality-gate.mjs --profile workbench-host --format markdown --artifact tmp/presentation-quality/workbench-host.json --fail-on-issues
 node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --skip-infra --skip-daemon
+node scripts/runtime-full-lifecycle-gate.mjs --gate runtime-full-lifecycle --profile workbench-host --live --timeout-ms 240000
 pnpm --filter @kirakira/desktop typecheck
 pnpm exec vitest run test/unit/desktop/startup-manifest.test.ts test/unit/desktop/main-security.test.ts test/unit/desktop/preload.test.ts test/unit/desktop/renderer-endpoint.test.ts test/unit/desktop/runtime-ipc.test.ts test/unit/desktop/desktop-transport.test.ts
 ```
@@ -77,7 +78,12 @@ artifact also carries a seven-dimension visual review scorecard and mobile,
 tablet, and desktop viewport targets so design QA has an archiveable record
 before live screenshot automation is needed.
 
-The hydrated visual QA gate is the screenshot automation layer:
+The fast hydrated visual QA gate is the screenshot automation layer for the
+renderer contract. It intentionally runs with mock runtime mode and
+`--skip-infra --skip-daemon` when called through the `upgrade` integration gate;
+that artifact proves the shared web/desktop workbench renders correctly, not
+that Docker, the daemon, gateway, or Electron shell have completed the full
+runtime lifecycle.
 
 - `configs/runtime/profiles.json` owns
   `presentationHydratedVisualQaGates.presentation-hydrated-visual-qa`.
@@ -93,10 +99,19 @@ The hydrated visual QA gate is the screenshot automation layer:
   `docs/upgrade/gates/presentation-hydrated-visual-qa.json`, with PNGs under
   `docs/upgrade/gates/presentation-hydrated-visual-qa/`.
 
+The full lifecycle gate is the slower Docker-backed contract:
+
+- `runtimeLifecycleGates.runtime-full-lifecycle` owns the daemon, gateway, web
+  renderer, desktop renderer, Electron shell, and no-skip hydrated QA sequence.
+- `scripts/runtime-full-lifecycle-gate.mjs` records Docker preflight, compose
+  readiness, profile-derived lifecycle steps, and child-gate identity in
+  `docs/upgrade/gates/runtime-full-lifecycle-gate.json`.
+- Readiness treats a blocked Docker preflight as open work, so a renderer-only
+  artifact cannot be mistaken for a complete desktop/web runtime pass.
+
 Remaining design work:
 
 - Document the shared web/desktop view taxonomy once multi-view workbench
   routing stabilizes.
-- Run the same hydrated gate against the full Docker-backed daemon/gateway stack
-  when Docker Desktop is available, instead of the renderer-only mock-runtime
-  path used for fast visual QA.
+- Replace the current blocked full-lifecycle artifact with a passed
+  Docker-backed artifact when Docker Desktop is available.

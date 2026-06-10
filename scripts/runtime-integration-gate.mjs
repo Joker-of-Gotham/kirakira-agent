@@ -119,10 +119,10 @@ export function buildRuntimeIntegrationGateCommand(
     steps.every((step) => step.status === "passed");
   const mismatches = steps.filter((step) => step.status === "mismatch");
   const skipReason = externallyPassed
-    ? undefined
-    : live
       ? undefined
-      : `live gate is opt-in; set ${gate.liveEnv} =1 or pass --live`;
+      : live
+        ? undefined
+      : `live gate is opt-in; set ${gate.liveEnv}=1 or pass --live`;
 
   return {
     schemaVersion: 1,
@@ -272,11 +272,12 @@ function buildStep(entry, options, env, adapters) {
 
 function buildDeepResearchStep(entry, options, env) {
   const profile = requiredString(entry.profile, "deep-research-live-adapters.profile");
+  const childEnv = entryEnv(entry);
   const command = buildDeepResearchLiveAdaptersCommand({
     profileName: profile,
     live: options.live,
     timeoutMs: options.timeoutMs,
-  }, env);
+  }, { ...env, ...childEnv });
   return {
     command,
     commandArgs: [
@@ -291,6 +292,7 @@ function buildDeepResearchStep(entry, options, env) {
       ],
     ],
     env: {
+      ...childEnv,
       KIRAKIRA_RUNTIME_PROFILE: profile,
     },
   };
@@ -299,12 +301,13 @@ function buildDeepResearchStep(entry, options, env) {
 function buildMemoryPersistenceStep(entry, options, env) {
   const profile = requiredString(entry.profile, "memory-persistence.profile");
   const skipCompose = entry.skipCompose === true || options.skipCompose === true;
+  const childEnv = entryEnv(entry);
   const command = buildMemoryPersistenceSmokeCommand({
     profileName: profile,
     live: options.live,
     timeoutMs: options.timeoutMs,
     skipCompose,
-  }, env);
+  }, { ...env, ...childEnv });
   return {
     command,
     commandArgs: [
@@ -320,6 +323,7 @@ function buildMemoryPersistenceStep(entry, options, env) {
       ],
     ],
     env: {
+      ...childEnv,
       KIRAKIRA_RUNTIME_PROFILE: profile,
     },
   };
@@ -328,12 +332,13 @@ function buildMemoryPersistenceStep(entry, options, env) {
 function buildRuntimeDaemonCompositionStep(entry, options, env) {
   const profile = requiredString(entry.profile, "runtime-daemon-composition.profile");
   const gateName = stringValue(entry.gate) ?? "runtime-daemon:composition-smoke";
+  const childEnv = entryEnv(entry);
   const command = buildRuntimeDaemonCompositionSmokeCommand({
     gateName,
     profileName: profile,
     live: options.live,
     timeoutMs: options.timeoutMs,
-  }, env);
+  }, { ...env, ...childEnv });
   return {
     command,
     commandArgs: [
@@ -350,6 +355,7 @@ function buildRuntimeDaemonCompositionStep(entry, options, env) {
       ],
     ],
     env: {
+      ...childEnv,
       KIRAKIRA_RUNTIME_PROFILE: profile,
     },
   };
@@ -359,13 +365,16 @@ function buildPresentationHydratedVisualQaStep(entry, options, env) {
   const profile = requiredString(entry.profile, "presentation-hydrated-visual-qa.profile");
   const gateName = requiredString(entry.gate, "presentation-hydrated-visual-qa.gate");
   const skipInfra = entry.skipInfra === true || options.skipInfra === true;
+  const skipDaemon = entry.skipDaemon === true;
+  const childEnv = entryEnv(entry);
   const command = buildPresentationHydratedVisualQaCommand({
     gateName,
     profileName: profile,
     live: options.live,
     timeoutMs: options.timeoutMs,
     skipInfra,
-  }, env);
+    skipDaemon,
+  }, { ...env, ...childEnv });
   return {
     command,
     commandArgs: [
@@ -379,10 +388,12 @@ function buildPresentationHydratedVisualQaStep(entry, options, env) {
         "--timeout-ms",
         String(options.timeoutMs),
         ...(skipInfra ? ["--skip-infra"] : []),
+        ...(skipDaemon ? ["--skip-daemon"] : []),
         "--live",
       ],
     ],
     env: {
+      ...childEnv,
       KIRAKIRA_RUNTIME_PROFILE: profile,
     },
   };
@@ -392,13 +403,14 @@ function buildWorkbenchSmokeStep(entry, options, env) {
   const profile = requiredString(entry.profile, "workbench-smoke.profile");
   const gateName = requiredString(entry.gate, "workbench-smoke.gate");
   const skipInfra = entry.skipInfra === true || options.skipInfra === true;
+  const childEnv = entryEnv(entry);
   const command = buildWorkbenchSmokeGateCommand({
     profileName: profile,
     gateName,
     live: options.live,
     timeoutMs: options.timeoutMs,
     skipInfra,
-  }, env);
+  }, { ...env, ...childEnv });
   return {
     command,
     commandArgs: [
@@ -416,9 +428,17 @@ function buildWorkbenchSmokeStep(entry, options, env) {
       ],
     ],
     env: {
+      ...childEnv,
       KIRAKIRA_RUNTIME_PROFILE: profile,
     },
   };
+}
+
+function entryEnv(entry) {
+  if (!isRecord(entry.env)) return {};
+  return Object.fromEntries(
+    Object.entries(entry.env).filter(([, value]) => typeof value === "string"),
+  );
 }
 
 function stepSummary(entry, built, kind) {

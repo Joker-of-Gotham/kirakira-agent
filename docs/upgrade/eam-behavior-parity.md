@@ -25,12 +25,15 @@ runtime validation before upgrade readiness can treat them as closed?
 
 ## Next Mechanism Gap
 
-After the profile-owned runtime integration gate, the single-run
+After the profile-owned fast runtime integration gate, the single-run
 `runtime-daemon-composition-smoke`, and the renderer-level
 `presentation-hydrated-visual-qa`, the highest-leverage remaining gap is now
-`full-lifecycle-docker-desktop-gate`: run the full Docker-backed daemon,
+`full-lifecycle-docker-desktop-gate`: keep the full Docker-backed daemon,
 browser gateway, web renderer, desktop renderer, Electron shell, and hydrated
-visual QA as one slower live gate when Docker Desktop is available.
+visual QA under one slower live gate. That gate now exists as
+`runtimeLifecycleGates.runtime-full-lifecycle`; the current artifact is
+`blocked` at Docker daemon preflight because Docker Desktop is not available in
+this environment.
 
 Evidence:
 
@@ -43,6 +46,7 @@ Evidence:
 - `packages/config-resolver/src/runtime-projection.ts`
 - `scripts/runtime-profile.mjs`
 - `scripts/runtime-integration-gate.mjs`
+- `scripts/runtime-full-lifecycle-gate.mjs`
 - `scripts/runtime-daemon-composition-smoke.mjs`
 - `scripts/presentation-hydrated-visual-qa.mjs`
 - `scripts/presentation-hydrated-visual-qa-runner.mjs`
@@ -55,6 +59,7 @@ Evidence:
 - `test/unit/runtime/profile-resolution.test.ts`
 - `test/unit/config-resolver/resolved-state.test.ts`
 - `test/unit/scripts/runtime-integration-gate.test.ts`
+- `test/unit/scripts/runtime-full-lifecycle-gate.test.ts`
 - `test/unit/scripts/runtime-daemon-composition-smoke.test.ts`
 - `test/unit/scripts/presentation-hydrated-visual-qa.test.ts`
 - `test/unit/runtime-daemon/kernel-bridge-subagent.test.ts`
@@ -67,6 +72,8 @@ Evidence:
 - `docs/upgrade/gates/runtime-daemon-composition-smoke.json`
 - `docs/upgrade/gates/presentation-hydrated-visual-qa.json`
 - `docs/upgrade/gates/runtime-integration-gate.json`
+- `docs/upgrade/gates/runtime-full-lifecycle-gate.json`
+- `docs/change-records/2026-06-10-runtime-full-lifecycle-gate.md`
 - `docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md`
 - `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
 - `docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`
@@ -76,11 +83,12 @@ Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
-pnpm exec vitest run test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm exec vitest run test/unit/scripts/runtime-full-lifecycle-gate.test.ts test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
 pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts
 node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live
 $env:VITE_KIRAKIRA_RUNTIME_MODE='mock'; node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --timeout-ms 240000 --skip-infra --skip-daemon
 node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
+node scripts/runtime-full-lifecycle-gate.mjs --gate runtime-full-lifecycle --profile workbench-host --live --timeout-ms 240000
 pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
 node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
 pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live
@@ -172,10 +180,20 @@ and MCP checks match the current gate contract.
 
 `gates.runtimeIntegration` now aggregates the profile-owned deep-research,
 memory-persistence, runtime-daemon composition, and web/desktop workbench child
-gates through `scripts/runtime-integration-gate.mjs`. It passes only when child
-gate evidence matches the current configured profiles and the aggregate
-artifact `docs/upgrade/gates/runtime-integration-gate.json` matches the current
-step identity.
+gates through `scripts/runtime-integration-gate.mjs`. The `upgrade` gate is the
+fast renderer-level gate: its hydrated visual QA child is explicitly recorded
+as `execution=mock/skipInfra/skipDaemon`, so it cannot be confused with full
+daemon/gateway proof. It passes only when child gate evidence matches the
+current configured profiles and the aggregate artifact
+`docs/upgrade/gates/runtime-integration-gate.json` matches the current step
+identity.
+
+`gates.runtimeFullLifecycle` is the separate slow lifecycle gate. It reads
+`docs/upgrade/gates/runtime-full-lifecycle-gate.json`, expects
+`integrationGate=full-lifecycle`, checks the Docker preflight, verifies
+profile-derived lifecycle steps and web/desktop/gateway targets, and reports
+the current Docker Desktop unavailability as actionable open work rather than
+as completed upgrade evidence.
 
 ## Readiness Interpretation
 

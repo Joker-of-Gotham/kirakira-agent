@@ -211,6 +211,11 @@ export function buildPresentationHydratedVisualQaCommand(
     surfaces,
     viewports: gate.viewports,
     views: gate.views,
+    execution: {
+      mode: env.VITE_KIRAKIRA_RUNTIME_MODE ?? env.KIRAKIRA_RUNTIME_MODE ?? "profile",
+      skipInfra: options.skipInfra === true,
+      skipDaemon: options.skipDaemon === true,
+    },
   });
   const resultMatches = visualQaResultMatches(result, expected);
   const externallyPassed = env[gate.passedEnv] === "1" || resultMatches;
@@ -232,6 +237,11 @@ export function buildPresentationHydratedVisualQaCommand(
     timeoutMs: options.timeoutMs ?? gate.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     skipDaemon: options.skipDaemon === true,
     skipInfra: options.skipInfra === true,
+    execution: {
+      mode: env.VITE_KIRAKIRA_RUNTIME_MODE ?? env.KIRAKIRA_RUNTIME_MODE ?? "profile",
+      skipInfra: options.skipInfra === true,
+      skipDaemon: options.skipDaemon === true,
+    },
     checks: gate.checks,
     surfaces,
     viewports: gate.viewports,
@@ -353,6 +363,7 @@ export function writePresentationHydratedVisualQaResult(command, results, path =
     viewports: command.viewports,
     views: command.views,
     targets: command.targets,
+    execution: command.execution,
     screenshotDir: command.screenshotDir,
     surfaceResults: results.map(relativeSurfaceResult),
     command: command.liveGate.command,
@@ -381,6 +392,7 @@ export function presentationHydratedVisualQaReport(command) {
     viewports: command.viewports,
     views: command.views,
     targets: command.targets,
+    execution: command.execution,
     screenshotDir: command.screenshotDir,
     evidence: command.evidence,
     liveGate: command.liveGate,
@@ -493,6 +505,7 @@ function visualQaIdentity(command) {
     surfaces: command.surfaces,
     viewports: command.viewports.map((viewport) => viewport.id),
     views: command.views.map((view) => view.id),
+    execution: command.execution,
   };
 }
 
@@ -507,7 +520,17 @@ function visualQaResultMatches(result, expected) {
   const viewIds = Array.isArray(result.views)
     ? result.views.map((view) => view.id)
     : [];
-  return sameStringArray(viewportIds, expected.viewports) && sameStringArray(viewIds, expected.views);
+  return sameStringArray(viewportIds, expected.viewports) &&
+    sameStringArray(viewIds, expected.views) &&
+    executionMatches(result.execution, expected.execution);
+}
+
+function executionMatches(actual, expected) {
+  return isRecord(actual) &&
+    isRecord(expected) &&
+    actual.mode === expected.mode &&
+    actual.skipInfra === expected.skipInfra &&
+    actual.skipDaemon === expected.skipDaemon;
 }
 
 function relativeSurfaceResult(result) {

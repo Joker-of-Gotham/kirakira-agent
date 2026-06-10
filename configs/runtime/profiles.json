@@ -347,7 +347,7 @@
   },
   "integrationGates": {
     "upgrade": {
-      "description": "Profile-owned integration release gate spanning deep research, memory persistence, and web/desktop workbench presentation.",
+      "description": "Profile-owned fast integration gate spanning deep research, memory persistence, daemon composition, renderer-level workbench presentation, and renderer-only hydrated visual QA evidence.",
       "liveEnv": "KIRAKIRA_RUNTIME_INTEGRATION_GATE_LIVE",
       "passedEnv": "KIRAKIRA_RUNTIME_INTEGRATION_GATE_PASSED",
       "resultPath": "docs/upgrade/gates/runtime-integration-gate.json",
@@ -378,7 +378,98 @@
           "id": "presentation:hydrated-visual-qa",
           "kind": "presentation-hydrated-visual-qa",
           "profile": "workbench-host",
-          "gate": "presentation-hydrated-visual-qa"
+          "gate": "presentation-hydrated-visual-qa",
+          "skipInfra": true,
+          "skipDaemon": true,
+          "env": {
+            "VITE_KIRAKIRA_RUNTIME_MODE": "mock"
+          }
+        }
+      ]
+    },
+    "full-lifecycle": {
+      "description": "Slow full lifecycle gate running Docker-backed services, daemon/gateway, web renderer, desktop renderer, Electron shell, and hydrated visual QA without renderer-only skips.",
+      "liveEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_INTEGRATION_LIVE",
+      "passedEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_INTEGRATION_PASSED",
+      "resultPath": "docs/upgrade/gates/runtime-full-lifecycle-integration.json",
+      "timeoutMs": 240000,
+      "gates": [
+        {
+          "id": "deep-research:live-adapters",
+          "kind": "deep-research-live-adapters",
+          "profile": "workbench-host"
+        },
+        {
+          "id": "memory-store:persistence",
+          "kind": "memory-persistence",
+          "profile": "test-host"
+        },
+        {
+          "id": "runtime-daemon:composition-smoke",
+          "kind": "runtime-daemon-composition",
+          "profile": "workbench-host",
+          "gate": "runtime-daemon:composition-smoke"
+        },
+        {
+          "id": "workbench:presentation",
+          "kind": "workbench-smoke",
+          "profile": "workbench-host",
+          "gate": "presentation"
+        },
+        {
+          "id": "presentation:hydrated-visual-qa",
+          "kind": "presentation-hydrated-visual-qa",
+          "profile": "workbench-host",
+          "gate": "presentation-hydrated-visual-qa",
+          "env": {
+            "VITE_KIRAKIRA_RUNTIME_MODE": "gateway"
+          }
+        }
+      ]
+    }
+  },
+  "runtimeLifecycleGates": {
+    "runtime-full-lifecycle": {
+      "description": "Top-level lifecycle proof for Docker services, daemon/browser gateway, web renderer, desktop renderer, Electron shell, and hydrated visual QA under one profile-owned live gate.",
+      "profile": "workbench-host",
+      "integrationGate": "full-lifecycle",
+      "liveEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_LIVE",
+      "passedEnv": "KIRAKIRA_RUNTIME_FULL_LIFECYCLE_PASSED",
+      "resultPath": "docs/upgrade/gates/runtime-full-lifecycle-gate.json",
+      "timeoutMs": 240000,
+      "requiredPreflights": ["docker compose"],
+      "lifecycleSteps": [
+        "runtime-ready:plan",
+        "docker-compose:up-wait",
+        "runtime-daemon:kernelbridge-composition",
+        "workbench:web-gateway",
+        "workbench:desktop-electron",
+        "presentation:hydrated-visual-qa"
+      ],
+      "checks": [
+        "runtime-lifecycle:docker-compose-ready",
+        "runtime-lifecycle:daemon-gateway",
+        "runtime-lifecycle:web-renderer",
+        "runtime-lifecycle:desktop-renderer",
+        "runtime-lifecycle:electron-shell",
+        "runtime-lifecycle:hydrated-visual-qa"
+      ],
+      "references": [
+        {
+          "title": "Docker Compose up",
+          "url": "https://docs.docker.com/reference/cli/docker/compose/up/"
+        },
+        {
+          "title": "Node.js child_process",
+          "url": "https://nodejs.org/api/child_process.html"
+        },
+        {
+          "title": "Electron BrowserWindow",
+          "url": "https://www.electronjs.org/docs/latest/api/browser-window"
+        },
+        {
+          "title": "MCP lifecycle",
+          "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle"
         }
       ]
     }

@@ -1,0 +1,163 @@
+{
+  "schemaVersion": 1,
+  "gate": "runtime-full-lifecycle",
+  "profile": "workbench-host",
+  "integrationGate": "full-lifecycle",
+  "status": "blocked",
+  "recordedAt": "2026-06-10T06:26:07.965Z",
+  "checks": [
+    "runtime-lifecycle:docker-compose-ready",
+    "runtime-lifecycle:daemon-gateway",
+    "runtime-lifecycle:web-renderer",
+    "runtime-lifecycle:desktop-renderer",
+    "runtime-lifecycle:electron-shell",
+    "runtime-lifecycle:hydrated-visual-qa"
+  ],
+  "lifecycleSteps": [
+    "runtime-ready:plan",
+    "docker-compose:up-wait",
+    "runtime-daemon:kernelbridge-composition",
+    "workbench:web-gateway",
+    "workbench:desktop-electron",
+    "presentation:hydrated-visual-qa"
+  ],
+  "requiredPreflights": [
+    "docker compose"
+  ],
+  "preflight": {
+    "status": "failed",
+    "command": "docker info",
+    "detail": "WARNING: Error loading config file: open C:\\Users\\explo\\.docker\\config.json: Access is denied.\nfailed to connect to the docker API at npipe:////./pipe/docker_engine; check if the path is correct and if the daemon is running: open //./pipe/docker_engine: The system cannot find the file specified."
+  },
+  "steps": [
+    {
+      "id": "deep-research:live-adapters",
+      "kind": "deep-research-live-adapters",
+      "profile": "workbench-host",
+      "gate": "deep-research:live-adapters",
+      "checks": [
+        "deep-research:file-source",
+        "deep-research:web-source",
+        "deep-research:mcp-runtime-source",
+        "deep-research:mcp-live-transports",
+        "deep-research:mcp-kernel-research-events"
+      ]
+    },
+    {
+      "id": "memory-store:persistence",
+      "kind": "memory-persistence",
+      "profile": "test-host",
+      "gate": "memory-store:persistence",
+      "checks": [
+        "memory-store:checkpoint",
+        "memory-store:retain-reflect"
+      ]
+    },
+    {
+      "id": "runtime-daemon:composition-smoke",
+      "kind": "runtime-daemon-composition",
+      "profile": "workbench-host",
+      "gate": "runtime-daemon:composition-smoke",
+      "checks": [
+        "runtime-daemon:kernelbridge-single-run",
+        "runtime-daemon:subagent-topology-events",
+        "runtime-daemon:deep-research-mcp-source",
+        "runtime-daemon:mcp-policy-trust-audit-otel",
+        "runtime-daemon:memory-recall-events",
+        "runtime-daemon:checkpoint-persistence",
+        "runtime-daemon:profile-readiness-manifest"
+      ]
+    },
+    {
+      "id": "workbench:presentation",
+      "kind": "workbench-smoke",
+      "profile": "workbench-host",
+      "gate": "presentation",
+      "checks": [
+        "daemon:browser-gateway",
+        "presentation:web",
+        "daemon:socket",
+        "presentation:desktop"
+      ]
+    },
+    {
+      "id": "presentation:hydrated-visual-qa",
+      "kind": "presentation-hydrated-visual-qa",
+      "profile": "workbench-host",
+      "gate": "presentation-hydrated-visual-qa",
+      "checks": [
+        "presentation:hydrated-web",
+        "presentation:hydrated-desktop",
+        "presentation:viewport-screenshots",
+        "presentation:console-page-errors",
+        "presentation:horizontal-overflow",
+        "presentation:nonblank-rendering",
+        "presentation:core-workbench-views"
+      ]
+    }
+  ],
+  "targets": {
+    "service:postgres": "postgres://127.0.0.1:5432/kirakira_test",
+    "service:redis": "redis://127.0.0.1:6379",
+    "service:qdrant": "http://127.0.0.1:6333/",
+    "service:neo4j": "bolt://127.0.0.1:7687",
+    "service:minio": "http://127.0.0.1:9000/",
+    "daemon:browser-gateway": "http://127.0.0.1:17373/healthz",
+    "presentation:web": "http://127.0.0.1:5183/",
+    "daemon:socket": "\\\\.\\pipe\\kirakira-agent-daemon-b48b29c06414",
+    "presentation:desktop": "http://127.0.0.1:5174/",
+    "web": "http://127.0.0.1:5183/",
+    "desktop": "http://127.0.0.1:5174/"
+  },
+  "compose": {
+    "command": "docker",
+    "args": [
+      "compose",
+      "-f",
+      "docker-compose.yml",
+      "-f",
+      "docker-compose.ports.yml",
+      "up",
+      "-d",
+      "--wait",
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad"
+    ],
+    "files": [
+      "docker-compose.yml",
+      "docker-compose.ports.yml"
+    ],
+    "services": [
+      "postgres",
+      "redis",
+      "qdrant",
+      "neo4j",
+      "minio",
+      "kirakirad"
+    ],
+    "wait": "running|healthy"
+  },
+  "command": "node scripts/runtime-full-lifecycle-gate.mjs --gate runtime-full-lifecycle --profile workbench-host --live",
+  "references": [
+    {
+      "title": "Docker Compose up",
+      "url": "https://docs.docker.com/reference/cli/docker/compose/up/"
+    },
+    {
+      "title": "Node.js child_process",
+      "url": "https://nodejs.org/api/child_process.html"
+    },
+    {
+      "title": "Electron BrowserWindow",
+      "url": "https://www.electronjs.org/docs/latest/api/browser-window"
+    },
+    {
+      "title": "MCP lifecycle",
+      "url": "https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle"
+    }
+  ]
+}

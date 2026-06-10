@@ -23,6 +23,7 @@
     "e2e:deep-research:live": "node scripts/deep-research-live-adapters.mjs --live",
     "e2e:runtime-daemon:composition": "node scripts/runtime-daemon-composition-smoke.mjs",
     "e2e:presentation:hydrated": "node scripts/presentation-hydrated-visual-qa.mjs",
+    "e2e:runtime:full-lifecycle": "node scripts/runtime-full-lifecycle-gate.mjs",
     "integration:gate": "node scripts/runtime-integration-gate.mjs",
     "llm:select": "node scripts/select-llm-provider.mjs",
     "runtime:profile": "node scripts/runtime-profile.mjs",

@@ -3,7 +3,7 @@
   "gate": "presentation-hydrated-visual-qa",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T03:31:54.625Z",
+  "passedAt": "2026-06-10T04:02:36.761Z",
   "checks": [
     "presentation:hydrated-web",
     "presentation:hydrated-desktop",
@@ -68,6 +68,11 @@
     "web": "http://127.0.0.1:5183/",
     "desktop": "http://127.0.0.1:5174/"
   },
+  "execution": {
+    "mode": "mock",
+    "skipInfra": true,
+    "skipDaemon": true
+  },
   "screenshotDir": "docs/upgrade/gates/presentation-hydrated-visual-qa",
   "surfaceResults": [
     {
@@ -87,8 +92,8 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 194944,
-            "sampledColors": 156,
+            "pngBytes": 193652,
+            "sampledColors": 150,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -187,7 +192,7 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 261593,
+            "pngBytes": 261609,
             "sampledColors": 118,
             "alphaPixels": 513,
             "nonblank": true
@@ -287,8 +292,8 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 621528,
-            "sampledColors": 94,
+            "pngBytes": 621583,
+            "sampledColors": 93,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -396,7 +401,7 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 216918,
+            "pngBytes": 216899,
             "sampledColors": 159,
             "alphaPixels": 512,
             "nonblank": true
@@ -418,7 +423,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=7d8264c2"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
             },
             {
               "level": "2",
@@ -496,7 +501,7 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 295240,
+            "pngBytes": 295213,
             "sampledColors": 120,
             "alphaPixels": 513,
             "nonblank": true
@@ -518,7 +523,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=7d8264c2"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
             },
             {
               "level": "2",
@@ -618,7 +623,7 @@
               "level": "1",
               "message": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold",
               "line": 20101,
-              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=7d8264c2"
+              "source": "http://127.0.0.1:5174/node_modules/.vite/deps/react-dom_client.js?v=4ba1b02b"
             },
             {
               "level": "2",

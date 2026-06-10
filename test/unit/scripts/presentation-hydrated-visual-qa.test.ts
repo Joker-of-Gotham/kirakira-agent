@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -74,6 +74,11 @@ describe("presentation hydrated visual QA gate", () => {
         web: "http://127.0.0.1:5183/",
         desktop: "http://127.0.0.1:5174/",
       });
+      expect(command.execution).toEqual({
+        mode: "profile",
+        skipInfra: true,
+        skipDaemon: false,
+      });
       expect(JSON.stringify(command)).not.toContain("5173");
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });
@@ -142,6 +147,11 @@ describe("presentation hydrated visual QA gate", () => {
         surfaces: ["web", "desktop"],
       });
       expect(stored).toMatchObject(result);
+      expect(stored.execution).toEqual({
+        mode: "profile",
+        skipInfra: true,
+        skipDaemon: false,
+      });
       expect(replay.status).toBe("passed");
       expect(replay.liveGate.status).toBe("passed");
       expect(replay.evidence).toMatchObject({
@@ -174,6 +184,49 @@ describe("presentation hydrated visual QA gate", () => {
     expect(JSON.stringify(command)).not.toContain("5183");
     expect(JSON.stringify(command)).not.toContain("5174");
     expect(JSON.stringify(command)).not.toContain("5173");
+  });
+
+  it("rejects stale evidence without execution identity", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "kirakira-hydrated-visual-qa-stale-"));
+    const resultPath = join(tempRoot, "presentation-hydrated-visual-qa.json");
+    try {
+      const command = buildPresentationHydratedVisualQaCommand(
+        {
+          gateName: "presentation-hydrated-visual-qa",
+          profileName: "workbench-host",
+          resultPath,
+          screenshotDir: join(tempRoot, "screenshots"),
+          skipInfra: true,
+          skipDaemon: true,
+        },
+        { VITE_KIRAKIRA_RUNTIME_MODE: "mock" },
+      );
+      const { execution: _execution, ...stale } = writePresentationHydratedVisualQaResult(
+        command,
+        fakeSurfaceResults(command),
+        resultPath,
+      );
+      writeFileSync(resultPath, `${JSON.stringify(stale, null, 2)}\n`);
+      const replay = buildPresentationHydratedVisualQaCommand(
+        {
+          gateName: "presentation-hydrated-visual-qa",
+          profileName: "workbench-host",
+          resultPath,
+          screenshotDir: join(tempRoot, "screenshots"),
+          skipInfra: true,
+          skipDaemon: true,
+        },
+        { VITE_KIRAKIRA_RUNTIME_MODE: "mock" },
+      );
+
+      expect(replay.status).toBe("skipped");
+      expect(replay.evidence).toMatchObject({
+        resultStatus: "passed",
+        resultMatches: false,
+      });
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 

@@ -17,6 +17,9 @@ Date: 2026-06-10
   runs before startup teardown.
 - Added the gate to `integrationGates.upgrade`, `scripts/upgrade-readiness.mjs`,
   and `docs/upgrade/gates/runtime-integration-gate.json`.
+- Added execution identity (`mode`, `skipInfra`, `skipDaemon`) to the hydrated
+  QA result so renderer-only mock evidence cannot be replayed as full
+  daemon/gateway proof.
 - Fixed the topology summary CSS so `Planned`, `Handoffs`, and `Mismatch`
   metrics no longer overflow narrow renderer columns.
 
@@ -55,6 +58,8 @@ node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 This closes the renderer-level hydrated visual QA gap for web and desktop:
 there are now six archived screenshots, four core views exercised per surface,
 and readiness evidence for nonblank rendering, console/page errors, and
-horizontal overflow. Docker Desktop was unavailable in this environment, so the
-full daemon/gateway-backed live visual run remains the next slower integration
-gate.
+horizontal overflow. The result is explicitly recorded as
+`execution=mock/skipInfra/skipDaemon`. Docker Desktop was unavailable in this
+environment, so the full daemon/gateway-backed live visual run remains the next
+slower integration gate and is tracked separately by
+`runtime-full-lifecycle-gate`.

@@ -79,8 +79,25 @@ describe("runtime integration gate", () => {
       "node scripts/memory-persistence-smoke.mjs --profile test-host --timeout-ms 12000 --live",
       "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --timeout-ms 12000 --live",
-      "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 12000 --live",
+      "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 12000 --skip-infra --skip-daemon --live",
     ]);
+  });
+
+  it("builds the slow full-lifecycle gate without renderer-only skips", () => {
+    const command = buildRuntimeIntegrationGateCommand(
+      { gateName: "full-lifecycle", resultPath: null, timeoutMs: 240_000 },
+      {},
+    );
+
+    expect(command.gate).toBe("full-lifecycle");
+    expect(command.steps.at(-1)).toMatchObject({
+      id: "presentation:hydrated-visual-qa",
+      kind: "presentation-hydrated-visual-qa",
+      profile: "workbench-host",
+      command: "node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --timeout-ms 240000 --live",
+    });
+    expect(command.steps.at(-1)?.command).not.toContain("--skip-infra");
+    expect(command.steps.at(-1)?.command).not.toContain("--skip-daemon");
   });
 
   it("writes and trusts aggregate evidence without losing child gate identities", () => {
@@ -150,6 +167,7 @@ describe("runtime integration gate", () => {
     expect(calls[1]).toContain("--skip-compose");
     expect(calls[3]).toContain("--skip-infra");
     expect(calls[4]).toContain("--skip-infra");
+    expect(calls[4]).toContain("--skip-daemon");
   });
 
   it("supports injected gate adapters without changing the aggregate flow", () => {

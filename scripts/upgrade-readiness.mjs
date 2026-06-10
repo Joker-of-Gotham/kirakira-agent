@@ -6,6 +6,7 @@ import { buildEamParityAudit } from "./eam-parity-audit.mjs";
 import { buildDeepResearchLiveAdaptersCommand } from "./deep-research-live-adapters.mjs";
 import { buildMemoryPersistenceSmokeCommand } from "./memory-persistence-smoke.mjs";
 import { buildPresentationHydratedVisualQaCommand } from "./presentation-hydrated-visual-qa.mjs";
+import { buildRuntimeFullLifecycleGateCommand } from "./runtime-full-lifecycle-gate.mjs";
 import { buildRuntimeIntegrationGateCommand } from "./runtime-integration-gate.mjs";
 import {
   buildRuntimeProfileProjection,
@@ -21,6 +22,8 @@ const PRESENTATION_RENDER_EVIDENCE_PATH =
   "docs/upgrade/gates/presentation-render-evidence.json";
 const PRESENTATION_HYDRATED_VISUAL_QA_PATH =
   "docs/upgrade/gates/presentation-hydrated-visual-qa.json";
+const RUNTIME_FULL_LIFECYCLE_GATE_PATH =
+  "docs/upgrade/gates/runtime-full-lifecycle-gate.json";
 
 export function normalizeUpgradeReadinessArgs(argv = []) {
   const options = {
@@ -83,6 +86,11 @@ export function buildUpgradeReadinessReport(options = {}) {
     { gateName: "upgrade" },
     options.env ?? process.env,
   );
+  const runtimeFullLifecycleGate = buildRuntimeFullLifecycleReadinessGate(
+    workspaceRoot,
+    profile.name,
+    options.env ?? process.env,
+  );
   const presentationProjection = buildPresentationProjectionGate(projection);
   const presentationRenderEvidence = buildPresentationRenderEvidenceGate(
     workspaceRoot,
@@ -92,6 +100,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     workspaceRoot,
     profile.name,
     options.env ?? process.env,
+    config,
   );
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
@@ -109,6 +118,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     memoryPersistenceSmoke,
     deepResearchLiveAdapters,
     runtimeIntegrationGate,
+    runtimeFullLifecycleGate,
     presentationProjection,
     presentationRenderEvidence,
     presentationHydratedVisualQa,
@@ -149,6 +159,7 @@ export function buildUpgradeReadinessReport(options = {}) {
       memoryPersistence: memoryPersistenceSmoke,
       deepResearchLiveAdapters,
       runtimeIntegration: runtimeIntegrationGate,
+      runtimeFullLifecycle: runtimeFullLifecycleGate,
       presentationProjection,
       presentationRenderEvidence,
       presentationHydratedVisualQa,
@@ -464,10 +475,17 @@ function presentationTrack({
   };
 }
 
-function buildPresentationHydratedVisualQaGate(workspaceRoot, profileName, env) {
+function buildPresentationHydratedVisualQaGate(workspaceRoot, profileName, env, config) {
+  const fastGateEntry = fastPresentationHydratedVisualQaEntry(config);
+  const commandEnv = { ...env, ...(fastGateEntry.env ?? {}) };
   const command = buildPresentationHydratedVisualQaCommand(
-    { gateName: "presentation-hydrated-visual-qa", profileName },
-    env,
+    {
+      gateName: fastGateEntry.gate ?? "presentation-hydrated-visual-qa",
+      profileName,
+      skipInfra: fastGateEntry.skipInfra === true,
+      skipDaemon: fastGateEntry.skipDaemon === true,
+    },
+    commandEnv,
   );
   const resultPath = join(workspaceRoot, PRESENTATION_HYDRATED_VISUAL_QA_PATH);
   if (!existsSync(resultPath)) {
@@ -551,6 +569,101 @@ function buildPresentationHydratedVisualQaGate(workspaceRoot, profileName, env) 
       `pageErrors=${pageErrors}`,
       `overflow=${overflowViolations}`,
       `forbiddenPort=${JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT) ? "present" : "absent"}`,
+      `execution=${artifact.execution?.mode ?? "missing"}/${artifact.execution?.skipInfra === true ? "skipInfra" : "infra"}/${artifact.execution?.skipDaemon === true ? "skipDaemon" : "daemon"}`,
+    ].join("; "),
+  };
+}
+
+function fastPresentationHydratedVisualQaEntry(config) {
+  const gates = config?.integrationGates?.upgrade?.gates;
+  const entry = Array.isArray(gates)
+    ? gates.find((candidate) => candidate?.kind === "presentation-hydrated-visual-qa")
+    : undefined;
+  if (!entry || typeof entry !== "object") {
+    return {};
+  }
+  return {
+    gate: typeof entry.gate === "string" ? entry.gate : undefined,
+    skipInfra: entry.skipInfra === true,
+    skipDaemon: entry.skipDaemon === true,
+    env: entry.env && typeof entry.env === "object" && !Array.isArray(entry.env)
+      ? Object.fromEntries(
+          Object.entries(entry.env).filter(([, value]) => typeof value === "string"),
+        )
+      : {},
+  };
+}
+
+function buildRuntimeFullLifecycleReadinessGate(workspaceRoot, profileName, env) {
+  const command = buildRuntimeFullLifecycleGateCommand(
+    { gateName: "runtime-full-lifecycle", profileName },
+    env,
+  );
+  const resultPath = join(workspaceRoot, RUNTIME_FULL_LIFECYCLE_GATE_PATH);
+  if (!existsSync(resultPath)) {
+    return {
+      status: "warn",
+      resultPath: RUNTIME_FULL_LIFECYCLE_GATE_PATH,
+      profile: profileName,
+      resultStatus: "missing",
+      resultMatches: false,
+      preflightStatus: "missing",
+      checks: command.checks,
+      lifecycleSteps: command.lifecycleSteps,
+      targets: Object.keys(command.targets ?? {}).sort(),
+      evidence: [
+        `result=${RUNTIME_FULL_LIFECYCLE_GATE_PATH}`,
+        "status=missing",
+        `profile=${profileName}`,
+        "preflight=missing",
+        "fullLifecycle=not-run",
+      ].join("; "),
+    };
+  }
+  const artifact = readJson(resultPath);
+  const targetNames = Object.keys(artifact.targets ?? {}).sort();
+  const lifecycleSteps = Array.isArray(artifact.lifecycleSteps) ? artifact.lifecycleSteps : [];
+  const checks = Array.isArray(artifact.checks) ? artifact.checks : [];
+  const preflightStatus = artifact.preflight?.status ?? "missing";
+  const containsForbiddenPort = JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT);
+  const resultMatches =
+    artifact.gate === "runtime-full-lifecycle" &&
+    artifact.profile === profileName &&
+    artifact.integrationGate === "full-lifecycle" &&
+    artifact.status === "passed" &&
+    command.evidence?.resultMatches === true &&
+    preflightStatus === "passed" &&
+    lifecycleSteps.includes("docker-compose:up-wait") &&
+    lifecycleSteps.includes("workbench:desktop-electron") &&
+    checks.includes("runtime-lifecycle:hydrated-visual-qa") &&
+    targetNames.includes("daemon:browser-gateway") &&
+    targetNames.includes("presentation:web") &&
+    targetNames.includes("presentation:desktop") &&
+    !containsForbiddenPort;
+  const status = resultMatches
+    ? "pass"
+    : artifact.status === "blocked" || preflightStatus === "failed"
+      ? "warn"
+      : "fail";
+  return {
+    status,
+    resultPath: RUNTIME_FULL_LIFECYCLE_GATE_PATH,
+    profile: artifact.profile ?? null,
+    resultStatus: artifact.status ?? "missing",
+    resultMatches,
+    preflightStatus,
+    checks,
+    lifecycleSteps,
+    targets: targetNames,
+    containsForbiddenPort,
+    evidence: [
+      `result=${RUNTIME_FULL_LIFECYCLE_GATE_PATH}`,
+      `status=${artifact.status ?? "missing"}`,
+      `profile=${artifact.profile ?? "missing"}`,
+      `preflight=${preflightStatus}`,
+      `steps=${lifecycleSteps.join(",") || "none"}`,
+      `targets=${targetNames.join(",") || "none"}`,
+      `forbiddenPort=${containsForbiddenPort ? "present" : "absent"}`,
     ].join("; "),
   };
 }
@@ -765,6 +878,7 @@ function ecosystemTrack({
   projection,
   memoryPersistenceSmoke,
   runtimeIntegrationGate,
+  runtimeFullLifecycleGate,
 }) {
   const readiness = projection.fragments?.readiness;
   const memoryStack = projection.fragments?.memoryStack;
@@ -801,6 +915,7 @@ function ecosystemTrack({
       ),
       memoryPersistenceLiveGateCheck(memoryPersistenceSmoke),
       runtimeIntegrationGateCheck(runtimeIntegrationGate),
+      runtimeFullLifecycleGateCheck(runtimeFullLifecycleGate),
     ],
   };
 }
@@ -850,6 +965,19 @@ function runtimeIntegrationGateCheck(gate) {
       `result=${gate?.evidence?.resultPath ?? "missing"}`,
       `childGatesPassed=${String(gate?.evidence?.childGatesPassed ?? false)}`,
     ].join("; "),
+  };
+}
+
+function runtimeFullLifecycleGateCheck(gate) {
+  const status = gate?.status === "pass"
+    ? "pass"
+    : gate?.status === "fail"
+      ? "fail"
+      : "warn";
+  return {
+    label: "Full Docker-backed web/Electron lifecycle gate is evidenced",
+    status,
+    evidence: gate?.evidence ?? "runtime full lifecycle gate missing",
   };
 }
 
