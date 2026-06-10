@@ -86,6 +86,16 @@ describe("upgrade readiness gate", () => {
       source: "runtime-profile-projection",
       failures: 0,
     });
+    expect(report.gates.presentationRenderEvidence).toMatchObject({
+      status: "pass",
+      resultPath: "docs/upgrade/gates/presentation-render-evidence.json",
+      profile: "workbench-host",
+      resultStatus: "passed",
+      resultMatches: true,
+      transportCalls: 0,
+      targetsPass: true,
+      containsForbiddenPort: false,
+    });
     expect(report.gates.presentationProjection.targets).toEqual([
       expect.objectContaining({
         surface: "web",
@@ -133,6 +143,20 @@ describe("upgrade readiness gate", () => {
     ]);
     expect(report.tracks).toContainEqual(
       expect.objectContaining({
+        id: "web-electron-presentation",
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            label: "Offline shared renderer evidence is current",
+            status: "pass",
+            evidence: expect.stringContaining(
+              "result=docs/upgrade/gates/presentation-render-evidence.json",
+            ),
+          }),
+        ]),
+      }),
+    );
+    expect(report.tracks).toContainEqual(
+      expect.objectContaining({
         id: "harness-api-contracts",
         checks: expect.arrayContaining([
           expect.objectContaining({
@@ -165,6 +189,7 @@ describe("upgrade readiness gate", () => {
     expect(json.gates.deepResearchLiveAdapters.status).toBe("pass");
     expect(json.gates.deepResearchLiveAdapters.liveGate.resultMatches).toBe(true);
     expect(json.gates.presentationProjection.failures).toBe(0);
+    expect(json.gates.presentationRenderEvidence.resultMatches).toBe(true);
     expect(json.gates.harnessHardcoding.totalMatches).toBe(0);
   });
 });

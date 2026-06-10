@@ -15,6 +15,8 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_WORKSPACE = resolve(SCRIPT_DIR, "..");
 const DEFAULT_PROFILE = "workbench-host";
 const FORBIDDEN_PORT_TEXT = "5173";
+const PRESENTATION_RENDER_EVIDENCE_PATH =
+  "docs/upgrade/gates/presentation-render-evidence.json";
 
 export function normalizeUpgradeReadinessArgs(argv = []) {
   const options = {
@@ -74,6 +76,10 @@ export function buildUpgradeReadinessReport(options = {}) {
     options.env ?? process.env,
   );
   const presentationProjection = buildPresentationProjectionGate(projection);
+  const presentationRenderEvidence = buildPresentationRenderEvidenceGate(
+    workspaceRoot,
+    profile.name,
+  );
   const harnessHardcoding = buildHarnessHardcodingGate(projection);
   const parity = buildEamParityAudit({
     workspaceRoot,
@@ -90,6 +96,7 @@ export function buildUpgradeReadinessReport(options = {}) {
     memoryPersistenceSmoke,
     deepResearchLiveAdapters,
     presentationProjection,
+    presentationRenderEvidence,
     harnessHardcoding,
   };
   const tracks = [
@@ -127,6 +134,7 @@ export function buildUpgradeReadinessReport(options = {}) {
       memoryPersistence: memoryPersistenceSmoke,
       deepResearchLiveAdapters,
       presentationProjection,
+      presentationRenderEvidence,
       harnessHardcoding,
     },
     advisoryWarnings: advisories,
@@ -379,7 +387,12 @@ function behaviorParityEvidence(parity) {
   ].join(", ");
 }
 
-function presentationTrack({ workspaceRoot, packageJson, presentationProjection }) {
+function presentationTrack({
+  workspaceRoot,
+  packageJson,
+  presentationProjection,
+  presentationRenderEvidence,
+}) {
   const webTarget = presentationProjection.targets.find((target) => target.surface === "web");
   const desktopTarget = presentationProjection.targets.find(
     (target) => target.surface === "desktop",
@@ -419,7 +432,70 @@ function presentationTrack({ workspaceRoot, packageJson, presentationProjection 
         hasScripts(packageJson, ["start:web", "start:desktop", "e2e:workbench"]),
         "start:web, start:desktop, e2e:workbench",
       ),
+      passFail(
+        "Offline shared renderer evidence is current",
+        presentationRenderEvidence.status === "pass",
+        presentationRenderEvidence.evidence,
+      ),
     ],
+  };
+}
+
+function buildPresentationRenderEvidenceGate(workspaceRoot, profileName) {
+  const resultPath = join(workspaceRoot, PRESENTATION_RENDER_EVIDENCE_PATH);
+  if (!existsSync(resultPath)) {
+    return {
+      status: "fail",
+      resultPath: PRESENTATION_RENDER_EVIDENCE_PATH,
+      evidence: `result=${PRESENTATION_RENDER_EVIDENCE_PATH}; status=missing`,
+    };
+  }
+  const artifact = readJson(resultPath);
+  const surfaces = Array.isArray(artifact.surfaces) ? artifact.surfaces : [];
+  const surfaceNames = surfaces.map((surface) => surface.surface).sort();
+  const hasRequiredSurfaces =
+    surfaceNames.includes("desktop") && surfaceNames.includes("web");
+  const transportCalls = surfaces.reduce(
+    (total, surface) =>
+      total +
+      Object.values(surface.transportCalls ?? {}).reduce(
+        (surfaceTotal, count) => surfaceTotal + Number(count ?? 0),
+        0,
+      ),
+    0,
+  );
+  const targets = Array.isArray(artifact.targets) ? artifact.targets : [];
+  const targetsPass =
+    targets.length >= 2 && targets.every((target) => target.status === "pass");
+  const containsForbiddenPort = JSON.stringify(artifact).includes(FORBIDDEN_PORT_TEXT);
+  const resultMatches =
+    artifact.gate === "presentation-render-evidence" &&
+    artifact.profile === profileName &&
+    artifact.status === "passed" &&
+    artifact.summary?.failed === 0 &&
+    hasRequiredSurfaces &&
+    transportCalls === 0 &&
+    targetsPass &&
+    !containsForbiddenPort;
+  return {
+    status: resultMatches ? "pass" : "fail",
+    resultPath: PRESENTATION_RENDER_EVIDENCE_PATH,
+    profile: artifact.profile ?? null,
+    resultStatus: artifact.status ?? "missing",
+    resultMatches,
+    surfaces: surfaceNames,
+    transportCalls,
+    targetsPass,
+    containsForbiddenPort,
+    evidence: [
+      `result=${PRESENTATION_RENDER_EVIDENCE_PATH}`,
+      `status=${artifact.status ?? "missing"}`,
+      `profile=${artifact.profile ?? "missing"}`,
+      `surfaces=${surfaceNames.join(",") || "none"}`,
+      `transportCalls=${transportCalls}`,
+      `targets=${targetsPass ? "pass" : "fail"}`,
+      `forbiddenPort=${containsForbiddenPort ? "present" : "absent"}`,
+    ].join("; "),
   };
 }
 

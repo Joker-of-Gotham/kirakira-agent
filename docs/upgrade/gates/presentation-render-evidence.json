@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "gate": "presentation-render-evidence",
+  "profile": "workbench-host",
+  "status": "passed",
+  "generatedAt": "2026-06-10T00:20:25.265Z",
+  "command": "tsx --tsconfig tsconfig.base.json scripts/presentation-render-evidence.ts --profile workbench-host --write-result C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-render-evidence.json",
+  "inputs": {
+    "sharedRenderer": "packages/frontend-app/src/workbench.tsx",
+    "webEntrypoint": "apps/web/src/main.tsx",
+    "desktopEntrypoint": "apps/desktop/src/renderer/main.tsx"
+  },
+  "surfaces": [
+    {
+      "surface": "web",
+      "transportMode": "browser-gateway",
+      "environmentLabel": "Browser gateway",
+      "html": {
+        "bytes": 20364,
+        "sha256": "319f6d0cc78ffc14a2734b35d7cc1eed9772d8ac6e95b024a7445ed4f5be02d8"
+      },
+      "selectors": [
+        {
+          "id": "shell",
+          "value": "class=\"kk-shell\"",
+          "status": "pass"
+        },
+        {
+          "id": "run-navigation",
+          "value": "aria-label=\"Run navigation\"",
+          "status": "pass"
+        },
+        {
+          "id": "workspace",
+          "value": "aria-label=\"Runtime workspace\"",
+          "status": "pass"
+        },
+        {
+          "id": "workspace-views",
+          "value": "aria-label=\"Workspace views\"",
+          "status": "pass"
+        },
+        {
+          "id": "surface-identity",
+          "value": "data-kk-presentation-surface=\"web\"",
+          "status": "pass"
+        }
+      ],
+      "textMarkers": [
+        {
+          "id": "product",
+          "value": "Kirakira Agent",
+          "status": "pass"
+        },
+        {
+          "id": "runs",
+          "value": "Runs",
+          "status": "pass"
+        },
+        {
+          "id": "recent-runs",
+          "value": "Recent Runs",
+          "status": "pass"
+        },
+        {
+          "id": "systems",
+          "value": "Systems",
+          "status": "pass"
+        },
+        {
+          "id": "environment",
+          "value": "Browser gateway",
+          "status": "pass"
+        }
+      ],
+      "transportCalls": {
+        "connect": 0,
+        "disconnect": 0,
+        "getStatus": 0,
+        "submitPrompt": 0,
+        "getState": 0,
+        "getArtifactContent": 0,
+        "listMcpTools": 0,
+        "callMcpTool": 0,
+        "subscribeRun": 0,
+        "approve": 0,
+        "cancel": 0,
+        "drain": 0
+      },
+      "failures": []
+    },
+    {
+      "surface": "desktop",
+      "transportMode": "desktop-ipc",
+      "environmentLabel": "Desktop IPC",
+      "html": {
+        "bytes": 20360,
+        "sha256": "0dca75cc27e42c92b5adfc60ad8e60e892f28c459fd2978efeacb7e9888a8ed6"
+      },
+      "selectors": [
+        {
+          "id": "shell",
+          "value": "class=\"kk-shell\"",
+          "status": "pass"
+        },
+        {
+          "id": "run-navigation",
+          "value": "aria-label=\"Run navigation\"",
+          "status": "pass"
+        },
+        {
+          "id": "workspace",
+          "value": "aria-label=\"Runtime workspace\"",
+          "status": "pass"
+        },
+        {
+          "id": "workspace-views",
+          "value": "aria-label=\"Workspace views\"",
+          "status": "pass"
+        },
+        {
+          "id": "surface-identity",
+          "value": "data-kk-presentation-surface=\"desktop\"",
+          "status": "pass"
+        }
+      ],
+      "textMarkers": [
+        {
+          "id": "product",
+          "value": "Kirakira Agent",
+          "status": "pass"
+        },
+        {
+          "id": "runs",
+          "value": "Runs",
+          "status": "pass"
+        },
+        {
+          "id": "recent-runs",
+          "value": "Recent Runs",
+          "status": "pass"
+        },
+        {
+          "id": "systems",
+          "value": "Systems",
+          "status": "pass"
+        },
+        {
+          "id": "environment",
+          "value": "Desktop IPC",
+          "status": "pass"
+        }
+      ],
+      "transportCalls": {
+        "connect": 0,
+        "disconnect": 0,
+        "getStatus": 0,
+        "submitPrompt": 0,
+        "getState": 0,
+        "getArtifactContent": 0,
+        "listMcpTools": 0,
+        "callMcpTool": 0,
+        "subscribeRun": 0,
+        "approve": 0,
+        "cancel": 0,
+        "drain": 0
+      },
+      "failures": []
+    }
+  ],
+  "checks": [
+    {
+      "id": "web:html",
+      "label": "web SSR markup",
+      "status": "pass",
+      "evidence": "bytes=20364; sha256=319f6d0cc78ffc14a2734b35d7cc1eed9772d8ac6e95b024a7445ed4f5be02d8"
+    },
+    {
+      "id": "web:selectors",
+      "label": "web SSR selectors",
+      "status": "pass",
+      "evidence": "missing=none"
+    },
+    {
+      "id": "web:text",
+      "label": "web SSR text markers",
+      "status": "pass",
+      "evidence": "missing=none"
+    },
+    {
+      "id": "web:transport",
+      "label": "web inert transport boundary",
+      "status": "pass",
+      "evidence": "calls=0"
+    },
+    {
+      "id": "desktop:html",
+      "label": "desktop SSR markup",
+      "status": "pass",
+      "evidence": "bytes=20360; sha256=0dca75cc27e42c92b5adfc60ad8e60e892f28c459fd2978efeacb7e9888a8ed6"
+    },
+    {
+      "id": "desktop:selectors",
+      "label": "desktop SSR selectors",
+      "status": "pass",
+      "evidence": "missing=none"
+    },
+    {
+      "id": "desktop:text",
+      "label": "desktop SSR text markers",
+      "status": "pass",
+      "evidence": "missing=none"
+    },
+    {
+      "id": "desktop:transport",
+      "label": "desktop inert transport boundary",
+      "status": "pass",
+      "evidence": "calls=0"
+    }
+  ],
+  "summary": {
+    "passed": 8,
+    "failed": 0,
+    "total": 8
+  },
+  "targets": [
+    {
+      "surface": "web",
+      "readinessName": "presentation:web",
+      "envName": "KIRAKIRA_WEB_URL",
+      "readinessTarget": "http://127.0.0.1:5183/",
+      "envTarget": "http://127.0.0.1:5183/",
+      "status": "pass"
+    },
+    {
+      "surface": "desktop",
+      "readinessName": "presentation:desktop",
+      "envName": "KIRAKIRA_DESKTOP_RENDERER_URL",
+      "readinessTarget": "http://127.0.0.1:5174/",
+      "envTarget": "http://127.0.0.1:5174/",
+      "status": "pass"
+    }
+  ]
+}
