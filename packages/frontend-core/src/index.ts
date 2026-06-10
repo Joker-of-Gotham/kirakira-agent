@@ -1,5 +1,9 @@
 export type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeConnectionState,
@@ -9,6 +13,7 @@ export type {
   RuntimeTransportSnapshot,
   RuntimeTransportStatus,
   RuntimeTransportStatusState,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,

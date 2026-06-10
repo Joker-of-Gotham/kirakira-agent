@@ -4,7 +4,7 @@
   "gateSource": "runtime-profile.deepResearchLiveAdapterGates",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T06:49:14.311Z",
+  "passedAt": "2026-06-10T07:26:34.276Z",
   "requiredSuites": [
     "file",
     "web",

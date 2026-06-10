@@ -68,6 +68,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -77,6 +78,7 @@ button {
 }
 
 button:focus-visible,
+input:focus-visible,
 textarea:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--kk-cyan);
@@ -324,7 +326,7 @@ a:focus-visible {
   min-width: 0;
   padding: 20px 22px 18px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
   gap: 14px;
 }
 
@@ -438,6 +440,237 @@ a:focus-visible {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--kk-ink);
+}
+
+.kk-command-center {
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+  box-shadow: var(--kk-shadow);
+}
+
+.kk-command-center-success {
+  border-color: var(--kk-color-success-border);
+}
+
+.kk-command-center-warning {
+  border-color: var(--kk-color-warning-border);
+}
+
+.kk-command-center-critical {
+  border-color: var(--kk-color-danger-border);
+}
+
+.kk-command-head,
+.kk-command-status,
+.kk-command-actions,
+.kk-command-priority,
+.kk-command-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.kk-command-head {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.kk-command-head h2 {
+  margin: 0;
+  color: var(--kk-ink);
+  font-size: 1rem;
+}
+
+.kk-command-status {
+  min-width: min(280px, 100%);
+  max-width: 380px;
+  gap: 7px;
+  border: 1px solid var(--kk-border);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: var(--kk-color-surface-subtle);
+}
+
+.kk-command-status svg {
+  flex: 0 0 auto;
+}
+
+.kk-command-status span {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+.kk-command-status strong,
+.kk-command-status small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kk-command-status strong {
+  color: var(--kk-ink);
+  font-size: 0.78rem;
+}
+
+.kk-command-status small {
+  color: var(--kk-text-muted);
+  font-size: 0.72rem;
+}
+
+.kk-command-status-success {
+  color: var(--kk-green);
+}
+
+.kk-command-status-warning {
+  color: var(--kk-amber);
+}
+
+.kk-command-status-critical {
+  color: var(--kk-red);
+}
+
+.kk-command-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) repeat(4, minmax(170px, 1fr));
+  gap: 8px;
+  align-items: stretch;
+}
+
+.kk-command-block,
+.kk-command-field {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.kk-command-block {
+  align-content: start;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--kk-color-surface-subtle);
+}
+
+.kk-command-field span,
+.kk-command-toggle span {
+  color: var(--kk-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.kk-command-field input,
+.kk-command-field textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  color: var(--kk-text);
+  background: var(--kk-surface);
+  padding: 8px;
+}
+
+.kk-command-field input {
+  min-height: 34px;
+}
+
+.kk-command-field textarea {
+  min-height: 66px;
+  resize: vertical;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.kk-command-actions {
+  min-width: 0;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.kk-command-actions .kk-icon-button {
+  flex: 1 1 auto;
+  min-height: 34px;
+  justify-content: center;
+  padding: 6px 8px;
+  font-size: 0.76rem;
+}
+
+.kk-command-priority {
+  flex: 1 1 auto;
+  min-width: 96px;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  background: var(--kk-surface);
+}
+
+.kk-command-priority button {
+  flex: 1 1 0;
+  min-height: 27px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--kk-text-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.72rem;
+}
+
+.kk-command-priority .kk-command-priority-active {
+  color: var(--kk-ink);
+  border-color: var(--kk-border);
+  background: var(--kk-surface-muted);
+}
+
+.kk-command-priority-input {
+  flex: 0 0 74px;
+}
+
+.kk-command-interrupt {
+  grid-template-columns: 1fr;
+}
+
+.kk-command-block-input {
+  grid-template-columns: minmax(0, 0.7fr) minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.kk-command-block-input .kk-command-field textarea {
+  min-height: 34px;
+}
+
+.kk-command-block-resume {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.kk-command-block-resume .kk-command-actions {
+  grid-column: 1 / -1;
+}
+
+.kk-command-toggle {
+  align-self: end;
+  gap: 6px;
+  min-height: 34px;
+  border: 1px solid var(--kk-border);
+  border-radius: 8px;
+  padding: 7px 8px;
+  background: var(--kk-surface);
+}
+
+.kk-command-toggle input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--kk-cyan);
 }
 
 .kk-main-grid {
@@ -3309,6 +3542,10 @@ a.kk-system-row:hover,
     grid-template-columns: 220px minmax(0, 1fr);
   }
 
+  .kk-command-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .kk-right-rail {
     grid-column: 1 / -1;
     border-width: 1px 0 0;
@@ -3391,6 +3628,9 @@ a.kk-system-row:hover,
   }
 
   .kk-stats,
+  .kk-command-grid,
+  .kk-command-block-input,
+  .kk-command-block-resume,
   .kk-main-grid,
   .kk-plan-board,
   .kk-inspector-grid,

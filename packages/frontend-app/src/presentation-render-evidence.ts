@@ -4,9 +4,14 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeTransport,
   RuntimeTransportEvent,
   RuntimeTransportMode,
+  SteerRunRequest,
   SubscribeRunOptions,
   SubmitPromptRequest,
 } from "@kirakira/frontend-core";
@@ -118,7 +123,12 @@ const TRANSPORT_METHODS = Object.freeze([
   "listMcpTools",
   "callMcpTool",
   "subscribeRun",
+  "steer",
+  "enqueue",
   "approve",
+  "provideInput",
+  "resume",
+  "inspect",
   "cancel",
   "drain",
 ]);
@@ -268,7 +278,12 @@ function createInertTransport(mode: Exclude<RuntimeTransportMode, "mock">): Runt
     ) => {
       return fail("subscribeRun");
     },
+    steer: async (_request: SteerRunRequest) => fail("steer"),
+    enqueue: async (_request: EnqueuePromptRequest) => fail("enqueue"),
     approve: async (_decision: ApprovalDecision) => fail("approve"),
+    provideInput: async (_request: ProvideRunInputRequest) => fail("provideInput"),
+    resume: async (_request: ResumeRunRequest) => fail("resume"),
+    inspect: async (_request: InspectRunRequest) => fail("inspect"),
     cancel: async (_runId: string, _reason?: string) => fail("cancel"),
     drain: async () => fail("drain"),
   };

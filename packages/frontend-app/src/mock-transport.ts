@@ -1,4 +1,8 @@
 import type {
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeTransport,
   RuntimeTransportEvent,
   RuntimeArtifactContent,
@@ -7,6 +11,7 @@ import type {
   RuntimeMcpListResult,
   RuntimeMcpToolCallRequest,
   RuntimeMcpToolCallResult,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -71,6 +76,7 @@ export function createMockRuntimeTransport(): RuntimeTransport {
   const listenersByRun = new Map<string, Set<Listener>>();
   const timers = new Set<number>();
   const artifactContentByRun = new Map<string, Map<string, RuntimeArtifactContent>>();
+  let lastRunId: string | undefined;
 
   const makeEvent = (
     runId: string,
@@ -385,6 +391,7 @@ export function createMockRuntimeTransport(): RuntimeTransport {
         throw new Error("Mock runtime is not connected");
       }
       const runId = `run-${Date.now().toString(36)}-${counter + 1}`;
+      lastRunId = runId;
       eventsByRun.set(runId, []);
       startMockRun(request, runId);
       return { runId };
@@ -588,6 +595,65 @@ export function createMockRuntimeTransport(): RuntimeTransport {
       return () => {
         listeners.delete(onEvent);
         if (listeners.size === 0) listenersByRun.delete(runId);
+      };
+    },
+    async steer(request: SteerRunRequest) {
+      emit(
+        makeEvent(request.runId, "steer.received", {
+          instruction: request.instruction,
+          priority: request.priority ?? "normal",
+        }),
+      );
+    },
+    async enqueue(request: EnqueuePromptRequest) {
+      const targetRunId = request.runId ?? lastRunId;
+      if (!targetRunId) return;
+      emit(
+        makeEvent(targetRunId, "task.ready", {
+          taskId: `${targetRunId}-queued-${counter + 1}`,
+          nodeId: `${targetRunId}-queued-${counter + 1}`,
+          kind: "queued_prompt",
+          description: request.prompt,
+          priority: request.priority ?? 0,
+        }),
+      );
+    },
+    async provideInput(request: ProvideRunInputRequest) {
+      emit(
+        makeEvent(request.runId, "interrupt.resumed", {
+          interruptId: request.interruptId,
+          data: request.data,
+        }),
+      );
+    },
+    async resume(request: ResumeRunRequest) {
+      lastRunId = request.runId;
+      emit(
+        makeEvent(request.runId, "checkpoint.restored", {
+          checkpointId: request.fromCheckpoint ?? `${request.runId}-latest`,
+        }),
+      );
+    },
+    async inspect(request: InspectRunRequest) {
+      const runEvents = eventsByRun.get(request.runId) ?? [];
+      const latestTerminal = [...runEvents]
+        .reverse()
+        .find((event) =>
+          event.kind === "run.completed" ||
+          event.kind === "run.failed" ||
+          event.kind === "run.drained",
+        );
+      return {
+        runId: request.runId,
+        state: {
+          runId: request.runId,
+          status: latestTerminal?.kind.replace("run.", "") ?? "running",
+          activeWorkers: [],
+          pendingApprovals: [],
+          costSummary: { totalCostUsd: 0, totalTokens: 0 },
+          checkpointId: `${request.runId}-checkpoint-1`,
+          ...(request.includeEvents ? { eventCount: runEvents.length } : {}),
+        },
       };
     },
     async approve(decision) {

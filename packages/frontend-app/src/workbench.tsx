@@ -114,9 +114,47 @@ interface McpToolCallState {
 }
 
 type McpToolDetailTab = "details" | "run" | "schema";
+type RunCommandAction = "steer" | "enqueue" | "provide_input" | "resume" | "inspect";
+type RunCommandPriority = "normal" | "high";
+type RunCommandStatusTone = "neutral" | "success" | "warning" | "critical";
+
+interface RunCommandCenterState {
+  targetRunId: string;
+  steerInstruction: string;
+  steerPriority: RunCommandPriority;
+  enqueuePrompt: string;
+  enqueuePriority: string;
+  interruptId: string;
+  inputJson: string;
+  checkpointId: string;
+  includeEvents: boolean;
+}
+
+interface RunCommandCenterStatus {
+  tone: RunCommandStatusTone;
+  message: string;
+  detail?: string;
+}
 
 const defaultPrompt =
   "Port the runtime contract surface into a browser-safe UI and secure desktop bridge.";
+
+const defaultCommandCenter: RunCommandCenterState = {
+  targetRunId: "",
+  steerInstruction: "Continue from the latest checkpoint and keep changes scoped.",
+  steerPriority: "normal",
+  enqueuePrompt: "",
+  enqueuePriority: "",
+  interruptId: "",
+  inputJson: "{}",
+  checkpointId: "",
+  includeEvents: true,
+};
+
+const defaultCommandStatus: RunCommandCenterStatus = {
+  tone: "neutral",
+  message: "Command center ready",
+};
 
 const statusLabel: Record<RunDashboardStatus, string> = {
   idle: "Idle",
@@ -154,6 +192,25 @@ const formatClock = (value?: string): string => {
 const textValue = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim().length > 0 ? value : undefined;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  Boolean(value) && typeof value === "object" && !Array.isArray(value);
+
+const summarizeRuntimeSnapshot = (state: unknown): string => {
+  if (!isRecord(state)) return "Snapshot received";
+  const status = textValue(state.status) ?? "unknown";
+  const workers = Array.isArray(state.activeWorkers) ? state.activeWorkers.length : 0;
+  const approvals = Array.isArray(state.pendingApprovals) ? state.pendingApprovals.length : 0;
+  const checkpoint = textValue(state.checkpointId);
+  return [
+    `status ${status}`,
+    `${workers} workers`,
+    `${approvals} approvals`,
+    checkpoint ? `checkpoint ${checkpoint}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(" / ");
+};
+
 export function KirakiraWorkbench({
   transport,
   presentationSurface = "web",
@@ -184,6 +241,11 @@ export function KirakiraWorkbench({
   const [artifactPreviews, setArtifactPreviews] = useState<Record<string, ArtifactPreviewState>>(
     {},
   );
+  const [commandCenter, setCommandCenter] =
+    useState<RunCommandCenterState>(defaultCommandCenter);
+  const [commandStatus, setCommandStatus] =
+    useState<RunCommandCenterStatus>(defaultCommandStatus);
+  const [commandBusy, setCommandBusy] = useState<RunCommandAction | undefined>();
 
   useEffect(() => {
     let disposed = false;
@@ -375,6 +437,16 @@ export function KirakiraWorkbench({
     });
   }, [events.length, projection.status, projection.updatedAt, prompt, runId]);
 
+  useEffect(() => {
+    if (!runId) return;
+    setCommandCenter((state) => ({ ...state, targetRunId: runId }));
+    setCommandStatus({
+      tone: "neutral",
+      message: "Active run selected",
+      detail: runId,
+    });
+  }, [runId]);
+
   const handleTransportEvent = (event: RuntimeTransportEvent) => {
     if (event.type === "connection") {
       setConnection(event.state);
@@ -425,6 +497,122 @@ export function KirakiraWorkbench({
     if (!runId) return;
     await runtime.cancel(runId, "Cancelled from Kirakira workbench");
   };
+
+  const commandTargetRunId = commandCenter.targetRunId.trim() || runId;
+
+  const updateCommandDraft = useCallback(
+    <K extends keyof RunCommandCenterState>(key: K, value: RunCommandCenterState[K]) => {
+      setCommandCenter((state) => ({ ...state, [key]: value }));
+    },
+    [],
+  );
+
+  const runControlCommand = async (
+    action: RunCommandAction,
+    execute: () => Promise<string | undefined>,
+    successMessage: string,
+  ) => {
+    setCommandBusy(action);
+    setError(undefined);
+    try {
+      const detail = await execute();
+      setCommandStatus({
+        tone: "success",
+        message: successMessage,
+        ...(detail ? { detail } : {}),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setCommandStatus({ tone: "critical", message: "Command failed", detail: message });
+      setConnection("degraded");
+      setError(message);
+    } finally {
+      setCommandBusy(undefined);
+    }
+  };
+
+  const steerRun = () =>
+    runControlCommand(
+      "steer",
+      async () => {
+        if (!commandTargetRunId) throw new Error("Run ID is required");
+        const instruction = commandCenter.steerInstruction.trim();
+        if (!instruction) throw new Error("Steer instruction is required");
+        await runtime.steer({
+          runId: commandTargetRunId,
+          instruction,
+          priority: commandCenter.steerPriority,
+        });
+        return commandTargetRunId;
+      },
+      "Steer sent",
+    );
+
+  const enqueuePrompt = () =>
+    runControlCommand(
+      "enqueue",
+      async () => {
+        const queuedPrompt = commandCenter.enqueuePrompt.trim();
+        if (!queuedPrompt) throw new Error("Queue prompt is required");
+        const priorityText = commandCenter.enqueuePriority.trim();
+        const priority = priorityText.length > 0 ? Number(priorityText) : undefined;
+        if (priorityText.length > 0 && (priority === undefined || Number.isNaN(priority))) {
+          throw new Error("Queue priority must be numeric");
+        }
+        await runtime.enqueue({
+          prompt: queuedPrompt,
+          ...(priority !== undefined ? { priority } : {}),
+          ...(commandTargetRunId ? { runId: commandTargetRunId } : {}),
+        });
+        setCommandCenter((state) => ({ ...state, enqueuePrompt: "" }));
+        return commandTargetRunId;
+      },
+      "Prompt queued",
+    );
+
+  const provideRunInput = () =>
+    runControlCommand(
+      "provide_input",
+      async () => {
+        if (!commandTargetRunId) throw new Error("Run ID is required");
+        const interruptId = commandCenter.interruptId.trim();
+        if (!interruptId) throw new Error("Interrupt ID is required");
+        const text = commandCenter.inputJson.trim();
+        const data = text.length > 0 ? JSON.parse(text) : {};
+        await runtime.provideInput({ runId: commandTargetRunId, interruptId, data });
+        return interruptId;
+      },
+      "Input provided",
+    );
+
+  const resumeRun = () =>
+    runControlCommand(
+      "resume",
+      async () => {
+        if (!commandTargetRunId) throw new Error("Run ID is required");
+        const fromCheckpoint = commandCenter.checkpointId.trim();
+        await runtime.resume({
+          runId: commandTargetRunId,
+          ...(fromCheckpoint ? { fromCheckpoint } : {}),
+        });
+        return fromCheckpoint || commandTargetRunId;
+      },
+      "Run resumed",
+    );
+
+  const inspectRun = () =>
+    runControlCommand(
+      "inspect",
+      async () => {
+        if (!commandTargetRunId) throw new Error("Run ID is required");
+        const snapshot = await runtime.inspect({
+          runId: commandTargetRunId,
+          includeEvents: commandCenter.includeEvents,
+        });
+        return summarizeRuntimeSnapshot(snapshot.state);
+      },
+      "Snapshot received",
+    );
 
   const selectWorkstreamItem = useCallback((itemId: string, focusId?: string) => {
     setSelectedWorkstreamItemId(itemId);
@@ -670,6 +858,19 @@ export function KirakiraWorkbench({
           <Stat label="Entities" value={String(countEntities(projection))} icon={<Bot size={18} />} />
           <Stat label="Updated" value={formatClock(projection.updatedAt)} icon={<Clock3 size={18} />} />
         </section>
+
+        <RunCommandCenter
+          state={commandCenter}
+          status={commandStatus}
+          busy={commandBusy}
+          hasActiveRun={Boolean(commandTargetRunId)}
+          onDraftChange={updateCommandDraft}
+          onSteer={() => void steerRun()}
+          onEnqueue={() => void enqueuePrompt()}
+          onProvideInput={() => void provideRunInput()}
+          onResume={() => void resumeRun()}
+          onInspect={() => void inspectRun()}
+        />
 
         <WorkbenchViewSurface
           activeView={navigation.activeView}
@@ -935,6 +1136,206 @@ function WorkbenchNavIcon({ id }: { id: WorkbenchViewId }) {
   if (id === "research") return <FileSearch size={18} />;
   if (id === "systems") return <ShieldCheck size={18} />;
   return <Activity size={18} />;
+}
+
+function RunCommandCenter({
+  state,
+  status,
+  busy,
+  hasActiveRun,
+  onDraftChange,
+  onSteer,
+  onEnqueue,
+  onProvideInput,
+  onResume,
+  onInspect,
+}: {
+  state: RunCommandCenterState;
+  status: RunCommandCenterStatus;
+  busy?: RunCommandAction;
+  hasActiveRun: boolean;
+  onDraftChange: <K extends keyof RunCommandCenterState>(
+    key: K,
+    value: RunCommandCenterState[K],
+  ) => void;
+  onSteer: () => void;
+  onEnqueue: () => void;
+  onProvideInput: () => void;
+  onResume: () => void;
+  onInspect: () => void;
+}) {
+  const busyLabel = busy ? busy.replace("_", " ") : undefined;
+  const controlsDisabled = busy !== undefined;
+  const canSteer = hasActiveRun && state.steerInstruction.trim().length > 0;
+  const canEnqueue = state.enqueuePrompt.trim().length > 0;
+  const canProvideInput = hasActiveRun && state.interruptId.trim().length > 0;
+  const canResumeOrInspect = hasActiveRun;
+
+  return (
+    <section
+      className={`kk-command-center kk-command-center-${status.tone}`}
+      aria-label="Run command center"
+    >
+      <div className="kk-command-head">
+        <div>
+          <p className="kk-kicker">Control</p>
+          <h2>Run Command Center</h2>
+        </div>
+        <div
+          className={`kk-command-status kk-command-status-${status.tone}`}
+          role="status"
+          aria-live="polite"
+        >
+          <CircleDot size={15} />
+          <span>
+            <strong>{busyLabel ? `Running ${busyLabel}` : status.message}</strong>
+            {status.detail ? <small>{status.detail}</small> : null}
+          </span>
+        </div>
+      </div>
+
+      <div className="kk-command-grid">
+        <label className="kk-command-field kk-command-field-run">
+          <span>Run ID</span>
+          <input
+            value={state.targetRunId}
+            onChange={(event) => onDraftChange("targetRunId", event.target.value)}
+          />
+        </label>
+
+        <div className="kk-command-block kk-command-block-steer">
+          <label className="kk-command-field">
+            <span>Steer</span>
+            <textarea
+              rows={2}
+              value={state.steerInstruction}
+              onChange={(event) => onDraftChange("steerInstruction", event.target.value)}
+            />
+          </label>
+          <div className="kk-command-actions">
+            <div className="kk-command-priority" role="group" aria-label="Steer priority">
+              {(["normal", "high"] as const).map((priority) => (
+                <button
+                  key={priority}
+                  type="button"
+                  aria-pressed={state.steerPriority === priority}
+                  className={state.steerPriority === priority ? "kk-command-priority-active" : ""}
+                  onClick={() => onDraftChange("steerPriority", priority)}
+                >
+                  {priority}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="kk-icon-button"
+              onClick={onSteer}
+              disabled={controlsDisabled || !canSteer}
+            >
+              <TerminalSquare size={15} />
+              <span>Steer</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="kk-command-block kk-command-block-queue">
+          <label className="kk-command-field">
+            <span>Queue Prompt</span>
+            <textarea
+              rows={2}
+              value={state.enqueuePrompt}
+              onChange={(event) => onDraftChange("enqueuePrompt", event.target.value)}
+            />
+          </label>
+          <div className="kk-command-actions">
+            <label className="kk-command-field kk-command-priority-input">
+              <span>Priority</span>
+              <input
+                inputMode="numeric"
+                value={state.enqueuePriority}
+                onChange={(event) => onDraftChange("enqueuePriority", event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="kk-icon-button"
+              onClick={onEnqueue}
+              disabled={controlsDisabled || !canEnqueue}
+            >
+              <Play size={15} />
+              <span>Enqueue</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="kk-command-block kk-command-block-input">
+          <label className="kk-command-field kk-command-interrupt">
+            <span>Interrupt</span>
+            <input
+              value={state.interruptId}
+              onChange={(event) => onDraftChange("interruptId", event.target.value)}
+            />
+          </label>
+          <label className="kk-command-field">
+            <span>Input JSON</span>
+            <textarea
+              rows={2}
+              value={state.inputJson}
+              spellCheck={false}
+              onChange={(event) => onDraftChange("inputJson", event.target.value)}
+            />
+          </label>
+          <button
+            type="button"
+            className="kk-icon-button"
+            onClick={onProvideInput}
+            disabled={controlsDisabled || !canProvideInput}
+          >
+            <CheckCircle2 size={15} />
+            <span>Provide</span>
+          </button>
+        </div>
+
+        <div className="kk-command-block kk-command-block-resume">
+          <label className="kk-command-field">
+            <span>Checkpoint</span>
+            <input
+              value={state.checkpointId}
+              onChange={(event) => onDraftChange("checkpointId", event.target.value)}
+            />
+          </label>
+          <label className="kk-command-toggle">
+            <input
+              type="checkbox"
+              checked={state.includeEvents}
+              onChange={(event) => onDraftChange("includeEvents", event.target.checked)}
+            />
+            <span>Events</span>
+          </label>
+          <div className="kk-command-actions kk-command-actions-split">
+            <button
+              type="button"
+              className="kk-icon-button"
+              onClick={onResume}
+              disabled={controlsDisabled || !canResumeOrInspect}
+            >
+              <RefreshCw size={15} />
+              <span>Resume</span>
+            </button>
+            <button
+              type="button"
+              className="kk-icon-button"
+              onClick={onInspect}
+              disabled={controlsDisabled || !canResumeOrInspect}
+            >
+              <ListTree size={15} />
+              <span>Inspect</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function WorkbenchViewSurface({

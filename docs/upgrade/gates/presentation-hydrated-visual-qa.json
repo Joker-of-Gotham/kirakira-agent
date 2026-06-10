@@ -3,7 +3,7 @@
   "gate": "presentation-hydrated-visual-qa",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-10T04:02:36.761Z",
+  "passedAt": "2026-06-10T07:29:48.308Z",
   "checks": [
     "presentation:hydrated-web",
     "presentation:hydrated-desktop",
@@ -92,8 +92,8 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 193652,
-            "sampledColors": 150,
+            "pngBytes": 194726,
+            "sampledColors": 155,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -192,8 +192,8 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 261609,
-            "sampledColors": 118,
+            "pngBytes": 261717,
+            "sampledColors": 123,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -292,7 +292,7 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 621583,
+            "pngBytes": 622120,
             "sampledColors": 93,
             "alphaPixels": 513,
             "nonblank": true
@@ -401,8 +401,8 @@
           "screenshot": {
             "width": 660,
             "height": 1423,
-            "pngBytes": 216899,
-            "sampledColors": 159,
+            "pngBytes": 216916,
+            "sampledColors": 156,
             "alphaPixels": 512,
             "nonblank": true
           },
@@ -501,8 +501,8 @@
           "screenshot": {
             "width": 1348,
             "height": 1794,
-            "pngBytes": 295213,
-            "sampledColors": 120,
+            "pngBytes": 293468,
+            "sampledColors": 117,
             "alphaPixels": 513,
             "nonblank": true
           },
@@ -601,7 +601,7 @@
           "screenshot": {
             "width": 2524,
             "height": 1577,
-            "pngBytes": 748373,
+            "pngBytes": 750264,
             "sampledColors": 102,
             "alphaPixels": 513,
             "nonblank": true

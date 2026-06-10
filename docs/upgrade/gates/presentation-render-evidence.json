@@ -3,7 +3,7 @@
   "gate": "presentation-render-evidence",
   "profile": "workbench-host",
   "status": "passed",
-  "generatedAt": "2026-06-10T00:20:25.265Z",
+  "generatedAt": "2026-06-10T07:14:44.453Z",
   "command": "tsx --tsconfig tsconfig.base.json scripts/presentation-render-evidence.ts --profile workbench-host --write-result C:\\technical-development\\kirakira-agent\\docs\\upgrade\\gates\\presentation-render-evidence.json",
   "inputs": {
     "sharedRenderer": "packages/frontend-app/src/workbench.tsx",
@@ -16,8 +16,8 @@
       "transportMode": "browser-gateway",
       "environmentLabel": "Browser gateway",
       "html": {
-        "bytes": 20364,
-        "sha256": "319f6d0cc78ffc14a2734b35d7cc1eed9772d8ac6e95b024a7445ed4f5be02d8"
+        "bytes": 24798,
+        "sha256": "9de6c0bbcb01a20e6fdec3194d5339b880852234f2d8dd70254f6acd8f064f14"
       },
       "selectors": [
         {
@@ -83,7 +83,12 @@
         "listMcpTools": 0,
         "callMcpTool": 0,
         "subscribeRun": 0,
+        "steer": 0,
+        "enqueue": 0,
         "approve": 0,
+        "provideInput": 0,
+        "resume": 0,
+        "inspect": 0,
         "cancel": 0,
         "drain": 0
       },
@@ -94,8 +99,8 @@
       "transportMode": "desktop-ipc",
       "environmentLabel": "Desktop IPC",
       "html": {
-        "bytes": 20360,
-        "sha256": "0dca75cc27e42c92b5adfc60ad8e60e892f28c459fd2978efeacb7e9888a8ed6"
+        "bytes": 24794,
+        "sha256": "af600aa9d5144e1b6d57c7ef004b1486171549d8543f205d77bf437b24adba3d"
       },
       "selectors": [
         {
@@ -161,7 +166,12 @@
         "listMcpTools": 0,
         "callMcpTool": 0,
         "subscribeRun": 0,
+        "steer": 0,
+        "enqueue": 0,
         "approve": 0,
+        "provideInput": 0,
+        "resume": 0,
+        "inspect": 0,
         "cancel": 0,
         "drain": 0
       },
@@ -173,7 +183,7 @@
       "id": "web:html",
       "label": "web SSR markup",
       "status": "pass",
-      "evidence": "bytes=20364; sha256=319f6d0cc78ffc14a2734b35d7cc1eed9772d8ac6e95b024a7445ed4f5be02d8"
+      "evidence": "bytes=24798; sha256=9de6c0bbcb01a20e6fdec3194d5339b880852234f2d8dd70254f6acd8f064f14"
     },
     {
       "id": "web:selectors",
@@ -197,7 +207,7 @@
       "id": "desktop:html",
       "label": "desktop SSR markup",
       "status": "pass",
-      "evidence": "bytes=20360; sha256=0dca75cc27e42c92b5adfc60ad8e60e892f28c459fd2978efeacb7e9888a8ed6"
+      "evidence": "bytes=24794; sha256=af600aa9d5144e1b6d57c7ef004b1486171549d8543f205d77bf437b24adba3d"
     },
     {
       "id": "desktop:selectors",

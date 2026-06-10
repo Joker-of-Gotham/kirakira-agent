@@ -1,6 +1,10 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
 import type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeMcpListRequest,
@@ -9,6 +13,7 @@ import type {
   RuntimeMcpToolCallResult,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
@@ -72,6 +77,19 @@ contextBridge.exposeInMainWorld(KIRAKIRA_PRELOAD_API_KEY, {
   },
   approve: (decision: ApprovalDecision) =>
     ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.approve, decision) as Promise<void>,
+  steer: (request: SteerRunRequest) =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.steer, request) as Promise<void>,
+  enqueue: (request: EnqueuePromptRequest) =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.enqueue, request) as Promise<void>,
+  provideInput: (request: ProvideRunInputRequest) =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.provideInput, request) as Promise<void>,
+  resume: (request: ResumeRunRequest) =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.resume, request) as Promise<void>,
+  inspect: (request: InspectRunRequest) =>
+    ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.inspect, request) as Promise<{
+      runId: string;
+      state: unknown;
+    }>,
   cancel: (runId: string, reason?: string) =>
     ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.cancel, { runId, reason }) as Promise<void>,
   drain: () => ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.drain) as Promise<void>,

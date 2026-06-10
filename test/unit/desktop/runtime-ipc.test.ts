@@ -91,7 +91,18 @@ function createFakeClient() {
       })),
       subscribeToRun: vi.fn(),
       unsubscribe: vi.fn(),
+      steerRun: vi.fn(async () => {}),
+      enqueuePrompt: vi.fn(async () => {}),
       approve: vi.fn(async () => {}),
+      provideInput: vi.fn(async () => {}),
+      resume: vi.fn(async () => {}),
+      inspectThread: vi.fn(async (runId: string) => ({
+        runId,
+        status: "running",
+        activeWorkers: [],
+        pendingApprovals: [],
+        costSummary: { totalCostUsd: 0, totalTokens: 0 },
+      })),
       cancel: vi.fn(async () => {}),
       drain: vi.fn(async () => {}),
       onMessage: vi.fn((handler: (message: ServerMessage) => void) => {
@@ -398,6 +409,73 @@ describe("desktop runtime IPC controller", () => {
         includeTools: "yes",
       }),
     ).rejects.toThrow("listMcpTools includeTools must be a boolean");
+  });
+
+  it("validates run command center controls before forwarding through desktop IPC", async () => {
+    const ipcMain = new FakeIpcMain();
+    const fake = createFakeClient();
+    const controller = createRuntimeIpcController({
+      client: fake.client,
+      isTrustedSender: () => true,
+      webContentsFromId: () => undefined,
+    });
+    controller.register(ipcMain);
+
+    await expect(
+      ipcMain.invoke("runtime:steer", eventFor(38), {
+        runId: "run-1",
+        instruction: "Keep changes scoped",
+        priority: "high",
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.client.steerRun).toHaveBeenCalledWith("run-1", "Keep changes scoped", "high");
+
+    await expect(
+      ipcMain.invoke("runtime:enqueue", eventFor(38), {
+        runId: "run-1",
+        prompt: "Continue verification",
+        priority: 4,
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.client.enqueuePrompt).toHaveBeenCalledWith("Continue verification", 4, "run-1");
+
+    await expect(
+      ipcMain.invoke("runtime:provideInput", eventFor(38), {
+        runId: "run-1",
+        interruptId: "interrupt-1",
+        data: { decision: "continue" },
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.client.provideInput).toHaveBeenCalledWith("run-1", "interrupt-1", {
+      decision: "continue",
+    });
+
+    await expect(
+      ipcMain.invoke("runtime:resume", eventFor(38), {
+        runId: "run-1",
+        fromCheckpoint: "checkpoint-1",
+      }),
+    ).resolves.toBeUndefined();
+    expect(fake.client.resume).toHaveBeenCalledWith("run-1", "checkpoint-1");
+
+    await expect(
+      ipcMain.invoke("runtime:inspect", eventFor(38), {
+        runId: "run-1",
+        includeEvents: true,
+      }),
+    ).resolves.toMatchObject({
+      runId: "run-1",
+      state: { runId: "run-1", status: "running" },
+    });
+    expect(fake.client.inspectThread).toHaveBeenCalledWith("run-1", true);
+
+    await expect(
+      ipcMain.invoke("runtime:steer", eventFor(38), {
+        runId: "run-1",
+        instruction: "bad",
+        priority: "urgent",
+      }),
+    ).rejects.toThrow("steer priority is invalid");
   });
 
   it("reports desktop IPC status without forcing daemon connection", async () => {

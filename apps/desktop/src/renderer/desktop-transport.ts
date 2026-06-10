@@ -36,7 +36,12 @@ export function createDesktopRuntimeTransport(): RuntimeTransport | null {
     ): Unsubscribe {
       return bridge.subscribeRun(runId, options, onEvent);
     },
+    steer: (request) => bridge.steer(request),
+    enqueue: (request) => bridge.enqueue(request),
     approve: (decision) => bridge.approve(decision),
+    provideInput: (request) => bridge.provideInput(request),
+    resume: (request) => bridge.resume(request),
+    inspect: (request) => bridge.inspect(request),
     cancel: (runId, reason) => bridge.cancel(runId, reason),
     drain: () => bridge.drain(),
   };

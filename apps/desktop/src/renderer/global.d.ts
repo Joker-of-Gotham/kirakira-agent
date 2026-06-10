@@ -1,5 +1,9 @@
 import type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeArtifactContent,
   RuntimeArtifactContentRequest,
   RuntimeMcpListRequest,
@@ -8,6 +12,7 @@ import type {
   RuntimeMcpToolCallResult,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -27,7 +32,12 @@ export interface KirakiraDesktopRuntimeBridge {
     options: SubscribeRunOptions | undefined,
     callback: (event: RuntimeTransportEvent) => void,
   ): Unsubscribe;
+  steer(request: SteerRunRequest): Promise<void>;
+  enqueue(request: EnqueuePromptRequest): Promise<void>;
   approve(decision: ApprovalDecision): Promise<void>;
+  provideInput(request: ProvideRunInputRequest): Promise<void>;
+  resume(request: ResumeRunRequest): Promise<void>;
+  inspect(request: InspectRunRequest): Promise<{ runId: string; state: unknown }>;
   cancel(runId: string, reason?: string): Promise<void>;
   drain(): Promise<void>;
 }

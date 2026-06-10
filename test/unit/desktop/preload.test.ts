@@ -16,9 +16,15 @@ describe("desktop preload bridge", () => {
 
     expect(KIRAKIRA_PRELOAD_API_KEY).toBe("kirakiraRuntime");
     expect(KIRAKIRA_PRELOAD_API_METHODS).toContain("getStatus");
+    expect(KIRAKIRA_PRELOAD_API_METHODS).toEqual(
+      expect.arrayContaining(["steer", "enqueue", "provideInput", "resume", "inspect"]),
+    );
     expect(RUNTIME_IPC_CHANNELS.getStatus).toBe("runtime:getStatus");
+    expect(RUNTIME_IPC_CHANNELS.inspect).toBe("runtime:inspect");
     expect(source).toContain("contextBridge.exposeInMainWorld(KIRAKIRA_PRELOAD_API_KEY");
     expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.getStatus)");
+    expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.steer");
+    expect(source).toContain("ipcRenderer.invoke(RUNTIME_IPC_CHANNELS.inspect");
     expect(source).not.toContain("get_status");
     expect(source).not.toContain("send: ipcRenderer.send");
     expect(source).not.toContain("invoke: ipcRenderer.invoke");

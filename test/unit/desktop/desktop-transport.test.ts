@@ -38,7 +38,21 @@ const bridgeStub = (
     },
   })),
   subscribeRun: vi.fn(() => () => {}),
+  steer: vi.fn(async () => {}),
+  enqueue: vi.fn(async () => {}),
   approve: vi.fn(async () => {}),
+  provideInput: vi.fn(async () => {}),
+  resume: vi.fn(async () => {}),
+  inspect: vi.fn(async (request) => ({
+    runId: request.runId,
+    state: {
+      runId: request.runId,
+      status: "running",
+      activeWorkers: [],
+      pendingApprovals: [],
+      costSummary: { totalCostUsd: 0, totalTokens: 0 },
+    },
+  })),
   cancel: vi.fn(async () => {}),
   drain: vi.fn(async () => {}),
   ...overrides,
@@ -106,5 +120,45 @@ describe("desktop runtime transport", () => {
       transport?.listMcpTools({ includeTools: true }),
     ).resolves.toMatchObject({ servers: [] });
     expect(bridge.listMcpTools).toHaveBeenCalledWith({ includeTools: true });
+  });
+
+  it("forwards run command center controls through the preload bridge", async () => {
+    const bridge = bridgeStub();
+    setDesktopBridge(bridge);
+
+    const transport = createDesktopRuntimeTransport();
+
+    await transport?.steer({
+      runId: "run-1",
+      instruction: "Keep changes scoped",
+      priority: "normal",
+    });
+    await transport?.enqueue({ runId: "run-1", prompt: "Continue", priority: 2 });
+    await transport?.provideInput({
+      runId: "run-1",
+      interruptId: "interrupt-1",
+      data: { decision: "continue" },
+    });
+    await transport?.resume({ runId: "run-1", fromCheckpoint: "checkpoint-1" });
+    await expect(
+      transport?.inspect({ runId: "run-1", includeEvents: true }),
+    ).resolves.toMatchObject({
+      runId: "run-1",
+      state: { status: "running" },
+    });
+
+    expect(bridge.steer).toHaveBeenCalledWith({
+      runId: "run-1",
+      instruction: "Keep changes scoped",
+      priority: "normal",
+    });
+    expect(bridge.enqueue).toHaveBeenCalledWith({ runId: "run-1", prompt: "Continue", priority: 2 });
+    expect(bridge.provideInput).toHaveBeenCalledWith({
+      runId: "run-1",
+      interruptId: "interrupt-1",
+      data: { decision: "continue" },
+    });
+    expect(bridge.resume).toHaveBeenCalledWith({ runId: "run-1", fromCheckpoint: "checkpoint-1" });
+    expect(bridge.inspect).toHaveBeenCalledWith({ runId: "run-1", includeEvents: true });
   });
 });

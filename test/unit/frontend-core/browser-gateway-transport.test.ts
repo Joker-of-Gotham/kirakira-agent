@@ -194,6 +194,115 @@ describe("browser gateway runtime transport", () => {
     });
   });
 
+  it("sends run command center controls through the runtime protocol", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket);
+    let socket: FakeWebSocket | null = null;
+    const transport = createBrowserGatewayTransport({
+      endpoint: "ws://127.0.0.1:17373/runtime",
+      idFactory: idFactory(),
+      socketFactory(url) {
+        socket = new FakeWebSocket(url);
+        return socket as unknown as WebSocket;
+      },
+    });
+
+    const connect = transport.connect();
+    socket?.open();
+    await connect;
+
+    const steer = transport.steer({
+      runId: "run-1",
+      instruction: "Keep changes scoped",
+      priority: "high",
+    });
+    const enqueue = transport.enqueue({
+      runId: "run-1",
+      prompt: "Continue verification",
+      priority: 3,
+    });
+    const provideInput = transport.provideInput({
+      runId: "run-1",
+      interruptId: "interrupt-1",
+      data: { decision: "continue" },
+    });
+    const resume = transport.resume({
+      runId: "run-1",
+      fromCheckpoint: "checkpoint-1",
+    });
+    const inspect = transport.inspect({ runId: "run-1", includeEvents: true });
+
+    const frames = socket?.sent.map((item) => JSON.parse(item)) ?? [];
+    expect(frames).toMatchObject([
+      {
+        type: "control",
+        message: {
+          type: "steer",
+          runId: "run-1",
+          instruction: "Keep changes scoped",
+          priority: "high",
+        },
+      },
+      {
+        type: "control",
+        message: {
+          type: "enqueue",
+          runId: "run-1",
+          prompt: "Continue verification",
+          priority: 3,
+        },
+      },
+      {
+        type: "control",
+        message: {
+          type: "provide_input",
+          runId: "run-1",
+          interruptId: "interrupt-1",
+          data: { decision: "continue" },
+        },
+      },
+      {
+        type: "control",
+        message: {
+          type: "resume",
+          runId: "run-1",
+          fromCheckpoint: "checkpoint-1",
+        },
+      },
+      {
+        type: "control",
+        message: {
+          type: "inspect",
+          runId: "run-1",
+          includeEvents: true,
+        },
+      },
+    ]);
+
+    for (const frame of frames.slice(0, 4)) {
+      socket?.message({ type: "ack", messageId: frame.messageId });
+    }
+    socket?.message({
+      type: "ack",
+      messageId: frames[4].messageId,
+      result: {
+        runId: "run-1",
+        status: "running",
+        activeWorkers: [],
+        pendingApprovals: [],
+        costSummary: { totalCostUsd: 0, totalTokens: 0 },
+      },
+    });
+
+    await expect(steer).resolves.toBeUndefined();
+    await expect(enqueue).resolves.toBeUndefined();
+    await expect(provideInput).resolves.toBeUndefined();
+    await expect(resume).resolves.toBeUndefined();
+    await expect(inspect).resolves.toMatchObject({
+      runId: "run-1",
+      state: { status: "running" },
+    });
+  });
+
   it("calls MCP tools through the runtime protocol and resolves typed results", async () => {
     vi.stubGlobal("WebSocket", FakeWebSocket);
     let socket: FakeWebSocket | null = null;

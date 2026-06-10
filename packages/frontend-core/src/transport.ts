@@ -41,6 +41,34 @@ export interface ApprovalDecision {
   reason?: string;
 }
 
+export interface SteerRunRequest {
+  runId: string;
+  instruction: string;
+  priority?: "high" | "normal";
+}
+
+export interface EnqueuePromptRequest {
+  prompt: string;
+  priority?: number;
+  runId?: string;
+}
+
+export interface ProvideRunInputRequest {
+  runId: string;
+  interruptId: string;
+  data: unknown;
+}
+
+export interface ResumeRunRequest {
+  runId: string;
+  fromCheckpoint?: string;
+}
+
+export interface InspectRunRequest {
+  runId: string;
+  includeEvents?: boolean;
+}
+
 export interface RuntimeTransportSnapshot {
   runId: string;
   state: unknown;
@@ -81,7 +109,12 @@ export interface RuntimeTransport {
     onEvent: (event: RuntimeTransportEvent) => void,
     options?: SubscribeRunOptions,
   ): Unsubscribe;
+  steer(request: SteerRunRequest): Promise<void>;
+  enqueue(request: EnqueuePromptRequest): Promise<void>;
   approve(decision: ApprovalDecision): Promise<void>;
+  provideInput(request: ProvideRunInputRequest): Promise<void>;
+  resume(request: ResumeRunRequest): Promise<void>;
+  inspect(request: InspectRunRequest): Promise<RuntimeTransportSnapshot>;
   cancel(runId: string, reason?: string): Promise<void>;
   drain(): Promise<void>;
 }

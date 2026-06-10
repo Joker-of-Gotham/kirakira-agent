@@ -11,9 +11,14 @@ import {
 } from "@kirakira/runtime-contracts";
 import type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeArtifactContentRequest,
   RuntimeTransportEvent,
   RuntimeTransportStatus,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
 } from "@kirakira/frontend-core";
@@ -31,7 +36,12 @@ export interface RuntimeIpcControllerOptions {
     | "callMcpTool"
     | "subscribeToRun"
     | "unsubscribe"
+    | "steerRun"
+    | "enqueuePrompt"
     | "approve"
+    | "provideInput"
+    | "resume"
+    | "inspectThread"
     | "cancel"
     | "drain"
     | "onMessage"
@@ -357,6 +367,93 @@ function parseCancelRequest(value: unknown): { runId: string; reason?: string } 
   return reason === undefined ? { runId } : { runId, reason };
 }
 
+function parseSteerRunRequest(value: unknown): SteerRunRequest {
+  if (!isRecord(value)) throw new Error("steer requires a request object");
+  const runId = parseRunId(value.runId, "steer");
+  if (typeof value.instruction !== "string") {
+    throw new Error("steer requires instruction");
+  }
+  const priority =
+    value.priority === undefined
+      ? undefined
+      : value.priority === "high" || value.priority === "normal"
+        ? value.priority
+        : null;
+  if (priority === null) {
+    throw new Error("steer priority is invalid");
+  }
+  const request: SteerRunRequest = {
+    runId,
+    instruction: value.instruction,
+    ...(priority !== undefined ? { priority } : {}),
+  };
+  validateControlMessage({ type: "control", message: { type: "steer", ...request } });
+  return request;
+}
+
+function parseEnqueuePromptRequest(value: unknown): EnqueuePromptRequest {
+  if (!isRecord(value)) throw new Error("enqueue requires a request object");
+  if (typeof value.prompt !== "string") {
+    throw new Error("enqueue requires prompt");
+  }
+  const priority = optionalNumber(value.priority);
+  if (value.priority !== undefined && priority === undefined) {
+    throw new Error("enqueue priority must be a number");
+  }
+  const runId = value.runId === undefined ? undefined : parseRunId(value.runId, "enqueue");
+  const request: EnqueuePromptRequest = {
+    prompt: value.prompt,
+    ...(priority !== undefined ? { priority } : {}),
+    ...(runId !== undefined ? { runId } : {}),
+  };
+  validateControlMessage({ type: "control", message: { type: "enqueue", ...request } });
+  return request;
+}
+
+function parseProvideInputRequest(value: unknown): ProvideRunInputRequest {
+  if (!isRecord(value)) throw new Error("provideInput requires a request object");
+  const runId = parseRunId(value.runId, "provideInput");
+  if (typeof value.interruptId !== "string" || value.interruptId.length === 0) {
+    throw new Error("provideInput requires interruptId");
+  }
+  const request: ProvideRunInputRequest = {
+    runId,
+    interruptId: value.interruptId,
+    data: value.data,
+  };
+  validateControlMessage({ type: "control", message: { type: "provide_input", ...request } });
+  return request;
+}
+
+function parseResumeRunRequest(value: unknown): ResumeRunRequest {
+  if (!isRecord(value)) throw new Error("resume requires a request object");
+  const runId = parseRunId(value.runId, "resume");
+  const fromCheckpoint = optionalString(value.fromCheckpoint);
+  if (value.fromCheckpoint !== undefined && fromCheckpoint === undefined) {
+    throw new Error("resume fromCheckpoint must be a string");
+  }
+  const request: ResumeRunRequest = {
+    runId,
+    ...(fromCheckpoint !== undefined ? { fromCheckpoint } : {}),
+  };
+  validateControlMessage({ type: "control", message: { type: "resume", ...request } });
+  return request;
+}
+
+function parseInspectRunRequest(value: unknown): InspectRunRequest {
+  if (!isRecord(value)) throw new Error("inspect requires a request object");
+  const runId = parseRunId(value.runId, "inspect");
+  if (value.includeEvents !== undefined && typeof value.includeEvents !== "boolean") {
+    throw new Error("inspect includeEvents must be a boolean");
+  }
+  const request: InspectRunRequest = {
+    runId,
+    ...(value.includeEvents !== undefined ? { includeEvents: value.includeEvents } : {}),
+  };
+  validateControlMessage({ type: "control", message: { type: "inspect", ...request } });
+  return request;
+}
+
 const eventMatches = (
   message: ServerMessage,
   runId: string,
@@ -561,6 +658,20 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
         disposeSubscription(parseSubscriptionId(rawRequest), event.sender.id);
       });
 
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.steer, async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseSteerRunRequest(rawRequest);
+        await ensureConnected();
+        await options.client.steerRun(request.runId, request.instruction, request.priority);
+      });
+
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.enqueue, async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseEnqueuePromptRequest(rawRequest);
+        await ensureConnected();
+        await options.client.enqueuePrompt(request.prompt, request.priority, request.runId);
+      });
+
       ipcMain.handle(RUNTIME_IPC_CHANNELS.approve, async (event, rawDecision: unknown) => {
         assertTrustedSender(event, options.isTrustedSender);
         const decision = parseApprovalDecision(rawDecision);
@@ -571,6 +682,30 @@ export function createRuntimeIpcController(options: RuntimeIpcControllerOptions)
           decision.reason,
           decision.runId,
         );
+      });
+
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.provideInput, async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseProvideInputRequest(rawRequest);
+        await ensureConnected();
+        await options.client.provideInput(request.runId, request.interruptId, request.data);
+      });
+
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.resume, async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseResumeRunRequest(rawRequest);
+        await ensureConnected();
+        await options.client.resume(request.runId, request.fromCheckpoint);
+      });
+
+      ipcMain.handle(RUNTIME_IPC_CHANNELS.inspect, async (event, rawRequest: unknown) => {
+        assertTrustedSender(event, options.isTrustedSender);
+        const request = parseInspectRunRequest(rawRequest);
+        await ensureConnected();
+        return {
+          runId: request.runId,
+          state: await options.client.inspectThread(request.runId, request.includeEvents),
+        };
       });
 
       ipcMain.handle(RUNTIME_IPC_CHANNELS.cancel, async (event, rawRequest: unknown) => {

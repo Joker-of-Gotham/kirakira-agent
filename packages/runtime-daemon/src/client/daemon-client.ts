@@ -215,25 +215,29 @@ export class DaemonClient {
     return runId;
   }
 
-  async steer(instruction: string, priority?: "high" | "normal"): Promise<void> {
-    if (!this.lastRunId) throw new Error("No active run");
+  async steerRun(runId: string, instruction: string, priority?: "high" | "normal"): Promise<void> {
     await this.rpcResult({
       type: "control",
       message: ctl(
         priority !== undefined
           ? {
               type: "steer",
-              runId: this.lastRunId,
+              runId,
               instruction,
               priority,
             }
           : {
               type: "steer",
-              runId: this.lastRunId,
+              runId,
               instruction,
             },
       ),
     }, 60_000, parseRuntimeVoidAckResult);
+  }
+
+  async steer(instruction: string, priority?: "high" | "normal"): Promise<void> {
+    if (!this.lastRunId) throw new Error("No active run");
+    await this.steerRun(this.lastRunId, instruction, priority);
   }
 
   async approve(
@@ -333,11 +337,16 @@ export class DaemonClient {
     }, 60_000, parseRuntimeMcpListAckResult);
   }
 
-  async enqueuePrompt(prompt: string, priority?: number): Promise<void> {
+  async enqueuePrompt(prompt: string, priority?: number, runId?: string): Promise<void> {
     await this.rpcResult({
       type: "control",
       message: ctl(
-        priority !== undefined ? { type: "enqueue", prompt, priority } : { type: "enqueue", prompt },
+        {
+          type: "enqueue",
+          prompt,
+          ...(priority !== undefined ? { priority } : {}),
+          ...(runId !== undefined ? { runId } : {}),
+        },
       ),
     }, 60_000, parseRuntimeVoidAckResult);
   }

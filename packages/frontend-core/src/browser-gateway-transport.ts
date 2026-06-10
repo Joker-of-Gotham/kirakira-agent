@@ -25,9 +25,14 @@ import {
 import { fetchBrowserGatewayHealth } from "./browser-gateway-health.js";
 import type {
   ApprovalDecision,
+  EnqueuePromptRequest,
+  InspectRunRequest,
+  ProvideRunInputRequest,
+  ResumeRunRequest,
   RuntimeTransport,
   RuntimeTransportEvent,
   RuntimeTransportSnapshot,
+  SteerRunRequest,
   SubmitPromptRequest,
   SubscribeRunOptions,
   Unsubscribe,
@@ -381,6 +386,80 @@ export function createBrowserGatewayTransport(
         },
         parseRuntimeVoidAckResult,
       );
+    },
+    async steer(input: SteerRunRequest) {
+      await request(
+        {
+          type: "control",
+          message:
+            input.priority !== undefined
+              ? {
+                  type: "steer",
+                  runId: input.runId,
+                  instruction: input.instruction,
+                  priority: input.priority,
+                }
+              : {
+                  type: "steer",
+                  runId: input.runId,
+                  instruction: input.instruction,
+                },
+        },
+        parseRuntimeVoidAckResult,
+      );
+    },
+    async enqueue(input: EnqueuePromptRequest) {
+      await request(
+        {
+          type: "control",
+          message: {
+            type: "enqueue",
+            prompt: input.prompt,
+            ...(input.priority !== undefined ? { priority: input.priority } : {}),
+            ...(input.runId !== undefined ? { runId: input.runId } : {}),
+          },
+        },
+        parseRuntimeVoidAckResult,
+      );
+    },
+    async provideInput(input: ProvideRunInputRequest) {
+      await request(
+        {
+          type: "control",
+          message: {
+            type: "provide_input",
+            runId: input.runId,
+            interruptId: input.interruptId,
+            data: input.data,
+          },
+        },
+        parseRuntimeVoidAckResult,
+      );
+    },
+    async resume(input: ResumeRunRequest) {
+      await request(
+        {
+          type: "control",
+          message:
+            input.fromCheckpoint !== undefined
+              ? { type: "resume", runId: input.runId, fromCheckpoint: input.fromCheckpoint }
+              : { type: "resume", runId: input.runId },
+        },
+        parseRuntimeVoidAckResult,
+      );
+    },
+    async inspect(input: InspectRunRequest): Promise<RuntimeTransportSnapshot> {
+      const state = await request(
+        {
+          type: "control",
+          message:
+            input.includeEvents !== undefined
+              ? { type: "inspect", runId: input.runId, includeEvents: input.includeEvents }
+              : { type: "inspect", runId: input.runId },
+        },
+        parseRuntimeStateSnapshotAckResult,
+      );
+      return { runId: input.runId, state };
     },
     async cancel(runId: string, reason?: string) {
       await request(
