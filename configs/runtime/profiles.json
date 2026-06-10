@@ -268,6 +268,57 @@
       "maxEvidence": 4
     }
   },
+  "deepResearchLiveAdapterGates": {
+    "deep-research:live-adapters": {
+      "description": "Profile-owned deep research adapter evidence across file, web, MCP transport, and KernelBridge research-event suites.",
+      "profile": "workbench-host",
+      "liveEnv": "KIRAKIRA_DEEP_RESEARCH_LIVE_ADAPTERS",
+      "passedEnv": "KIRAKIRA_DEEP_RESEARCH_LIVE_ADAPTERS_PASSED",
+      "resultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
+      "timeoutMs": 180000,
+      "suites": [
+        {
+          "id": "file",
+          "source": "packages/deep-research/src/file.ts",
+          "checks": ["deep-research:file-source"],
+          "unitTests": ["test/unit/deep-research/file.test.ts"]
+        },
+        {
+          "id": "web",
+          "source": "packages/deep-research/src/web.ts",
+          "checks": ["deep-research:web-source"],
+          "unitTests": ["test/unit/deep-research/web.test.ts"]
+        },
+        {
+          "id": "mcp",
+          "source": "packages/deep-research/src/mcp.ts",
+          "checks": [
+            "deep-research:mcp-runtime-source",
+            "deep-research:mcp-live-transports",
+            "deep-research:mcp-kernel-research-events"
+          ],
+          "unitTests": [
+            "test/unit/deep-research/mcp.test.ts",
+            "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
+          ],
+          "liveTests": [
+            "test/smoke/deep-research/live-adapters-smoke.test.ts",
+            "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
+          ]
+        }
+      ],
+      "references": [
+        {
+          "title": "MCP Tools 2025-11-25",
+          "url": "https://modelcontextprotocol.io/specification/2025-11-25/server/tools"
+        },
+        {
+          "title": "OpenTelemetry MCP semantic conventions",
+          "url": "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/"
+        }
+      ]
+    }
+  },
   "daemonCompositionGates": {
     "runtime-daemon:composition-smoke": {
       "description": "Single KernelBridge smoke proving subagent topology, deep research MCP, MCP policy/trust/audit/OTel, memory recall, checkpoint persistence, and profile readiness in one daemon run.",
@@ -355,7 +406,8 @@
         {
           "id": "deep-research:live-adapters",
           "kind": "deep-research-live-adapters",
-          "profile": "workbench-host"
+          "profile": "workbench-host",
+          "gate": "deep-research:live-adapters"
         },
         {
           "id": "memory-store:persistence",
@@ -397,7 +449,8 @@
         {
           "id": "deep-research:live-adapters",
           "kind": "deep-research-live-adapters",
-          "profile": "workbench-host"
+          "profile": "workbench-host",
+          "gate": "deep-research:live-adapters"
         },
         {
           "id": "memory-store:persistence",

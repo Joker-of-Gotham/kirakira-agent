@@ -10,7 +10,9 @@ import {
 } from "./runtime-profile.mjs";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_GATE = "deep-research:live-adapters";
 const DEFAULT_PROFILE = "workbench-host";
+const GATE_NAME_ENV = "KIRAKIRA_DEEP_RESEARCH_GATE";
 const GATE_PROFILE_ENV = "KIRAKIRA_DEEP_RESEARCH_GATE_PROFILE";
 const LIVE_ENV = "KIRAKIRA_DEEP_RESEARCH_LIVE_ADAPTERS";
 const PASSED_ENV = "KIRAKIRA_DEEP_RESEARCH_LIVE_ADAPTERS_PASSED";
@@ -22,24 +24,6 @@ const DEFAULT_RESULT_PATH = resolve(
   "gates",
   "deep-research-live-adapters.json",
 );
-const REQUIRED_SUITES = Object.freeze(["file", "web", "mcp"]);
-const UNIT_TESTS = Object.freeze([
-  "test/unit/deep-research/file.test.ts",
-  "test/unit/deep-research/web.test.ts",
-  "test/unit/deep-research/mcp.test.ts",
-  "test/unit/runtime-daemon/deep-research-mcp-source.test.ts",
-]);
-const LIVE_TESTS = Object.freeze([
-  "test/smoke/deep-research/live-adapters-smoke.test.ts",
-  "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts",
-]);
-const CHECKS = Object.freeze([
-  "deep-research:file-source",
-  "deep-research:web-source",
-  "deep-research:mcp-runtime-source",
-  "deep-research:mcp-live-transports",
-  "deep-research:mcp-kernel-research-events",
-]);
 
 function readValue(args, index, name) {
   const value = args[index + 1];
@@ -60,6 +44,7 @@ function positiveInteger(value, name) {
 export function normalizeDeepResearchLiveAdaptersArgs(argv = []) {
   const args = argv[0] === "--" ? argv.slice(1) : argv;
   const options = {
+    gateName: undefined,
     profileName: undefined,
     dryRun: false,
     live: false,
@@ -70,6 +55,11 @@ export function normalizeDeepResearchLiveAdaptersArgs(argv = []) {
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
+    if (arg === "--gate") {
+      options.gateName = readValue(args, index, "--gate");
+      index += 1;
+      continue;
+    }
     if (arg === "--profile") {
       options.profileName = readValue(args, index, "--profile");
       index += 1;
@@ -125,6 +115,92 @@ function sameStringArray(left, right) {
   );
 }
 
+function stringValue(value) {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function requiredString(value, name) {
+  const text = stringValue(value);
+  if (!text) {
+    throw new Error(`${name} must be a non-empty string`);
+  }
+  return text;
+}
+
+function stringArray(value, name) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(`${name} must be an array`);
+  }
+  return value.map((item, index) => requiredString(item, `${name}[${index}]`));
+}
+
+function uniqueStrings(values) {
+  return [...new Set(values.filter((value) => typeof value === "string" && value.length > 0))];
+}
+
+function deepResearchGateConfig(config, gateName) {
+  const gates = isRecord(config?.deepResearchLiveAdapterGates)
+    ? config.deepResearchLiveAdapterGates
+    : {};
+  const gate = gates[gateName];
+  if (!isRecord(gate)) {
+    throw new Error(`Unknown deep research live adapter gate: ${gateName}`);
+  }
+  const suites = normalizeDeepResearchSuites(gate.suites);
+  return {
+    name: gateName,
+    description: stringValue(gate.description),
+    profile: stringValue(gate.profile),
+    liveEnv: stringValue(gate.liveEnv) ?? LIVE_ENV,
+    passedEnv: stringValue(gate.passedEnv) ?? PASSED_ENV,
+    resultPath: stringValue(gate.resultPath) ?? relativeEvidencePath(DEFAULT_RESULT_PATH),
+    timeoutMs: gate.timeoutMs === undefined
+      ? DEFAULT_TIMEOUT_MS
+      : positiveInteger(gate.timeoutMs, `deepResearchLiveAdapterGates.${gateName}.timeoutMs`),
+    suites,
+    requiredSuites: suites.map((suite) => suite.id),
+    checks: uniqueStrings(suites.flatMap((suite) => suite.checks)),
+    unitTests: uniqueStrings(suites.flatMap((suite) => suite.unitTests)),
+    liveTests: uniqueStrings(suites.flatMap((suite) => suite.liveTests)),
+    references: normalizeReferences(gate.references),
+  };
+}
+
+function normalizeDeepResearchSuites(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("deep research live adapter gate suites must be a non-empty array");
+  }
+  return value.map((suite, index) => {
+    if (!isRecord(suite)) {
+      throw new Error(`deep research live adapter suite ${index} must be an object`);
+    }
+    return {
+      id: requiredString(suite.id, `deepResearchLiveAdapterGates.suites[${index}].id`),
+      source: requiredString(suite.source, `deepResearchLiveAdapterGates.suites[${index}].source`),
+      checks: stringArray(suite.checks, `deepResearchLiveAdapterGates.suites[${index}].checks`),
+      unitTests: stringArray(suite.unitTests, `deepResearchLiveAdapterGates.suites[${index}].unitTests`),
+      liveTests: stringArray(suite.liveTests, `deepResearchLiveAdapterGates.suites[${index}].liveTests`),
+    };
+  });
+}
+
+function normalizeReferences(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("deep research live adapter gate references must be an array");
+  }
+  return value.map((reference, index) => {
+    if (!isRecord(reference)) {
+      throw new Error(`deep research live adapter reference ${index} must be an object`);
+    }
+    return {
+      title: requiredString(reference.title, `deepResearchLiveAdapterGates.references[${index}].title`),
+      url: requiredString(reference.url, `deepResearchLiveAdapterGates.references[${index}].url`),
+    };
+  });
+}
+
 function relativeEvidencePath(path) {
   return relative(repoRoot, path).replaceAll("\\", "/");
 }
@@ -161,44 +237,54 @@ function commandPlan(command, args) {
 }
 
 export function buildDeepResearchLiveAdaptersCommand(options = {}, env = process.env) {
-  const profileName = options.profileName ?? env[GATE_PROFILE_ENV] ?? DEFAULT_PROFILE;
+  const gateName = options.gateName ?? env[GATE_NAME_ENV] ?? DEFAULT_GATE;
+  const config = options.config ?? loadRuntimeProfiles();
+  const gate = deepResearchGateConfig(config, gateName);
+  const profileName = options.profileName ?? env[GATE_PROFILE_ENV] ?? gate.profile ?? DEFAULT_PROFILE;
   const profile = resolveRuntimeProfile(
     profileName,
-    loadRuntimeProfiles(),
+    config,
     env,
   );
-  const resultPath = options.resultPath === null
+  const configuredResultPath = options.resultPath !== undefined
+    ? options.resultPath
+    : gate.resultPath;
+  const resultPath = options.resultPath === null || configuredResultPath === undefined
     ? undefined
-    : (options.resultPath ?? DEFAULT_RESULT_PATH);
+    : resolve(repoRoot, configuredResultPath);
   const result = readSmokeResult(resultPath);
   const expectedResult = {
-    gate: "deep-research:live-adapters",
+    gate: gate.name,
     profile: profile.name,
-    requiredSuites: [...REQUIRED_SUITES],
-    checks: [...CHECKS],
-    unitTests: [...UNIT_TESTS],
-    liveTests: [...LIVE_TESTS],
+    requiredSuites: gate.requiredSuites,
+    checks: gate.checks,
+    unitTests: gate.unitTests,
+    liveTests: gate.liveTests,
   };
   const resultPassed = smokeResultMatches(result, expectedResult);
-  const externallyPassed = env[PASSED_ENV] === "1" || resultPassed;
-  const live = options.live || env[LIVE_ENV] === "1" || env.KIRAKIRA_LIVE_E2E === "1";
+  const externallyPassed = env[gate.passedEnv] === "1" || resultPassed;
+  const live = options.live || env[gate.liveEnv] === "1" || env.KIRAKIRA_LIVE_E2E === "1";
   const skipReason = externallyPassed
     ? undefined
     : live
       ? undefined
-      : `live gate is opt-in; set ${LIVE_ENV}=1 or pass --live`;
-  const unitArgs = ["vitest", "run", ...UNIT_TESTS];
-  const liveArgs = ["vitest", "run", ...LIVE_TESTS];
+      : `live gate is opt-in; set ${gate.liveEnv}=1 or pass --live`;
+  const unitArgs = ["vitest", "run", ...gate.unitTests];
+  const liveArgs = ["vitest", "run", ...gate.liveTests];
 
   return {
     schemaVersion: 1,
-    gate: "deep-research:live-adapters",
+    gate: gate.name,
+    gateSource: "runtime-profile.deepResearchLiveAdapterGates",
+    description: gate.description,
     profile: profile.name,
     live,
     status: externallyPassed ? "passed" : live ? "ready" : "skipped",
     ...(skipReason ? { skipReason } : {}),
-    requiredSuites: [...REQUIRED_SUITES],
-    checks: [...CHECKS],
+    liveEnv: gate.liveEnv,
+    requiredSuites: gate.requiredSuites,
+    checks: gate.checks,
+    suites: gate.suites,
     evidence: {
       ...(resultPath ? { resultPath: relativeEvidencePath(resultPath) } : {}),
       ...(isRecord(result)
@@ -211,29 +297,20 @@ export function buildDeepResearchLiveAdaptersCommand(options = {}, env = process
     },
     unitContract: {
       status: "planned",
-      tests: [...UNIT_TESTS],
+      tests: gate.unitTests,
       command: commandPlan("pnpm", unitArgs),
     },
     liveGate: {
       status: externallyPassed ? "passed" : live ? "pending" : "skipped",
       ...(skipReason ? { skipReason } : {}),
-      tests: [...LIVE_TESTS],
+      tests: gate.liveTests,
       command: commandPlan("pnpm", liveArgs),
       env: {
         KIRAKIRA_RUNTIME_PROFILE: profile.name,
       },
-      timeoutMs: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      timeoutMs: options.timeoutMs ?? gate.timeoutMs,
     },
-    references: [
-      {
-        title: "MCP Tools 2025-11-25",
-        url: "https://modelcontextprotocol.io/specification/2025-11-25/server/tools",
-      },
-      {
-        title: "OpenTelemetry MCP semantic conventions",
-        url: "https://opentelemetry.io/docs/specs/semconv/gen-ai/mcp/",
-      },
-    ],
+    references: gate.references,
   };
 }
 
@@ -283,14 +360,16 @@ function writeSmokeResult(smoke, path) {
   const result = {
     schemaVersion: 1,
     gate: smoke.gate,
+    gateSource: smoke.gateSource,
     profile: smoke.profile,
     status: "passed",
     passedAt: new Date().toISOString(),
     requiredSuites: smoke.requiredSuites,
     checks: smoke.checks,
+    suites: smoke.suites,
     unitTests: smoke.unitContract.tests,
     liveTests: smoke.liveGate.tests,
-    command: `node scripts/deep-research-live-adapters.mjs --profile ${smoke.profile} --live`,
+    command: `node scripts/deep-research-live-adapters.mjs --gate ${smoke.gate} --profile ${smoke.profile} --live`,
     references: smoke.references,
   };
   mkdirSync(dirname(path), { recursive: true });
@@ -302,8 +381,10 @@ function printHelp() {
   return `Usage: node scripts/deep-research-live-adapters.mjs [options]
 
 Options:
+  --gate <name>            Deep research live adapter gate name.
+                           Defaults to ${GATE_NAME_ENV}, then ${DEFAULT_GATE}.
   --profile <name>         Runtime profile label for gate evidence.
-                           Defaults to ${GATE_PROFILE_ENV}, then workbench-host.
+                           Defaults to ${GATE_PROFILE_ENV}, then the gate profile.
   --dry-run                Print the profile-gated smoke contract only.
   --live                   Run unit and live MCP adapter tests.
   --timeout-ms <ms>        Per-command timeout for test execution.
@@ -354,7 +435,12 @@ async function main(argv = process.argv.slice(2), env = process.env) {
   if (liveCode !== 0) return liveCode;
 
   if (options.writeResult !== false) {
-    writeSmokeResult(smoke, options.resultPath ?? DEFAULT_RESULT_PATH);
+    const writePath = options.resultPath !== undefined
+      ? options.resultPath
+      : smoke.evidence?.resultPath
+        ? resolve(repoRoot, smoke.evidence.resultPath)
+        : undefined;
+    writeSmokeResult(smoke, writePath);
   }
   return 0;
 }

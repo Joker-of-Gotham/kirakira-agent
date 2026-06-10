@@ -109,6 +109,7 @@ export function buildRuntimeIntegrationGateCommand(
     timeoutMs: options.timeoutMs ?? gate.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     skipCompose: options.skipCompose,
     skipInfra: options.skipInfra,
+    config,
   }, env, adapters));
   const result = readGateResult(resultPath);
   const expectedIdentity = integrationIdentity(gate, steps);
@@ -272,11 +273,14 @@ function buildStep(entry, options, env, adapters) {
 
 function buildDeepResearchStep(entry, options, env) {
   const profile = requiredString(entry.profile, "deep-research-live-adapters.profile");
+  const gateName = stringValue(entry.gate) ?? "deep-research:live-adapters";
   const childEnv = entryEnv(entry);
   const command = buildDeepResearchLiveAdaptersCommand({
+    gateName,
     profileName: profile,
     live: options.live,
     timeoutMs: options.timeoutMs,
+    config: options.config,
   }, { ...env, ...childEnv });
   return {
     command,
@@ -284,6 +288,8 @@ function buildDeepResearchStep(entry, options, env) {
       process.execPath,
       [
         "scripts/deep-research-live-adapters.mjs",
+        "--gate",
+        gateName,
         "--profile",
         profile,
         "--timeout-ms",

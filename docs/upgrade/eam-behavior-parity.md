@@ -44,6 +44,7 @@ Evidence:
 - `packages/deep-research/src/web.ts`
 - `packages/runtime-daemon/src/bridge/deep-research.ts`
 - `packages/config-resolver/src/runtime-projection.ts`
+- `configs/runtime/profiles.json#deepResearchLiveAdapterGates`
 - `scripts/runtime-profile.mjs`
 - `scripts/runtime-integration-gate.mjs`
 - `scripts/runtime-full-lifecycle-gate.mjs`
@@ -58,6 +59,7 @@ Evidence:
 - `test/unit/runtime-daemon/deep-research-mcp-source.test.ts`
 - `test/unit/runtime/profile-resolution.test.ts`
 - `test/unit/config-resolver/resolved-state.test.ts`
+- `test/unit/scripts/deep-research-live-adapters.test.ts`
 - `test/unit/scripts/runtime-integration-gate.test.ts`
 - `test/unit/scripts/runtime-full-lifecycle-gate.test.ts`
 - `test/unit/scripts/runtime-daemon-composition-smoke.test.ts`
@@ -74,6 +76,7 @@ Evidence:
 - `docs/upgrade/gates/runtime-integration-gate.json`
 - `docs/upgrade/gates/runtime-full-lifecycle-gate.json`
 - `docs/change-records/2026-06-10-runtime-full-lifecycle-gate.md`
+- `docs/change-records/2026-06-10-deep-research-adapter-gate-profile-config.md`
 - `docs/change-records/2026-06-10-presentation-hydrated-visual-qa.md`
 - `docs/change-records/2026-06-10-deep-research-profile-mcp-targets.md`
 - `docs/change-records/2026-06-10-runtime-daemon-composition-smoke.md`
@@ -83,14 +86,14 @@ Focused validation command:
 
 ```powershell
 pnpm exec vitest run test/unit/runtime/profile-resolution.test.ts test/unit/config-resolver/resolved-state.test.ts test/unit/runtime-daemon/deep-research-mcp-source.test.ts test/unit/deep-research/mcp.test.ts
-pnpm exec vitest run test/unit/scripts/runtime-full-lifecycle-gate.test.ts test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
+pnpm exec vitest run test/unit/scripts/deep-research-live-adapters.test.ts test/unit/scripts/runtime-full-lifecycle-gate.test.ts test/unit/scripts/presentation-hydrated-visual-qa.test.ts test/unit/scripts/workbench-smoke.test.ts test/unit/scripts/runtime-daemon-composition-smoke.test.ts test/unit/scripts/runtime-integration-gate.test.ts test/unit/scripts/upgrade-readiness.test.ts
 pnpm exec vitest run test/smoke/runtime-daemon/composition-smoke.test.ts
 node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --live
 $env:VITE_KIRAKIRA_RUNTIME_MODE='mock'; node scripts/presentation-hydrated-visual-qa.mjs --gate presentation-hydrated-visual-qa --profile workbench-host --live --timeout-ms 240000 --skip-infra --skip-daemon
 node scripts/runtime-integration-gate.mjs --gate upgrade --dry-run
 node scripts/runtime-full-lifecycle-gate.mjs --gate runtime-full-lifecycle --profile workbench-host --live --timeout-ms 240000
 pnpm exec vitest run test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts
-node scripts/deep-research-live-adapters.mjs --profile workbench-host --live
+node scripts/deep-research-live-adapters.mjs --gate deep-research:live-adapters --profile workbench-host --live
 pnpm e2e:workbench -- --profile workbench-host --surface web --timeout-ms 120000 --live
 pnpm e2e:workbench -- --profile workbench-host --surface desktop --timeout-ms 120000 --live
 ```
@@ -172,8 +175,10 @@ profile env fragment. This keeps presentation readiness tied to the profile
 projection instead of duplicating port-specific constants in the readiness gate.
 
 `gates.deepResearchLiveAdapters` now keeps adapter-level and KernelBridge-level
-live research evidence machine-visible. It requires unit-evidenced file, web,
-and MCP source adapter suites, then reads
+live research evidence machine-visible. Its required suites, source paths,
+checks, unit tests, live tests, and references come from
+`deepResearchLiveAdapterGates.deep-research:live-adapters`. Readiness verifies
+unit-evidenced file, web, and MCP source adapter suites, then reads
 `docs/upgrade/gates/deep-research-live-adapters.json` and passes only when the
 profile, required suites, unit tests, adapter smoke, KernelBridge event smoke,
 and MCP checks match the current gate contract.

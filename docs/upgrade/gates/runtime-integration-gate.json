@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "gate": "upgrade",
   "status": "passed",
-  "passedAt": "2026-06-10T06:25:21.338Z",
+  "passedAt": "2026-06-10T06:49:35.778Z",
   "checks": [
     "deep-research:file-source",
     "deep-research:web-source",

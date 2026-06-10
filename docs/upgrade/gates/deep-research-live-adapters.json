@@ -1,9 +1,10 @@
 {
   "schemaVersion": 1,
   "gate": "deep-research:live-adapters",
+  "gateSource": "runtime-profile.deepResearchLiveAdapterGates",
   "profile": "workbench-host",
   "status": "passed",
-  "passedAt": "2026-06-09T23:09:47.776Z",
+  "passedAt": "2026-06-10T06:49:14.311Z",
   "requiredSuites": [
     "file",
     "web",
@@ -16,6 +17,47 @@
     "deep-research:mcp-live-transports",
     "deep-research:mcp-kernel-research-events"
   ],
+  "suites": [
+    {
+      "id": "file",
+      "source": "packages/deep-research/src/file.ts",
+      "checks": [
+        "deep-research:file-source"
+      ],
+      "unitTests": [
+        "test/unit/deep-research/file.test.ts"
+      ],
+      "liveTests": []
+    },
+    {
+      "id": "web",
+      "source": "packages/deep-research/src/web.ts",
+      "checks": [
+        "deep-research:web-source"
+      ],
+      "unitTests": [
+        "test/unit/deep-research/web.test.ts"
+      ],
+      "liveTests": []
+    },
+    {
+      "id": "mcp",
+      "source": "packages/deep-research/src/mcp.ts",
+      "checks": [
+        "deep-research:mcp-runtime-source",
+        "deep-research:mcp-live-transports",
+        "deep-research:mcp-kernel-research-events"
+      ],
+      "unitTests": [
+        "test/unit/deep-research/mcp.test.ts",
+        "test/unit/runtime-daemon/deep-research-mcp-source.test.ts"
+      ],
+      "liveTests": [
+        "test/smoke/deep-research/live-adapters-smoke.test.ts",
+        "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
+      ]
+    }
+  ],
   "unitTests": [
     "test/unit/deep-research/file.test.ts",
     "test/unit/deep-research/web.test.ts",
@@ -26,7 +68,7 @@
     "test/smoke/deep-research/live-adapters-smoke.test.ts",
     "test/smoke/runtime-daemon/deep-research-mcp-live-source-smoke.test.ts"
   ],
-  "command": "node scripts/deep-research-live-adapters.mjs --profile workbench-host --live",
+  "command": "node scripts/deep-research-live-adapters.mjs --gate deep-research:live-adapters --profile workbench-host --live",
   "references": [
     {
       "title": "MCP Tools 2025-11-25",

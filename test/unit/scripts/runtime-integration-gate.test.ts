@@ -9,6 +9,7 @@ import {
   runRuntimeIntegrationGate,
   writeRuntimeIntegrationGateResult,
 } from "../../../scripts/runtime-integration-gate.mjs";
+import { loadRuntimeProfiles } from "../../../scripts/runtime-profile.mjs";
 
 describe("runtime integration gate", () => {
   it("parses the profile-owned integration command shape", () => {
@@ -75,7 +76,7 @@ describe("runtime integration gate", () => {
       "node scripts/runtime-integration-gate.mjs --gate upgrade --live",
     );
     expect(command.steps.map((step) => step.command)).toEqual([
-      "node scripts/deep-research-live-adapters.mjs --profile workbench-host --timeout-ms 12000 --live",
+      "node scripts/deep-research-live-adapters.mjs --gate deep-research:live-adapters --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/memory-persistence-smoke.mjs --profile test-host --timeout-ms 12000 --live",
       "node scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host --timeout-ms 12000 --live",
       "node scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation --timeout-ms 12000 --live",
@@ -158,7 +159,7 @@ describe("runtime integration gate", () => {
 
     expect(code).toBe(0);
     expect(calls).toEqual([
-      expect.stringContaining("scripts/deep-research-live-adapters.mjs --profile workbench-host"),
+      expect.stringContaining("scripts/deep-research-live-adapters.mjs --gate deep-research:live-adapters --profile workbench-host"),
       expect.stringContaining("scripts/memory-persistence-smoke.mjs --profile test-host"),
       expect.stringContaining("scripts/runtime-daemon-composition-smoke.mjs --gate runtime-daemon:composition-smoke --profile workbench-host"),
       expect.stringContaining("scripts/kirakira-workbench-smoke.mjs --profile workbench-host --gate presentation"),
@@ -218,6 +219,55 @@ describe("runtime integration gate", () => {
         checks: ["custom:check"],
       }),
     ]);
+  });
+
+  it("passes injected profile config through to deep research child gates", () => {
+    const config = {
+      ...loadRuntimeProfiles(),
+      deepResearchLiveAdapterGates: {
+        "deep-research:custom-adapters": {
+          profile: "workbench-host",
+          liveEnv: "KIRAKIRA_CUSTOM_DEEP_RESEARCH_LIVE",
+          passedEnv: "KIRAKIRA_CUSTOM_DEEP_RESEARCH_PASSED",
+          resultPath: "docs/upgrade/gates/custom-deep-research-live-adapters.json",
+          suites: [
+            {
+              id: "custom",
+              source: "packages/deep-research/src/file.ts",
+              checks: ["deep-research:custom-source"],
+              unitTests: ["test/unit/deep-research/file.test.ts"],
+              liveTests: ["test/smoke/deep-research/live-adapters-smoke.test.ts"],
+            },
+          ],
+        },
+      },
+      integrationGates: {
+        customDeepResearch: {
+          gates: [
+            {
+              id: "deep-research:custom-adapters",
+              kind: "deep-research-live-adapters",
+              profile: "workbench-host",
+              gate: "deep-research:custom-adapters",
+            },
+          ],
+        },
+      },
+    };
+
+    const command = buildRuntimeIntegrationGateCommand(
+      { gateName: "customDeepResearch", resultPath: null },
+      {},
+      { config },
+    );
+
+    expect(command.checks).toEqual(["deep-research:custom-source"]);
+    expect(command.steps[0]).toMatchObject({
+      gate: "deep-research:custom-adapters",
+      checks: ["deep-research:custom-source"],
+      command: "node scripts/deep-research-live-adapters.mjs --gate deep-research:custom-adapters --profile workbench-host --timeout-ms 180000 --live",
+      tests: ["test/smoke/deep-research/live-adapters-smoke.test.ts"],
+    });
   });
 
   it("rejects unknown integration gates before running child commands", () => {

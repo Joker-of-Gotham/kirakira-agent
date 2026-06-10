@@ -12,6 +12,8 @@ describe("deep research live adapter gate", () => {
   it("parses the opt-in live command shape", () => {
     expect(
       normalizeDeepResearchLiveAdaptersArgs([
+        "--gate",
+        "deep-research:live-adapters",
         "--profile",
         "workbench-host",
         "--live",
@@ -19,6 +21,7 @@ describe("deep research live adapter gate", () => {
         "120000",
       ]),
     ).toMatchObject({
+      gateName: "deep-research:live-adapters",
       profileName: "workbench-host",
       live: true,
       timeoutMs: 120_000,
@@ -35,7 +38,13 @@ describe("deep research live adapter gate", () => {
     expect(smoke.live).toBe(false);
     expect(smoke.status).toBe("skipped");
     expect(smoke.gate).toBe("deep-research:live-adapters");
+    expect(smoke.gateSource).toBe("runtime-profile.deepResearchLiveAdapterGates");
     expect(smoke.requiredSuites).toEqual(["file", "web", "mcp"]);
+    expect(smoke.suites.map((suite) => [suite.id, suite.source])).toEqual([
+      ["file", "packages/deep-research/src/file.ts"],
+      ["web", "packages/deep-research/src/web.ts"],
+      ["mcp", "packages/deep-research/src/mcp.ts"],
+    ]);
     expect(smoke.checks).toEqual([
       "deep-research:file-source",
       "deep-research:web-source",

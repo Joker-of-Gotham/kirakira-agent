@@ -104,13 +104,15 @@
     "deepResearchLiveAdapterGate": {
       "script": "scripts/upgrade-readiness.mjs",
       "reportPath": "gates.deepResearchLiveAdapters",
+      "gateSource": "runtime-profile.deepResearchLiveAdapterGates",
+      "configPath": "configs/runtime/profiles.json#deepResearchLiveAdapterGates",
       "requiredSuites": [
         "file",
         "web",
         "mcp"
       ],
       "liveResultPath": "docs/upgrade/gates/deep-research-live-adapters.json",
-      "expectation": "Provider-neutral file, web, and MCP adapter suites are unit-evidenced, and the local live stdio/http MCP adapter plus KernelBridge research event result must match the current profile, required suites, unit tests, live tests, and MCP checks before readiness can pass."
+      "expectation": "Provider-neutral file, web, and MCP adapter suites, source paths, checks, unit tests, live tests, and references are profile-owned, and the local live stdio/http MCP adapter plus KernelBridge research event result must match the current profile, required suites, unit tests, live tests, and MCP checks before readiness can pass."
     },
     "runtimeIntegrationGate": {
       "script": "scripts/runtime-integration-gate.mjs",
@@ -790,7 +792,7 @@
       "targetName": "deep-research",
       "classification": "intentional-kirakira-extension",
       "status": "covered",
-      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered."
+      "behavior": "Kirakira owns deep-research as a standalone package instead of treating it as a missing EAM package; generic same-kind source adapter fanout, workspace-bounded file evidence, configurable HTTPS-first web evidence, provider-neutral MCP tool-call evidence, profile-projected MCP research target discovery, profile-owned live adapter suite/check/test metadata, MCP tool-originated `isError` evidence semantics, MCP transport failure propagation, local live stdio/http MCP adapter execution, and KernelBridge/ResearchTaskExecutor live MCP research event emission are covered."
     },
     {
       "targetName": "frontend-app",

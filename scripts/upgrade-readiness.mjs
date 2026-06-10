@@ -308,29 +308,9 @@ function eamMechanismTrack({ workspaceRoot, parity, deepResearchLiveAdapters }) 
 
 function buildDeepResearchLiveAdapterGate(workspaceRoot, profileName, env) {
   const command = buildDeepResearchLiveAdaptersCommand({ profileName }, env);
-  const requiredSuites = [
-    {
-      name: "file",
-      source: "packages/deep-research/src/file.ts",
-      tests: ["test/unit/deep-research/file.test.ts"],
-    },
-    {
-      name: "web",
-      source: "packages/deep-research/src/web.ts",
-      tests: ["test/unit/deep-research/web.test.ts"],
-    },
-    {
-      name: "mcp",
-      source: "packages/deep-research/src/mcp.ts",
-      tests: [
-        "test/unit/deep-research/mcp.test.ts",
-        "test/unit/runtime-daemon/deep-research-mcp-source.test.ts",
-      ],
-    },
-  ];
-  const suites = requiredSuites.map((suite) => {
+  const suites = command.suites.map((suite) => {
     const sourceExists = existsSync(join(workspaceRoot, suite.source));
-    const tests = suite.tests.map((testPath) => ({
+    const tests = suite.unitTests.map((testPath) => ({
       path: testPath,
       exists: existsSync(join(workspaceRoot, testPath)),
     }));
@@ -342,8 +322,8 @@ function buildDeepResearchLiveAdapterGate(workspaceRoot, profileName, env) {
       covered,
     };
   });
-  const coveredSuites = suites.filter((suite) => suite.covered).map((suite) => suite.name);
-  const missingSuites = suites.filter((suite) => !suite.covered).map((suite) => suite.name);
+  const coveredSuites = suites.filter((suite) => suite.covered).map((suite) => suite.id);
+  const missingSuites = suites.filter((suite) => !suite.covered).map((suite) => suite.id);
   const resultStatus = command.evidence?.resultStatus;
   const resultMatches = command.evidence?.resultMatches === true;
   const livePassed = command.status === "passed" && resultMatches;
@@ -357,6 +337,7 @@ function buildDeepResearchLiveAdapterGate(workspaceRoot, profileName, env) {
   return {
     status,
     gate: command.gate,
+    gateSource: command.gateSource,
     profile: command.profile,
     requiredSuites: command.requiredSuites,
     coveredSuites,
